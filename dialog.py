@@ -87,13 +87,13 @@ class Osm3dModelDialog(QDialog):
         self.run_button = QPushButton(_RUN_LABEL)
         self.run_button.setObjectName("runButton")
         self.run_button.setMinimumHeight(42)
-        self.run_button.setCursor(Qt.PointingHandCursor)
+        self.run_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.run_button.clicked.connect(self._emit_run)
         body.addWidget(self.run_button)
 
         self.reopen_button = QPushButton("Reopen last viewer")
         self.reopen_button.setObjectName("ghostButton")
-        self.reopen_button.setCursor(Qt.PointingHandCursor)
+        self.reopen_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.reopen_button.clicked.connect(self.reopenRequested.emit)
         body.addWidget(self.reopen_button)
 
@@ -108,7 +108,7 @@ class Osm3dModelDialog(QDialog):
 
         footer = QLabel("PlanX 3D City engine · Dokuz Eylül University — City & Regional Planning")
         footer.setWordWrap(True)
-        footer.setAlignment(Qt.AlignCenter)
+        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer.setStyleSheet("color: #9b837a; font-size: 10px; padding-top: 4px;")
         body.addWidget(footer)
 
@@ -122,7 +122,7 @@ class Osm3dModelDialog(QDialog):
         if os.path.exists(_ICON):
             icon = QLabel()
             icon.setPixmap(QIcon(_ICON).pixmap(40, 40))
-            lay.addWidget(icon, 0, Qt.AlignTop)
+            lay.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
 
         text = QVBoxLayout()
         text.setSpacing(2)
@@ -181,9 +181,9 @@ class Osm3dModelDialog(QDialog):
         self.adv_toggle.setObjectName("advToggle")
         self.adv_toggle.setText("Advanced")
         self.adv_toggle.setCheckable(True)
-        self.adv_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.adv_toggle.setArrowType(Qt.RightArrow)
-        self.adv_toggle.setCursor(Qt.PointingHandCursor)
+        self.adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.adv_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.adv_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.adv_toggle.toggled.connect(self._toggle_advanced)
         lay.addWidget(self.adv_toggle)
 
@@ -230,11 +230,11 @@ class Osm3dModelDialog(QDialog):
         btn_row = QHBoxLayout()
         open_viewer = QPushButton("Open viewer")
         open_viewer.setObjectName("ghostButton")
-        open_viewer.setCursor(Qt.PointingHandCursor)
+        open_viewer.setCursor(Qt.CursorShape.PointingHandCursor)
         open_viewer.clicked.connect(self.reopenRequested.emit)
         open_folder = QPushButton("Open data folder")
         open_folder.setObjectName("ghostButton")
-        open_folder.setCursor(Qt.PointingHandCursor)
+        open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
         open_folder.clicked.connect(self.openFolderRequested.emit)
         btn_row.addWidget(open_viewer)
         btn_row.addWidget(open_folder)
@@ -256,7 +256,7 @@ class Osm3dModelDialog(QDialog):
     # -- Behaviour ----------------------------------------------------------
     def _toggle_advanced(self, checked: bool):
         self.adv_container.setVisible(checked)
-        self.adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        self.adv_toggle.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
 
     def _emit_run(self):
         params = {

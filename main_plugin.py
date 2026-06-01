@@ -91,7 +91,7 @@ class Osm3dModelPlugin:
 
         if self.dialog:
             self.dialog.set_status("Computing study circle...", busy=True)
-        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         try:
             summary = build_and_export(
