@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "name": "mybusstops", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": []}

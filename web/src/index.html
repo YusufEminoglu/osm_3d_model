@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D OSM Model</title>
+    <meta name="description" content="3D OSM Model: pick an area, download OpenStreetMap, and explore it as an interactive 3D city.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23b8978a'/%3E%3Crect x='3' y='7' width='3' height='6' fill='%23fffaf7'/%3E%3Crect x='7' y='4' width='3' height='9' fill='%23fffaf7'/%3E%3Crect x='11' y='6' width='2' height='7' fill='%23fffaf7'/%3E%3C/svg%3E">
+
+    <link rel="stylesheet" href="style.css?v=osm0.3.0">
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "../assets/vendor/three/build/three.module.js",
+                "three/addons/": "../assets/vendor/three/examples/jsm/"
+            }
+        }
+    </script>
+    <script src="../assets/vendor/geotiff/dist-browser/geotiff.js"></script>
+    <script>
+      /* Early diagnostic + safety net. The 3D module creates its WebGL renderer at
+         top level, before it can register its own error handlers — so a failure there
+         (or a missing module import) would otherwise leave an endless spinner with no
+         clue. Surface the real error on the loading screen instead. */
+      (function () {
+        function fail(msg) {
+          var lt = document.getElementById('loading-text');
+          if (lt) { lt.style.color = '#b91c1c'; lt.textContent = msg; }
+          var sp = document.querySelector('#loading .spinner');
+          if (sp) sp.style.display = 'none';
+        }
+        window.addEventListener('error', function (e) {
+          if (window.__sceneReady) return;
+          var m = (e && (e.message || (e.error && e.error.message))) || 'unknown error';
+          fail('Could not start the 3D scene: ' + m + ' — press F12 → Console for details.');
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          if (window.__sceneReady) return;
+          var r = e && e.reason;
+          fail('Could not start the 3D scene: ' + ((r && r.message) || r) + ' — press F12 → Console for details.');
+        });
+        // Hard watchdog: never allow an infinite spinner. If the scene has not
+        // signalled ready within 15s, clear the overlay regardless of the cause
+        // so the user always reaches the viewer.
+        setTimeout(function () {
+          if (window.__sceneReady) return;
+          var ld = document.getElementById('loading');
+          if (ld && ld.style.display !== 'none') {
+            ld.style.opacity = 0;
+            setTimeout(function () { ld.style.display = 'none'; }, 400);
+          }
+          console.warn('[3D OSM Model] Boot watchdog (15s): forced overlay clear. moduleEvaluated=' + !!window.__moduleEvaluated + ', sceneReady=' + !!window.__sceneReady);
+        }, 15000);
+      })();
+    </script>
+</head>
+<body>
+    <div id="loading" class="loading-screen">
+        <div class="spinner"></div>
+        <h2 data-i18n="htmlTitle">3D OSM Model</h2>
+        <p id="loading-text" data-i18n="loadingData">Loading OpenStreetMap data...</p>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="ui-container">
+        <button id="panel-toggle" class="panel-btn" title="Toggle dashboard" data-i18n-title="togglePanel">☰</button>
+        <button id="lang-toggle" class="panel-btn lang-btn" title="Switch to Turkish" data-i18n-title="toggleLanguage">TR</button>
+        <button id="layers-toggle" class="panel-btn layers-btn" data-dock-target="layer-dock" title="Layer dock" data-i18n-title="dockTitleLayers">☷</button>
+        <button id="style-toggle" class="panel-btn style-btn" data-dock-target="style-dock" title="Style dock" data-i18n-title="dockTitleStyle">◩</button>
+        <button id="scene-toggle" class="panel-btn scene-btn" data-dock-target="scene-dock" title="Scene &amp; Sun" data-i18n-title="dockTitleScene">☀</button>
+        <button id="model-studio-toggle" class="panel-btn model-studio-btn" data-dock-target="model-studio-dock" title="Model Studio" data-i18n-title="dockTitleModelStudio">✦</button>
+        <button id="walk-toggle" class="panel-btn walk-btn" title="Walk mode" data-i18n-title="dockTitleWalk">W</button>
+        <button id="advanced-toggle" class="panel-btn advanced-btn" title="Advanced controls" data-i18n-title="dockTitleAdvanced">⚙</button>
+        <button id="btn-screenshot" class="panel-btn screenshot-btn" title="Save screenshot (PNG)" data-i18n-title="screenshotTitle">📷</button>
+        <button id="measure-toggle" class="panel-btn measure-btn" title="Measure distance" data-i18n-title="measureTitle">📏</button>
+        <button id="help-toggle" class="panel-btn help-btn" title="Help &amp; shortcuts" data-i18n-title="helpTitle">❔</button>
+
+        <div class="glass-panel" id="main-panel">
+            <div class="dashboard-head">
+                <div>
+                    <h1 data-i18n="title">3D OSM Model</h1>
+                    <p class="dashboard-sub" data-i18n="desc">Instant 3D city from OpenStreetMap: pick an area, download buildings, roads, greens and trees, and explore them live.</p>
+                </div>
+                <span id="scene-state" class="scene-pill" data-i18n="scenePreparing">Preparing</span>
+            </div>
+            <div class="metric-grid" id="scene-metrics">
+                <div><span id="metric-buildings">-</span><small data-i18n="metricBuildings">Buildings</small></div>
+                <div><span id="metric-blocks">-</span><small data-i18n="metricBlocks">Greens</small></div>
+                <div><span id="metric-floors">-</span><small data-i18n="metricFloors">Avg. floors</small></div>
+                <div><span id="metric-population">-</span><small data-i18n="metricPopulation">Population</small></div>
+                <div><span id="metric-dwellings">-</span><small data-i18n="metricDwellings">Dwellings</small></div>
+                <div><span id="metric-vehicles">-</span><small data-i18n="metricVehicles">Vehicles</small></div>
+            </div>
+            <div class="project-meta" id="project-meta" data-i18n="projectWaiting">Waiting for project metadata</div>
+            <div class="data-health" id="data-health"></div>
+            <div class="controls" id="stats-panel">
+                <h3 data-i18n="statsTitle">Area Statistics</h3>
+                <div id="stats-content" data-i18n="statsLoading">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <aside class="dock-panel hidden" id="layer-dock">
+        <div class="dock-head"><span data-i18n="dockLayers">Layers</span><button class="dock-close" data-close="layer-dock">x</button></div>
+        <label><input type="checkbox" data-setting="showBuildings"> <span data-i18n="lblBuildings">Buildings</span></label>
+        <label><input type="checkbox" data-setting="showRoads"> <span data-i18n="lblRoads">Roads</span></label>
+        <label><input type="checkbox" data-setting="showIslands"> <span data-i18n="lblBlocks">Greens / parks</span></label>
+        <label><input type="checkbox" data-setting="showTrees"> <span data-i18n="lblTrees">Trees</span></label>
+        <label><input type="checkbox" data-setting="showSidewalks"> <span data-i18n="lblSidewalks">Sidewalks</span></label>
+        <label><input type="checkbox" data-setting="showCrosswalks"> <span data-i18n="lblCrosswalks">Crosswalks</span></label>
+        <label><input type="checkbox" data-setting="showCars"> <span data-i18n="lblCars">Cars</span></label>
+        <label><input type="checkbox" data-setting="showPedestrians"> <span data-i18n="lblPedestrians">Pedestrians</span></label>
+        <label><input type="checkbox" data-setting="showOutsideRoiTerrain"> <span data-i18n="lblOutsideRoiTerrain">Outside ROI terrain</span></label>
+    </aside>
+
+    <aside class="dock-panel hidden" id="scene-dock">
+        <div class="dock-head"><span data-i18n="dockScene">Scene &amp; Sun</span><button class="dock-close" data-close="scene-dock">x</button></div>
+        <label><span data-i18n="lblTime">Time of day</span> <input type="range" min="0" max="24" step="0.1" data-setting="timeOfDay"></label>
+        <div class="shadow-presets" id="time-quick-presets">
+            <button data-time-preset="6"  data-i18n="timeDawn">Dawn 6</button>
+            <button data-time-preset="12" data-i18n="timeNoon">Noon 12</button>
+            <button data-time-preset="17" data-i18n="timeGolden">Golden 17</button>
+            <button data-time-preset="22" data-i18n="timeNight">Night 22</button>
+        </div>
+        <label><input type="checkbox" data-setting="autoTime"> <span data-i18n="lblAutoTime">Solar animation</span></label>
+        <label><span data-i18n="lblAutoTimeSpeed">Animation speed</span> <input type="range" min="0.5" max="8" step="0.5" data-setting="autoTimeSpeed"></label>
+        <label><span data-i18n="lblWeather">Weather</span> <select data-setting="weather"></select></label>
+        <label><span data-i18n="lblFog">Fog</span> <input type="range" min="0.0001" max="0.002" step="0.0001" data-setting="fogDensity"></label>
+        <label><span data-i18n="lblThemeMode">Theme</span>
+            <select id="theme-mode-select">
+                <option value="auto" data-i18n="themeAuto">Auto (system)</option>
+                <option value="light" data-i18n="themeLight">Light</option>
+                <option value="dark" data-i18n="themeDark">Dark</option>
+            </select>
+        </label>
+        <label><input type="checkbox" data-setting="enableSSAO"> <span data-i18n="lblSSAO">Shadow quality</span></label>
+        <label><input type="checkbox" data-setting="enableBloom"> <span data-i18n="lblBloom">Bloom/glow</span></label>
+        <div class="dock-section">
+            <p class="dock-section-title" data-i18n="secLifeTraffic">Life &amp; traffic</p>
+            <label><span data-i18n="lblTrafficSpeed">Traffic speed</span> <input type="range" min="0" max="5" step="0.1" data-setting="trafficSpeed"></label>
+            <label><span data-i18n="lblCarDensity">Car density</span> <input type="range" min="0" max="1" step="0.1" data-setting="carDensity"></label>
+            <label><span data-i18n="lblPedDensity">Pedestrian density</span> <input type="range" min="0" max="1" step="0.1" data-setting="pedestrianDensity"></label>
+        </div>
+        <div class="dock-section">
+            <p class="dock-section-title" data-i18n="secModelBase">Model base</p>
+            <label><input type="checkbox" data-setting="showTerrainSides"> <span data-i18n="lblModelBase">ROI model base</span></label>
+            <label><span data-i18n="lblSideDrop">Base drop</span> <input type="range" min="0" max="40" step="0.5" data-setting="terrainSideDrop"></label>
+            <label><span data-i18n="lblSideColor">Base color</span> <input type="color" data-setting="terrainSideColor"></label>
+            <label><span data-i18n="lblDemQuality">DEM mesh quality</span> <input type="range" min="48" max="360" step="8" data-setting="demMeshQuality"></label>
+        </div>
+        <div class="dock-subtitle" data-i18n="lblBookmarks">Camera bookmarks</div>
+        <div id="bookmark-list" class="bookmark-list"></div>
+        <div class="dock-actions">
+            <button id="bookmark-save" data-i18n="bookmarkSave">Save current view</button>
+        </div>
+    </aside>
+
+    <aside class="dock-panel hidden" id="style-dock">
+        <div class="dock-head"><span data-i18n="dockStyle">Style</span><button class="dock-close" data-close="style-dock">x</button></div>
+        <label><span data-i18n="lblIslandColor">Block color</span> <input type="color" data-setting="islandColor"></label>
+        <label><span data-i18n="lblIslandTexture">Block texture</span> <select data-setting="islandTexture"></select></label>
+        <label><span data-i18n="lblIslandTransparency">Block transparency</span> <input type="range" min="0" max="0.95" step="0.05" data-setting="islandTransparency"></label>
+        <label><span data-i18n="lblRoadColor">Road color</span> <input type="color" data-setting="roadColor"></label>
+        <label><span data-i18n="lblRoadStyle">Road texture</span> <select data-setting="roadStyle"></select></label>
+        <label><span data-i18n="lblPavementStyle">Ground texture</span> <select data-setting="pavementStyle"></select></label>
+        <label><span data-i18n="lblTerrainTileMeters">Texture tile size (m)</span> <input type="range" min="5" max="300" step="5" data-setting="terrainTileMeters"></label>
+        <label><span data-i18n="lblTerrainAnalysis">Topography view</span> <select data-setting="terrainAnalysisMode"></select></label>
+        <label><span data-i18n="lblAssetTheme">Asset theme</span> <select data-setting="assetTheme"></select></label>
+        <label><span data-i18n="lblTreeRenderMode">Tree render mode</span> <select data-setting="treeRenderMode"></select></label>
+        <label><input type="checkbox" data-setting="treeRandomize"> <span data-i18n="lblTreeRandomize">Randomize trees</span></label>
+        <label><span data-i18n="lblTreeVariantCount">Tree variant count</span> <select data-setting="treeVariantCount"></select></label>
+        <label><span data-i18n="lblTreeHeightRandom">Tree height expression</span> <input type="text" data-setting="treeHeightRandomExpr" placeholder="rand(1,7)"></label>
+        <label><span data-i18n="lblBuildingMode">Building mode</span> <select data-setting="buildingMode"></select></label>
+        <label><span data-i18n="lblFacadeTextureScale">Facade scale</span> <input type="range" min="1" max="8" step="0.05" data-setting="facadeTextureScale"></label>
+        <label><span data-i18n="lblFloorHeight">Floor height</span> <input type="range" min="2.8" max="3.6" step="0.05" data-setting="floorHeight"></label>
+        <label><span data-i18n="lblRoofShape">Roof shape</span> <select data-setting="roofShape"></select></label>
+        <label><span data-i18n="lblRoofHeight">Roof height</span> <input type="range" min="0.5" max="6" step="0.1" data-setting="roofHeight"></label>
+        <label><span data-i18n="lblRoofTexture">Roof texture</span> <select data-setting="roofTexture"></select></label>
+        <div class="dock-subtitle">Procedural Rules</div>
+        <label><input type="checkbox" data-setting="showRoadMarkings"> <span>Show Road Markings</span></label>
+        <label><input type="checkbox" data-setting="showLedges"> <span>Facade Ledges / Slabs</span></label>
+        <label><input type="checkbox" data-setting="showStorefronts"> <span>Ground Storefronts</span></label>
+        <label><span>Building Setback (m)</span> <input type="range" min="0" max="5.0" step="0.1" data-setting="buildingSetback"></label>
+        <label><span>Ledge Projection (m)</span> <input type="range" min="0.05" max="0.6" step="0.05" data-setting="ledgeProjection"></label>
+        <div class="dock-subtitle" data-i18n="lblBlockStyles">Block Categories</div>
+        <div id="block-style-controls" class="block-style-controls"></div>
+        <div class="dock-subtitle" data-i18n="lblFunctionStyles">Function colors and facades</div>
+        <div id="function-style-controls" class="function-style-controls"></div>
+    </aside>
+
+    <aside class="dock-panel hidden" id="model-studio-dock" style="width: 360px;">
+        <div class="dock-head"><span data-i18n="dockTitleModelStudio">Model Studio</span><button class="dock-close" data-close="model-studio-dock">x</button></div>
+        
+        <div class="dock-section">
+            <h4 data-i18n="modelUploadTitle" style="margin: 4px 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Upload Custom Model (.glb)</h4>
+            <label><span data-i18n="lblModelCategory">Category</span>
+                <select id="upload-model-category">
+                    <option value="mosque" data-i18n="catMosque">Mosque</option>
+                    <option value="tumulus" data-i18n="catTumulus">Tumulus</option>
+                    <option value="tree" data-i18n="catTree">Tree</option>
+                    <option value="light" data-i18n="catLight">Street Light</option>
+                    <option value="bench" data-i18n="catBench">Bench</option>
+                    <option value="bin" data-i18n="catBin">Trash Bin</option>
+                    <option value="busstop" data-i18n="catBusStop">Bus Stop</option>
+                </select>
+            </label>
+            <input type="file" id="upload-model-file" accept=".glb" class="dock-file" style="margin-top: 6px;">
+            <div id="upload-status" class="dock-note" style="margin-top: 6px; color: var(--planx-accent-hover);"></div>
+        </div>
+
+        <div class="dock-section" style="border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; margin-top: 10px;">
+            <h4 data-i18n="uploadedModelsTitle" style="margin: 0 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Library Models</h4>
+            <div id="uploaded-models-list" class="uploaded-models-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; padding-right: 4px;"></div>
+        </div>
+
+        <div class="dock-section" style="border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; margin-top: 10px;">
+            <h4 data-i18n="treePoolTitle" style="margin: 0 0 6px; color: var(--planx-accent-hover); font-size: 0.85rem;">Tree Model Pool (random)</h4>
+            <div data-i18n="treePoolNote" class="dock-note" style="font-size: 0.68rem; color: rgba(255,255,255,0.5); margin-bottom: 6px;">Add 2-3 tree models; trees are picked randomly from them.</div>
+            <div id="tree-pool-list" class="uploaded-models-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto; padding-right: 4px;"></div>
+        </div>
+
+        <div class="dock-section" style="border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; margin-top: 10px;">
+            <h4 data-i18n="modelTransformTitle" style="margin: 0 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Model Transform (Elevation &amp; Scale)</h4>
+            <label><span data-i18n="lblTransformCategory">Category</span>
+                <select id="transform-category">
+                    <option value="mosque" data-i18n="catMosque">Mosque</option>
+                    <option value="tumulus" data-i18n="catTumulus">Tumulus</option>
+                    <option value="tree" data-i18n="catTree">Tree</option>
+                    <option value="light" data-i18n="catLight">Street Light</option>
+                    <option value="bench" data-i18n="catBench">Bench</option>
+                    <option value="bin" data-i18n="catBin">Trash Bin</option>
+                    <option value="busstop" data-i18n="catBusStop">Bus Stop</option>
+                </select>
+            </label>
+            <div id="model-transform-controls" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;"></div>
+        </div>
+
+        <div class="dock-section" style="border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; margin-top: 10px;">
+            <h4 data-i18n="mosqueCustomTitle" style="margin: 0 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Mosque Placements & Overrides</h4>
+            <div id="mosque-custom-list" class="mosque-custom-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 4px;"></div>
+        </div>
+
+        <div class="dock-section" style="border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; margin-top: 10px;">
+            <h4 data-i18n="tumulusCustomTitle" style="margin: 0 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Tumulus Placements & Overrides</h4>
+            <div id="tumulus-custom-list" class="mosque-custom-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 4px;"></div>
+        </div>
+    </aside>
+
+    <div id="tour-caption-overlay" class="tour-caption-overlay hidden"></div>
+    <div id="walk-hud" class="walk-hud hidden" data-i18n="walkHud">WASD move · Shift sprint · C crouch · Esc exit</div>
+
+    <div id="game-hud" class="game-hud hidden">
+        <div class="game-crosshair"></div>
+        <div class="game-score-display">◎ <span id="game-score">0</span></div>
+        <div id="game-feedback" class="game-feedback"></div>
+        <div class="game-hint" data-i18n="gameHint">Left click: throw stone</div>
+    </div>
+
+    <div id="fps-chip" class="hud-chip hud-chip-fps" title="Render frames per second">-- fps</div>
+
+    <div id="bldg-hover-tip" class="bldg-hover-tip"></div>
+    <div id="bldg-detail-tip" class="bldg-detail-tip floating-tooltip" style="display:none;"></div>
+
+    <div id="minimap-wrap">
+        <div id="minimap-header">⌖ <span data-i18n="minimap">Minimap</span></div>
+        <canvas id="minimap-canvas" width="160" height="160"></canvas>
+    </div>
+
+    <div id="scale-bar">
+        <div id="scale-line"></div>
+        <span id="scale-label">100m</span>
+    </div>
+
+    <div id="compass-wrap">
+        <canvas id="compass-canvas" width="48" height="48"></canvas>
+    </div>
+
+    <div id="measure-hud" class="measure-hud hidden">
+        <span class="measure-dot"></span>
+        <span data-i18n="measureHud">Click two points on the ground to measure · Esc to finish</span>
+        <button id="measure-clear" class="measure-clear" data-i18n="measureClear">Clear</button>
+    </div>
+
+    <div id="help-overlay" class="help-overlay hidden">
+        <div class="help-card">
+            <div class="help-head">
+                <span data-i18n="helpTitle">Help &amp; shortcuts</span>
+                <button class="help-close" id="help-close">✕</button>
+            </div>
+            <div id="help-body" class="help-body"></div>
+            <div class="help-foot" data-i18n="helpFoot">3D OSM Model · PlanX 3D City engine</div>
+        </div>
+    </div>
+
+    <div id="osm-credit" class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> <span data-i18n="osmContributors">contributors</span></div>
+
+    <script type="module" src="app.js?v=osm0.3.0"></script>
+</body>
+</html>

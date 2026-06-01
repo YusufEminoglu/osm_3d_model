@@ -1,0 +1,82 @@
+{
+  "schema": "planx-3d-city-manifest/v1",
+  "plugin": "osm_3d_model",
+  "version": "0.3.0",
+  "mode": "vector",
+  "flexibleInputs": true,
+  "exportedAt": "2026-06-01T12:00:00+03:00",
+  "project": {
+    "title": "3D OSM Model (sample)",
+    "fileName": ""
+  },
+  "requiredInputs": [],
+  "optionalInputs": [
+    "buildings",
+    "roads",
+    "trees",
+    "blocks"
+  ],
+  "terrainTexture": null,
+  "baseMapTexture": null,
+  "roadAccess": null,
+  "fieldMappings": {
+    "building_floors_field": "katadedi",
+    "landuse_function_field": "uipfonksiyon",
+    "road_hierarchy_field": "yol_turu",
+    "block_category_field": "uipfonksiyon"
+  },
+  "analysisDefaults": {
+    "roadColorMode": "Default"
+  },
+  "viewerDefaults": {
+    "showBuildings": true,
+    "showRoads": true,
+    "showTrees": true,
+    "showIslands": true,
+    "showTerrainSides": true,
+    "terrainSideDrop": 8.0,
+    "terrainSideColor": "#b8978a",
+    "showOutsideRoiTerrain": false,
+    "terrainOutsideColor": "#e7d7d0",
+    "islandColor": "#dcc7bd",
+    "islandTransparency": 0.0,
+    "parkColor": "#9fae8a",
+    "sportColor": "#8fa07c",
+    "roadColor": "#9a8c84",
+    "flattenIslands": true,
+    "showLedges": false,
+    "showStorefronts": false,
+    "showRoadMarkings": true,
+    "buildingMode": "Extruded + roof",
+    "treeRenderMode": "Realistic",
+    "assetTheme": "Modern Urban",
+    "showCars": true,
+    "carDensity": 0.45,
+    "trafficSpeed": 1.0,
+    "showPedestrians": true,
+    "pedestrianDensity": 0.5,
+    "showFurniture": false,
+    "showCrosswalks": true,
+    "showSidewalks": true,
+    "showPedestrianPaths": false,
+    "showParcels": false,
+    "showHardscape": false,
+    "showFences": false,
+    "showWaterlines": false,
+    "showMosques": false,
+    "showTumulus": false,
+    "demMeshQuality": 140,
+    "latitude": 39.12,
+    "dayOfYear": 172,
+    "timeOfDay": 17.0,
+    "autoTime": false,
+    "fogDensity": 0.00035
+  },
+  "assetTheme": "Modern Urban",
+  "inputs": [],
+  "summary": {
+    "source": "OpenStreetMap (sample)",
+    "epsg": 32635,
+    "hasDem": false
+  }
+}

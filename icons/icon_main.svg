@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e7c3b7"/>
+      <stop offset="1" stop-color="#b88c7e"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#g)" stroke="#8a675c" stroke-width="2"/>
+  <ellipse cx="32" cy="44" rx="22" ry="7" fill="#9c7a6f" opacity="0.55"/>
+  <g fill="#5c4842" stroke="#3f312c" stroke-width="1">
+    <rect x="20" y="28" width="9" height="16"/>
+    <rect x="30" y="22" width="10" height="22"/>
+    <rect x="41" y="32" width="8" height="12"/>
+  </g>
+  <g fill="#f0d8cf">
+    <rect x="22" y="31" width="2" height="2"/><rect x="25" y="31" width="2" height="2"/>
+    <rect x="22" y="35" width="2" height="2"/><rect x="25" y="35" width="2" height="2"/>
+    <rect x="32" y="25" width="2" height="2"/><rect x="36" y="25" width="2" height="2"/>
+    <rect x="32" y="30" width="2" height="2"/><rect x="36" y="30" width="2" height="2"/>
+    <rect x="32" y="35" width="2" height="2"/><rect x="36" y="35" width="2" height="2"/>
+    <rect x="43" y="35" width="2" height="2"/><rect x="46" y="35" width="2" height="2"/>
+  </g>
+</svg>

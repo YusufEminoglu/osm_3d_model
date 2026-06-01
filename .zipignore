@@ -1,0 +1,8 @@
+# Plugin Hub package excludes (path-prefix match, relative to plugin folder).
+#
+# web/data ships a small bundled SAMPLE city (planx_manifest.json + yerlesim/*.geojson)
+# so the viewer is never empty on first open. When the user runs the plugin, the
+# real OSM export overwrites it. Only the heavy/runtime-only DEM raster is excluded.
+web/data/dem
+__pycache__
+*.pyc

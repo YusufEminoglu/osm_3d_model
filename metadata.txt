@@ -1,0 +1,47 @@
+[general]
+name=3D OSM Model
+qgisMinimumVersion=3.28
+description=Pick an area, download OpenStreetMap data, and instantly view it as a procedural 3D city in the browser.
+version=0.3.0
+author=Yusuf Eminoglu
+email=yusuf.eminoglu@deu.edu.tr
+about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, greens and trees, fits the largest circle inside your selection as the study boundary with a solid base, and opens an interactive Three.js 3D city viewer. Buildings default to 3 floors when no level data exists, roofs and facades follow the PlanX procedural logic (extra procedural detail is off by default), road traces are procedural, and an external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
+tracker=https://github.com/YusufEminoglu/planx_3d_city/issues
+repository=https://github.com/YusufEminoglu/planx_3d_city
+category=Web
+homepage=https://github.com/YusufEminoglu/planx_3d_city
+tags=osm,openstreetmap,3d city,three.js,procedural,massing,urban planning,geojson,QGIS
+icon=icons/icon_main.svg
+qgisMaximumVersion=4.99
+experimental=True
+deprecated=False
+hasProcessingProvider=no
+plugin_dependencies=
+license=MIT
+changelog=
+    3D OSM Model 0.3.0 - Critical viewer fix, measurement, screenshots & resilient download.
+        - Fixed a critical bug that left the web viewer stuck on an endless loading spinner: a stray quote inside the Turkish interface strings raised a syntax error that crashed the entire 3D module before it could start. The viewer now boots reliably.
+        - The viewer now ships with a small bundled sample city, so it opens as a populated 3D scene before you run any export (great for a first look and for offline demos).
+        - New distance measurement tool: pick two points on the ground to read the distance, with a live dashed preview and stackable segments.
+        - New one-click screenshot button saves a clean PNG of the current view (UI hidden).
+        - New in-app Help & shortcuts overlay listing the mouse and keyboard controls (bilingual).
+        - Added the required OpenStreetMap attribution credit ("© OpenStreetMap contributors").
+        - More resilient OSM download: Overpass requests now fall back across mirror servers automatically when the main endpoint is rate-limited or slow.
+        - The plugin dialog remembers your last study-area source and maximum area, and adds an "open viewer automatically after export" toggle.
+        - Fixed 2D overlay labels that never appeared because the label layer was created but never drawn each frame.
+    3D OSM Model 0.2.0 - Unified salmon identity, golden hour & richer dialog.
+        - One cohesive salmon-tinted grey theme now spans the QGIS dialog, the web toolbar/panels and the 3D scene; the viewer chrome was previously teal.
+        - Restored the Scene & Sun controls behind their own toolbar button: time of day with quick presets, weather, light/dark theme, bloom and shadow quality, camera bookmarks, plus a Life & traffic section (traffic speed, car and pedestrian density).
+        - Leaner, OSM-focused interface: the Layer and Style docks now list only what OpenStreetMap produces; removed the unused Mobility, Street furniture, Fences, Analysis and Narrative panels and fixed the toolbar button spacing.
+        - The scene opens at golden hour for warm, flattering massing.
+        - Redesigned the plugin dialog: header banner, grouped cards, a live study-area estimate, a collapsible Advanced (DEM) section, and a last-run summary with Open viewer and Open data folder buttons.
+    3D OSM Model 0.1.2 - Independent, decluttered interface.
+        - Rebranded the viewer as "3D OSM Model" with its own salmon-tinted grey theme, separate from PlanX 3D City.
+        - Trimmed the toolbar to the essentials: Layers, Style, Model Studio, Walk mode and Advanced; kept the minimap. Removed Scene, Mobility, Street furniture, Fences, Analysis, Narrative, Slingshot and Camera/recording controls.
+    3D OSM Model 0.1.1 - Lively scene defaults.
+        - Realistic trees, animated pedestrians and mixed traffic are now on by default.
+        - Added a procedural vehicle factory with cars, vans, buses and trucks (wheels, windows, head/brake lights); buses and trucks move a little slower.
+    3D OSM Model 0.1.0 - Initial release.
+        - One-button workflow: select an area, download OSM, and open an interactive 3D city viewer.
+        - Largest inscribed circle of the selection becomes the study boundary with a solid base; extent capped at ~300 ha.
+        - Procedural roofs and facades (extra detail off by default), procedural road traces, default 3 floors when level data is missing, optional external DEM, salmon-tinted grey theme.
