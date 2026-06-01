@@ -193,7 +193,7 @@ def _viewer_defaults(latitude: float, has_dem: bool) -> dict:
         "pedestrianDensity": 0.5,
         # Keep the rest off so the scene stays fast.
         "showFurniture": False,
-        "showCrosswalks": True,
+        "showCrosswalks": False,
         "showSidewalks": True,
         "showPedestrianPaths": False,
         "showParcels": False,

@@ -1594,7 +1594,7 @@ const settings = {
   showRoads: true,
   showSidewalks: true,
   showPedestrianPaths: true,
-  showCrosswalks: true,
+  showCrosswalks: false,
   showLights: false,
   lightStyle: 'Modern Arc',
   showBenches: false,
@@ -7462,6 +7462,90 @@ function createPedestrianModel(index = 0) {
   return { mesh: root, limbRefs: { leftArm, rightArm, leftLeg, rightLeg, leftShoe, rightShoe } };
 }
 
+// Paint every road as one dissolved surface: a single canvas of round-join /
+// flat-cap strokes draped on a terrain-following plane. Overlapping roads merge
+// into one continuous painted layer, so intersections have no leftover ribbon
+// edges, no z-fighting and no stray marking lines.
+function buildDissolvedRoadSurface(roadPaints, buildToken = sceneBuildToken) {
+  if (!roadPaints.length || !settings.showRoads) return;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxW = 0;
+  for (const r of roadPaints) {
+    maxW = Math.max(maxW, r.width);
+    for (const [x, z] of r.pts) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    }
+  }
+  if (!Number.isFinite(minX)) return;
+  const margin = maxW * 0.5 + 2;
+  minX -= margin; maxX += margin; minZ -= margin; maxZ += margin;
+  const spanX = Math.max(1, maxX - minX);
+  const spanZ = Math.max(1, maxZ - minZ);
+
+  // Canvas resolution: ~0.4 m/px, capped so the long side stays <= 2048 px.
+  let mpp = 0.4;
+  const longSpan = Math.max(spanX, spanZ);
+  if (longSpan / mpp > 2048) mpp = longSpan / 2048;
+  const cw = Math.max(8, Math.round(spanX / mpp));
+  const ch = Math.max(8, Math.round(spanZ / mpp));
+  const canvas = document.createElement('canvas');
+  canvas.width = cw; canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.lineJoin = 'round';   // rounded bends/joins
+  ctx.lineCap = 'butt';     // flat caps at road ends
+  // World (local) -> canvas px. Flip Z so it matches the CanvasTexture (flipY) v axis.
+  const toPx = (x, z) => [(x - minX) / mpp, ch - (z - minZ) / mpp];
+  for (const r of roadPaints) {
+    if (r.pts.length < 2) continue;
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = Math.max(1, r.width / mpp);
+    ctx.beginPath();
+    for (let i = 0; i < r.pts.length; i++) {
+      const [px, py] = toPx(r.pts[i][0], r.pts[i][1]);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+
+  // Terrain-following plane spanning the road bounds.
+  const segX = Math.min(220, Math.max(1, Math.round(spanX / 4)));
+  const segZ = Math.min(220, Math.max(1, Math.round(spanZ / 4)));
+  const positions = [], uvs = [], indices = [];
+  for (let j = 0; j <= segZ; j++) {
+    for (let i = 0; i <= segX; i++) {
+      const x = minX + spanX * (i / segX);
+      const z = minZ + spanZ * (j / segZ);
+      positions.push(x, terrainLocalYAt(x, z) + LAYER.road, z);
+      uvs.push(i / segX, j / segZ);
+    }
+  }
+  const cols = segX + 1;
+  for (let j = 0; j < segZ; j++) {
+    for (let i = 0; i < segX; i++) {
+      const a = j * cols + i, b = a + 1, c = a + cols, d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex, transparent: false, alphaTest: 0.5, roughness: 0.95, metalness: 0.0,
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+  });
+  if (isSceneBuildStale(buildToken)) { geo.dispose(); mat.dispose(); tex.dispose(); return; }
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  mesh.renderOrder = 30;
+  roadGroup.add(mesh);
+}
+
 async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
   clearGroup(roadGroup);
   clearGroup(carGroup);
@@ -7493,6 +7577,7 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     polygonOffsetUnits: -4
   });
   const amenityPoints = settings.roadColorMode === 'Amenity distance' ? estimateAmenityPoints() : [];
+  const roadPaints = [];  // {pts:[[x,z]...], width, color} for the dissolved surface
 
   for (const f of yollar.features) {
     if (!f.geometry || f.geometry.type !== 'LineString') continue;
@@ -7519,46 +7604,17 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     if (roadAllowsCars(f)) vehicleRoadCurves.push(curve);
     const segments = Math.max(24, terrainPts.length * 3);
     const centers = curve.getPoints(segments);
-    const left = [];
-    const right = [];
-    for (let i = 0; i < centers.length; i++) {
-      const p = centers[i];
-      const t = curve.getTangent(i / (centers.length - 1));
-      const n = new THREE.Vector3(-t.z, 0, t.x).normalize().multiplyScalar(featureWidth * 0.5);
-      left.push(new THREE.Vector3(p.x + n.x, p.y, p.z + n.z));
-      right.push(new THREE.Vector3(p.x - n.x, p.y, p.z - n.z));
-    }
-    const positions = [];
-    const uvs = [];
-    const indices = [];
-    for (let i = 0; i < left.length; i++) {
-      positions.push(left[i].x, left[i].y, left[i].z);
-      positions.push(right[i].x, right[i].y, right[i].z);
-      const v = i / Math.max(1, left.length - 1);
-      uvs.push(0, v, 1, v);
-    }
-    for (let i = 0; i < left.length - 1; i++) {
-      const a = i * 2;
-      const b = a + 1;
-      const c = a + 2;
-      const d = a + 3;
-      indices.push(a, c, b, c, d, b);
-    }
-    const roadGeo = new THREE.BufferGeometry();
-    roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    roadGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    roadGeo.setIndex(indices);
-    roadGeo.computeVertexNormals();
-    const featureRoadMat = roadMat.clone();
-    featureRoadMat.color = roadVisualColor(f, amenityPoints);
-    if (isSceneBuildStale(buildToken)) return;
-    const mesh = new THREE.Mesh(roadGeo, featureRoadMat);
-    mesh.receiveShadow = true;
-    mesh.renderOrder = 30;
-    roadGroup.add(mesh);
+    // Collect for the dissolved road surface (painted once, after the loop).
+    roadPaints.push({
+      pts: centers.map((p) => [p.x, p.z]),
+      width: featureWidth,
+      color: '#' + roadVisualColor(f, amenityPoints).getHexString(),
+    });
 
-    // Procedural Road Markings
-    if (settings.showRoadMarkings && settings.showRoads) {
+    // Procedural lane markings are disabled: roads now render as one dissolved
+    // surface, and per-lane lines would reintroduce the stray marks across
+    // intersections that the dissolved look is meant to remove.
+    if (false) {
       const roadLenMark = xzCurve.getLength();
       
       const markingMat = new THREE.MeshStandardMaterial({
@@ -7679,6 +7735,8 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
       }
     }
   }
+
+  buildDissolvedRoadSurface(roadPaints, buildToken);
 
   if (settings.showCars && vehicleRoadCurves.length > 0) {
     const carVariants = assetPoolVariants('cars');
@@ -8667,7 +8725,6 @@ function addGui() {
   roads.add(settings, 'trafficSpeed', 0, 5, 0.1).name(t('trafficSpd'));
   roads.add(settings, 'showSidewalks').name(t('showSidewalks')).onChange(rebuildScene);
   roads.add(settings, 'showPedestrianPaths').name(t('showPedestrianPaths')).onChange(rebuildScene);
-  roads.add(settings, 'showCrosswalks').name(t('showCrosswalks')).onChange(rebuildScene);
   roads.add(settings, 'showPedestrians').onChange(rebuildScene);
   roads.add(settings, 'pedestrianDensity', 0.0, 1.0, 0.1).name(t('pedDensity')).onChange(rebuildScene);
 

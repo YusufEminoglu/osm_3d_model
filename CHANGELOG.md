@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.5.0] - 2026-06-01
+
+- Dissolved roads with clean intersections (round joins, flat caps); crosswalks and lane markings removed; sidewalks both sides
+
 All notable changes to this plugin are documented here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning: [SemVer](https://semver.org/).
 
 ## [0.4.0] - 2026-06-01

@@ -7,7 +7,7 @@
     <meta name="description" content="3D OSM Model: pick an area, download OpenStreetMap, and explore it as an interactive 3D city.">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23b8978a'/%3E%3Crect x='3' y='7' width='3' height='6' fill='%23fffaf7'/%3E%3Crect x='7' y='4' width='3' height='9' fill='%23fffaf7'/%3E%3Crect x='11' y='6' width='2' height='7' fill='%23fffaf7'/%3E%3C/svg%3E">
 
-    <link rel="stylesheet" href="style.css?v=osm0.4.0">
+    <link rel="stylesheet" href="style.css?v=osm0.5.0">
 
     <script type="importmap">
         {
@@ -109,7 +109,6 @@
         <label><input type="checkbox" data-setting="showIslands"> <span data-i18n="lblBlocks">Greens / parks</span></label>
         <label><input type="checkbox" data-setting="showTrees"> <span data-i18n="lblTrees">Trees</span></label>
         <label><input type="checkbox" data-setting="showSidewalks"> <span data-i18n="lblSidewalks">Sidewalks</span></label>
-        <label><input type="checkbox" data-setting="showCrosswalks"> <span data-i18n="lblCrosswalks">Crosswalks</span></label>
         <label><input type="checkbox" data-setting="showCars"> <span data-i18n="lblCars">Cars</span></label>
         <label><input type="checkbox" data-setting="showPedestrians"> <span data-i18n="lblPedestrians">Pedestrians</span></label>
         <label><input type="checkbox" data-setting="showOutsideRoiTerrain"> <span data-i18n="lblOutsideRoiTerrain">Outside ROI terrain</span></label>
@@ -179,7 +178,6 @@
         <label><span data-i18n="lblRoofHeight">Roof height</span> <input type="range" min="0.5" max="6" step="0.1" data-setting="roofHeight"></label>
         <label><span data-i18n="lblRoofTexture">Roof texture</span> <select data-setting="roofTexture"></select></label>
         <div class="dock-subtitle">Procedural Rules</div>
-        <label><input type="checkbox" data-setting="showRoadMarkings"> <span>Show Road Markings</span></label>
         <label><input type="checkbox" data-setting="showLedges"> <span>Facade Ledges / Slabs</span></label>
         <label><input type="checkbox" data-setting="showStorefronts"> <span>Ground Storefronts</span></label>
         <label><span>Building Setback (m)</span> <input type="range" min="0" max="5.0" step="0.1" data-setting="buildingSetback"></label>
@@ -296,6 +294,6 @@
 
     <div id="osm-credit" class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> <span data-i18n="osmContributors">contributors</span></div>
 
-    <script type="module" src="app.js?v=osm0.4.0"></script>
+    <script type="module" src="app.js?v=osm0.5.0"></script>
 </body>
 </html>
