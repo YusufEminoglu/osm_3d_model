@@ -2,23 +2,28 @@
 name=3D OSM Model
 qgisMinimumVersion=3.28
 description=Pick an area, download OpenStreetMap data, and instantly view it as a procedural 3D city in the browser.
-version=0.3.0
+version=0.4.0
 author=Yusuf Eminoglu
 email=yusuf.eminoglu@deu.edu.tr
 about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, greens and trees, fits the largest circle inside your selection as the study boundary with a solid base, and opens an interactive Three.js 3D city viewer. Buildings default to 3 floors when no level data exists, roofs and facades follow the PlanX procedural logic (extra procedural detail is off by default), road traces are procedural, and an external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
-tracker=https://github.com/YusufEminoglu/planx_3d_city/issues
-repository=https://github.com/YusufEminoglu/planx_3d_city
+tracker=https://github.com/YusufEminoglu/osm_3d_model/issues
+repository=https://github.com/YusufEminoglu/osm_3d_model
 category=Web
-homepage=https://github.com/YusufEminoglu/planx_3d_city
+homepage=https://github.com/YusufEminoglu/osm_3d_model
 tags=osm,openstreetmap,3d city,three.js,procedural,massing,urban planning,geojson,QGIS
 icon=icons/icon_main.svg
 qgisMaximumVersion=4.99
-experimental=True
+experimental=False
 deprecated=False
 hasProcessingProvider=no
 plugin_dependencies=
 license=MIT
 changelog=
+    3D OSM Model 0.4.0 - Connected road network, calmer traffic, stable release.
+        - Roads are welded into a connected network on export: segment ends are snapped to nearby roads and dissolved by class, so streets flow continuously even where OpenStreetMap left small gaps between ways (best-effort; skipped safely if Processing is unavailable).
+        - Reduced the default on-screen traffic to about one fifth for a calmer, faster scene; the car-count formula no longer collapses to zero at low densities.
+        - Added the required LICENSE file (MIT) and switched all Qt enums to Qt6-safe scoped forms so the package validates for QGIS 4.
+        - Marked the plugin as stable (experimental=False).
     3D OSM Model 0.3.0 - Critical viewer fix, measurement, screenshots & resilient download.
         - Fixed a critical bug that left the web viewer stuck on an endless loading spinner: a stray quote inside the Turkish interface strings raised a syntax error that crashed the entire 3D module before it could start. The viewer now boots reliably.
         - The viewer now ships with a small bundled sample city, so it opens as a populated 3D scene before you run any export (great for a first look and for offline demos).

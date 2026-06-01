@@ -51,7 +51,7 @@
     "treeRenderMode": "Realistic",
     "assetTheme": "Modern Urban",
     "showCars": true,
-    "carDensity": 0.45,
+    "carDensity": 0.09,
     "trafficSpeed": 1.0,
     "showPedestrians": true,
     "pedestrianDensity": 0.5,

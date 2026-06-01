@@ -1568,7 +1568,7 @@ const settings = {
   windDirectionDeg: 315,
   windPlumeDistance: 180,
   showUrbanComfort: false,
-  carDensity: 0.2,
+  carDensity: 0.09,
   showIslands: true,
   showParcels: false,
   showHardscape: false,
@@ -7686,7 +7686,9 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
       ? carVariants.map((name, index) => assetColor(name, [0x1f2937, 0x334155, 0x475569, 0x64748b, 0x0f766e][index % 5]))
       : [0x1f2937, 0x334155, 0x475569, 0x64748b, 0x0f766e, 0x7f1d1d, 0xb45309, 0xe5e7eb];
     const isNight = (_solarCache.elevationDeg ?? 30) < -3;
-    const spawnCount = Math.min(300, vehicleRoadCurves.length * Math.floor(10 * settings.carDensity));
+    // Continuous (round, not per-curve floor) so low densities still spawn a
+    // proportional, non-zero number of cars instead of collapsing to zero.
+    const spawnCount = Math.min(300, Math.round(vehicleRoadCurves.length * 10 * settings.carDensity));
     for (let i = 0; i < spawnCount; i++) {
       const curve = vehicleRoadCurves[Math.floor(Math.random() * vehicleRoadCurves.length)];
       const type = pickVehicleType();

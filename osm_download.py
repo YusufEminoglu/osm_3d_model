@@ -36,7 +36,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.3.0 (https://github.com/YusufEminoglu/planx_3d_city)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.4.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 
@@ -225,6 +225,52 @@ def save_layer_to_geojson(layer: QgsVectorLayer, path) -> None:
     QgsVectorFileWriter.writeAsVectorFormatV3(
         layer, str(path), QgsProject.instance().transformContext(), options
     )
+
+
+def connect_roads(roads_layer: QgsVectorLayer, tolerance_m: float = 2.0, feedback=None) -> QgsVectorLayer:
+    """Best-effort: weld road segments into one connected network.
+
+    OSM ways are normally noded at junctions, but clipping to the study circle and
+    small data gaps can leave near-but-not-touching segment ends. We:
+      1. snap each road's END POINTS to the nearest road within ``tolerance_m``
+         (interior vertices are left untouched, so road curves are not distorted),
+      2. dissolve by road class so contiguous same-class runs merge,
+      3. explode back to single-part LineStrings (the viewer renders LineString
+         roads only; MultiLineString features would be skipped).
+    On any failure the original layer is returned so the export never breaks.
+    """
+    if roads_layer is None or roads_layer.featureCount() == 0:
+        return roads_layer
+    try:
+        import processing  # noqa: WPS433 (QGIS runtime import)
+
+        if feedback:
+            feedback(f"Connecting roads (snap {tolerance_m:g} m + dissolve)...")
+        snapped = processing.run("native:snapgeometries", {
+            "INPUT": roads_layer,
+            "REFERENCE_LAYER": roads_layer,
+            "TOLERANCE": float(tolerance_m),
+            "BEHAVIOR": 5,  # move end points only, prefer closest point (no interior distortion)
+            "OUTPUT": "TEMPORARY_OUTPUT",
+        })["OUTPUT"]
+        dissolved = processing.run("native:dissolve", {
+            "INPUT": snapped,
+            "FIELD": ["yol_turu"],
+            "OUTPUT": "TEMPORARY_OUTPUT",
+        })["OUTPUT"]
+        singles = processing.run("native:multiparttosingleparts", {
+            "INPUT": dissolved,
+            "OUTPUT": "TEMPORARY_OUTPUT",
+        })["OUTPUT"]
+        out = QgsVectorLayer(singles, "OSM Roads", "ogr") if isinstance(singles, str) else singles
+        if out is not None and out.isValid() and out.featureCount() > 0:
+            if feedback:
+                feedback(f"Roads connected: {roads_layer.featureCount()} -> {out.featureCount()} segments.")
+            return out
+    except Exception as exc:  # never block the export on geometry cleanup
+        if feedback:
+            feedback(f"Road connect skipped ({exc}).")
+    return roads_layer
 
 
 # --------------------------------------------------------------------------

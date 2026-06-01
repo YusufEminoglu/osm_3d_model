@@ -27,7 +27,7 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QVariant
 
-from .osm_download import download_osm_for_circle, save_layer_to_geojson, utm_epsg_for
+from .osm_download import connect_roads, download_osm_for_circle, save_layer_to_geojson, utm_epsg_for
 
 MODEL_NAME = "3D OSM Model"
 MAX_STUDY_HA_DEFAULT = 300.0
@@ -186,7 +186,8 @@ def _viewer_defaults(latitude: float, has_dem: bool) -> dict:
         "treeRenderMode": "Realistic",
         "assetTheme": "Modern Urban",
         "showCars": True,
-        "carDensity": 0.45,
+        # Sparse default traffic: ~1/5 of the previous density (user request).
+        "carDensity": 0.09,
         "trafficSpeed": 1.0,
         "showPedestrians": True,
         "pedestrianDensity": 0.5,
@@ -275,6 +276,8 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
 
     # OSM download + clip.
     osm = download_osm_for_circle(circle_utm, epsg_dest, feedback=feedback)
+    # Weld road segments into a connected network (snap + dissolve, best-effort).
+    osm["roads"] = connect_roads(osm["roads"], tolerance_m=2.0, feedback=feedback)
 
     # Write GeoJSON the viewer expects.
     web_path = Path(web_root)
