@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: OpenStreetMap copyright and attribution
+    url: https://www.openstreetmap.org/copyright
+    about: Check attribution requirements before sharing OSM-based exports or screenshots.

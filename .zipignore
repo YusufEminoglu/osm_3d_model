@@ -4,5 +4,7 @@
 # so the viewer is never empty on first open. When the user runs the plugin, the
 # real OSM export overwrites it. Only the heavy/runtime-only DEM raster is excluded.
 web/data/dem
+docs
+.github
 __pycache__
 *.pyc

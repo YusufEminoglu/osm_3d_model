@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D OSM Model - QGIS to OpenStreetMap 3D City</title>
+  <meta name="description" content="3D OSM Model turns a QGIS study area into an interactive OpenStreetMap 3D city viewer.">
+  <style>
+    :root {
+      --ink: #17222a;
+      --muted: #5d6a70;
+      --soft: #fbf7f4;
+      --paper: #ffffff;
+      --salmon: #b8978a;
+      --salmon-dark: #8f6f5b;
+      --forest: #365c55;
+      --water: #73a5a7;
+      --moss: #8fa07c;
+      --line: rgba(68, 55, 50, 0.13);
+      --shadow: 0 28px 80px rgba(58, 44, 38, 0.18);
+      --radius: 8px;
+      --life: 62%;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--soft);
+      letter-spacing: 0;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 88vh;
+      overflow: hidden;
+      display: grid;
+      align-items: center;
+      padding: 28px clamp(18px, 5vw, 72px) 74px;
+      isolation: isolate;
+      background: #efe4de;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(251, 247, 244, 1) 0%, rgba(251, 247, 244, 0.98) 38%, rgba(251, 247, 244, 0.62) 64%, rgba(251, 247, 244, 0.14) 86%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+      z-index: -1;
+    }
+
+    .hero-art {
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      transform: scale(1.02);
+      transform-origin: 70% 50%;
+      opacity: 0.9;
+    }
+
+    .hero-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .nav {
+      position: absolute;
+      top: 20px;
+      left: clamp(18px, 5vw, 72px);
+      right: clamp(18px, 5vw, 72px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 3;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 850;
+      color: var(--ink);
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, var(--salmon), #e6c7b2);
+      box-shadow: 0 8px 24px rgba(143, 111, 91, 0.25);
+      position: relative;
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      bottom: 7px;
+      width: 5px;
+      background: #fff8f3;
+      border-radius: 1px;
+    }
+
+    .brand-mark::before {
+      left: 9px;
+      height: 11px;
+      box-shadow: 8px -5px 0 #fff8f3, 16px -1px 0 #fff8f3;
+    }
+
+    .brand-mark::after {
+      left: 17px;
+      height: 16px;
+      opacity: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav-links a,
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 15px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(47, 72, 88, 0.16);
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--ink);
+      font-weight: 740;
+      font-size: 14px;
+      backdrop-filter: blur(12px);
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .nav-links a:hover,
+    .button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(143, 111, 91, 0.35);
+      box-shadow: 0 10px 30px rgba(53, 40, 34, 0.13);
+    }
+
+    .hero-copy {
+      max-width: 650px;
+      padding-top: 82px;
+    }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      color: var(--salmon-dark);
+      font-weight: 850;
+      text-transform: uppercase;
+      font-size: 13px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(46px, 7vw, 92px);
+      line-height: 0.92;
+      letter-spacing: 0;
+      max-width: 760px;
+    }
+
+    .lead {
+      margin: 24px 0 0;
+      max-width: 610px;
+      color: #344149;
+      font-size: clamp(18px, 2.2vw, 25px);
+      line-height: 1.45;
+      font-weight: 520;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 32px;
+    }
+
+    .button.primary {
+      background: var(--ink);
+      color: white;
+      border-color: var(--ink);
+    }
+
+    .button.secondary {
+      background: rgba(255, 255, 255, 0.84);
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(116px, 1fr));
+      gap: 10px;
+      max-width: 770px;
+      margin-top: 38px;
+    }
+
+    .stat {
+      padding: 14px 15px;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      box-shadow: 0 12px 34px rgba(66, 48, 42, 0.1);
+      backdrop-filter: blur(10px);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 21px;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    main {
+      background: var(--soft);
+    }
+
+    .section {
+      width: min(1120px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 74px 0;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(280px, 1.15fr);
+      gap: 42px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 54px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .section-head p,
+    .plain p,
+    .card p,
+    .step p,
+    .footer p {
+      color: var(--muted);
+      line-height: 1.65;
+      margin: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: 0 16px 48px rgba(69, 52, 45, 0.08);
+    }
+
+    .card h3,
+    .step h3 {
+      margin: 0 0 10px;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .step {
+      position: relative;
+      padding: 22px 18px;
+      min-height: 182px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 16px 48px rgba(69, 52, 45, 0.08);
+    }
+
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #efe1da;
+      color: var(--salmon-dark);
+      font-weight: 900;
+      margin-bottom: 18px;
+    }
+
+    .radar-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .radar-panel,
+    .demo-panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .demo-panel {
+      padding: 26px;
+      display: grid;
+      align-content: center;
+      gap: 20px;
+    }
+
+    .demo-readout {
+      min-height: 170px;
+      border-radius: var(--radius);
+      background:
+        radial-gradient(circle at 50% 50%, rgba(184, 151, 138, 0.28) 0 var(--life), rgba(54, 92, 85, 0.09) calc(var(--life) + 1%), rgba(255, 255, 255, 0.8) 100%);
+      border: 1px solid rgba(184, 151, 138, 0.2);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 22px;
+      transition: background 200ms ease;
+    }
+
+    .demo-readout strong {
+      display: block;
+      font-size: 40px;
+      line-height: 1;
+    }
+
+    .demo-readout span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-weight: 760;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--salmon-dark);
+    }
+
+    .pipeline-card {
+      background: var(--paper);
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .footer {
+      width: min(1120px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 64px 0 78px;
+      border-top: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+    }
+
+    @media (max-width: 920px) {
+      .hero {
+        min-height: auto;
+        padding-bottom: 46px;
+      }
+
+      .hero::before {
+        background:
+          linear-gradient(180deg, rgba(251, 247, 244, 0.97) 0%, rgba(251, 247, 244, 0.88) 58%, rgba(251, 247, 244, 0.45) 100%);
+      }
+
+      .nav {
+        position: relative;
+        inset: auto;
+        align-items: flex-start;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .hero-copy {
+        padding-top: 58px;
+      }
+
+      .hero-stats,
+      .grid,
+      .workflow,
+      .radar-layout,
+      .section-head,
+      .footer {
+        grid-template-columns: 1fr;
+      }
+
+      .workflow {
+        gap: 10px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .hero-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .hero-actions .button {
+        width: 100%;
+      }
+
+      .section {
+        padding: 52px 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-art" aria-hidden="true">
+      <img src="assets/github-hero.svg" alt="">
+    </div>
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="https://github.com/YusufEminoglu/osm_3d_model">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>3D OSM Model</span>
+      </a>
+      <div class="nav-links">
+        <a href="#workflow">Workflow</a>
+        <a href="#capabilities">Capabilities</a>
+        <a href="#showcase">Showcase</a>
+        <a href="ARCHITECTURE.md">Architecture</a>
+      </div>
+    </nav>
+
+    <div class="hero-copy">
+      <p class="eyebrow">QGIS + OpenStreetMap + Three.js</p>
+      <h1>3D OSM Model</h1>
+      <p class="lead">Select a study area in QGIS, download OpenStreetMap data, and open a live procedural 3D city viewer for planning, teaching, mobility reading, and public communication.</p>
+      <div class="hero-actions">
+        <a class="button primary" href="https://github.com/YusufEminoglu/osm_3d_model">Open GitHub</a>
+        <a class="button secondary" href="#workflow">See the workflow</a>
+      </div>
+      <div class="hero-stats" aria-label="Highlights">
+        <div class="stat"><strong>1</strong><span>primary action</span></div>
+        <div class="stat"><strong>300 ha</strong><span>polite area cap</span></div>
+        <div class="stat"><strong>OSM</strong><span>native schema</span></div>
+        <div class="stat"><strong>3D</strong><span>walkable viewer</span></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="section plain" id="why">
+      <div class="section-head">
+        <h2>Built for real planning conversations.</h2>
+        <p>3D OSM Model is not just a visualization trick. It makes the first version of an urban context model fast enough to use during design exploration, studio review, public meetings, and classroom demonstrations.</p>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>Native OSM tags</h3>
+          <p>Fields such as building, building_levels, highway, waterway, landuse, natural, leisure, and width stay visible through the export.</p>
+        </article>
+        <article class="card">
+          <h3>Procedural city detail</h3>
+          <p>Buildings, roofs, roads, sidewalks, bike lanes, waterways, trees, vehicles, pedestrians, and furniture are generated in the viewer.</p>
+        </article>
+        <article class="card">
+          <h3>Presentation ready</h3>
+          <p>Golden-hour lighting, screenshots, measurement, camera bookmarks, walk mode, and a live dashboard support demos without extra tooling.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="workflow">
+      <div class="section-head">
+        <h2>One clean pipeline.</h2>
+        <p>The plugin hides the rough edges: study area logic, Overpass fallback, clipping, reprojection, GeoJSON writing, manifest defaults, local serving, and browser launch.</p>
+      </div>
+      <div class="workflow">
+        <article class="step">
+          <span class="step-number">1</span>
+          <h3>Pick area</h3>
+          <p>Use the current map extent or selected polygon features in QGIS.</p>
+        </article>
+        <article class="step">
+          <span class="step-number">2</span>
+          <h3>Fit circle</h3>
+          <p>The largest safe study circle is fitted and clamped to a polite request size.</p>
+        </article>
+        <article class="step">
+          <span class="step-number">3</span>
+          <h3>Fetch OSM</h3>
+          <p>Overpass mirrors provide buildings, roads, water, greens, trees, and furniture.</p>
+        </article>
+        <article class="step">
+          <span class="step-number">4</span>
+          <h3>Export layers</h3>
+          <p>Native-tag GeoJSON and a viewer manifest are written to the web data folder.</p>
+        </article>
+        <article class="step">
+          <span class="step-number">5</span>
+          <h3>Explore 3D</h3>
+          <p>The local Three.js viewer opens with controls for style, sun, walk, and screenshots.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="capabilities">
+      <div class="section-head">
+        <h2>Radar view of the system.</h2>
+        <p>The plugin is strongest when the pieces are seen together: a simple QGIS action, native OSM semantics, procedural 3D detail, live mobility, terrain context, and shareable output.</p>
+      </div>
+      <div class="radar-layout">
+        <div class="radar-panel">
+          <img src="assets/capability-radar.svg" alt="Capability radar">
+        </div>
+        <aside class="demo-panel">
+          <div class="demo-readout">
+            <div>
+              <strong id="life-value">62%</strong>
+              <span id="life-label">balanced city life</span>
+            </div>
+          </div>
+          <label for="life-slider"><strong>Viewer life density</strong></label>
+          <input id="life-slider" type="range" min="10" max="100" value="62">
+          <p>Use the real viewer to tune traffic, pedestrians, cyclists, sun, fog, DEM mesh quality, and style controls during a live demo.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section" id="showcase">
+      <div class="section-head">
+        <h2>Showcase recipes.</h2>
+        <p>Use these scenarios to prepare GitHub screenshots, classroom examples, or stakeholder demos.</p>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>Compact neighborhood</h3>
+          <p>Show the one-click flow, dashboard metrics, function-colored buildings, roads, sidewalks, cars, and pedestrians.</p>
+        </article>
+        <article class="card">
+          <h3>Complete street</h3>
+          <p>Show bike lanes, cyclists, lamps, benches, bus stops, and density controls on a readable corridor.</p>
+        </article>
+        <article class="card">
+          <h3>Water and terrain</h3>
+          <p>Show waterways, trees, greens, the model base, DEM support, and golden-hour shadows.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="architecture">
+      <div class="section-head">
+        <h2>Architecture at a glance.</h2>
+        <p>The same contract powers the sample city and real exports. The viewer reads a manifest, loads GeoJSON layers, and builds the scene procedurally.</p>
+      </div>
+      <div class="pipeline-card">
+        <img src="assets/pipeline.svg" alt="Pipeline from QGIS to Three.js">
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>
+      <h2>Ready for a stronger GitHub presence.</h2>
+      <p>Enable GitHub Pages from the repository settings, using the main branch and the `/docs` folder. Documentation changes do not require a plugin version bump.</p>
+    </div>
+    <a class="button primary" href="PUBLISHING.md">Publishing guide</a>
+  </footer>
+
+  <script>
+    const slider = document.getElementById("life-slider");
+    const value = document.getElementById("life-value");
+    const label = document.getElementById("life-label");
+    function updateLife() {
+      const v = Number(slider.value);
+      document.documentElement.style.setProperty("--life", v + "%");
+      value.textContent = v + "%";
+      label.textContent = v < 35 ? "quiet study model" : v < 72 ? "balanced city life" : "busy public realm";
+    }
+    slider.addEventListener("input", updateLife);
+    updateLife();
+  </script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible problem in the QGIS plugin, exporter, or 3D viewer.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve 3D OSM Model. Please include enough detail to reproduce the issue.
+  - type: input
+    id: plugin_version
+    attributes:
+      label: Plugin version
+      placeholder: "Example: 0.8.2"
+    validations:
+      required: true
+  - type: input
+    id: qgis_version
+    attributes:
+      label: QGIS version
+      placeholder: "Example: 3.40"
+    validations:
+      required: true
+  - type: dropdown
+    id: area_source
+    attributes:
+      label: Study area source
+      options:
+        - Current map view
+        - Selected polygon feature(s)
+        - Bundled sample city
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open QGIS...
+        2. Select...
+        3. Click...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or browser console output
+      description: Paste relevant text or attach screenshots. Keep OpenStreetMap attribution visible in shared screenshots.
+      render: text
+  - type: textarea
+    id: area
+    attributes:
+      label: Area details
+      description: If safe to share, mention the city/neighborhood, approximate area size, and whether Overpass was slow or rate-limited.

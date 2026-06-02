@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest an improvement for the exporter, viewer, data model, or GitHub showcase.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share the planning use case first. The strongest feature requests explain what decision, demo, or workflow becomes easier.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Planning or visualization need
+      placeholder: "What are you trying to understand, present, or automate?"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed feature
+      placeholder: "Describe the change you want to see."
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area of the system
+      options:
+        - QGIS dialog
+        - OSM download/export
+        - Three.js viewer
+        - Styling and facades
+        - Mobility and traffic
+        - Terrain/DEM
+        - Documentation/GitHub page
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example data or inspiration
+      description: Add OSM tags, screenshots, links, or comparable tools if useful.
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This should preserve the one-button workflow.
+        - label: This should not require external pip dependencies.
+        - label: This should work with the bundled sample city.

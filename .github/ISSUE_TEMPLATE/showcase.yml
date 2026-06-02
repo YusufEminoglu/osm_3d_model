@@ -1,0 +1,42 @@
+name: Showcase idea
+description: Propose an area, screenshot set, or demo story for the GitHub page.
+title: "[Showcase]: "
+labels: ["showcase"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for demo locations, screenshot ideas, teaching examples, and public-facing gallery material.
+  - type: input
+    id: location
+    attributes:
+      label: Location or theme
+      placeholder: "Example: waterfront corridor, campus core, complete street"
+    validations:
+      required: true
+  - type: textarea
+    id: story
+    attributes:
+      label: Story to tell
+      placeholder: "What should this example prove or communicate?"
+    validations:
+      required: true
+  - type: checkboxes
+    id: elements
+    attributes:
+      label: Scene elements to highlight
+      options:
+        - label: Buildings and floors
+        - label: Roads and sidewalks
+        - label: Bike lanes and cyclists
+        - label: Waterways
+        - label: Trees and greens
+        - label: Street furniture
+        - label: DEM terrain
+        - label: Walk mode
+        - label: Screenshot or measurement tool
+  - type: textarea
+    id: media
+    attributes:
+      label: Existing media or notes
+      description: Attach screenshots or note the camera angles that would make the example clear.
