@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.1] - 2026-06-02
+
+- Fixed the QGIS Plugin Hub upload error caused by a literal `%` in the changelog (ConfigParser interpolation); reworded so metadata parses.
+- Roads exported as MultiLineString (post dissolve) now render full procedural carriageways and sidewalks on **both** sides — the viewer previously skipped any non-LineString road.
+- Default building colours switched to muted greys/slates (European / North-American massing); default facades and roofs lead with stone/glass/charcoal instead of terracotta brick.
+- Roof texture options renamed to systematic, descriptive labels (e.g. "Slate tile", "Standing-seam metal") instead of RoofA/RoofB; internal keys unchanged.
+- Cyclists ride automatically whenever a bike-lane layer exists.
+- Procedural building setback now defaults to 0.
+- Trucks ~1% and buses ~2% of traffic; the rest are city cars/vans.
+- Removed the redundant top-level "Block color" control (covered by Block Categories).
+
 ## [0.8.0] - 2026-06-02
 
 - Elite viewer toolbar: the floating circular buttons (absolutely positioned, which left dead gaps where the language and advanced buttons used to be) are now a single self-packing glass tray with even spacing and hairline separators grouping dashboard / docks / walk / tools.

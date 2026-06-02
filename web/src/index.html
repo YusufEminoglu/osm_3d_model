@@ -7,7 +7,7 @@
     <meta name="description" content="3D OSM Model: pick an area, download OpenStreetMap, and explore it as an interactive 3D city.">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23b8978a'/%3E%3Crect x='3' y='7' width='3' height='6' fill='%23fffaf7'/%3E%3Crect x='7' y='4' width='3' height='9' fill='%23fffaf7'/%3E%3Crect x='11' y='6' width='2' height='7' fill='%23fffaf7'/%3E%3C/svg%3E">
 
-    <link rel="stylesheet" href="style.css?v=osm0.8.0">
+    <link rel="stylesheet" href="style.css?v=osm0.8.1">
 
     <script type="importmap">
         {
@@ -165,7 +165,6 @@
 
     <aside class="dock-panel hidden" id="style-dock">
         <div class="dock-head"><span data-i18n="dockStyle">Style</span><button class="dock-close" data-close="style-dock">x</button></div>
-        <label><span data-i18n="lblIslandColor">Block color</span> <input type="color" data-setting="islandColor"></label>
         <label><span data-i18n="lblIslandTexture">Block texture</span> <select data-setting="islandTexture"></select></label>
         <label><span data-i18n="lblIslandTransparency">Block transparency</span> <input type="range" min="0" max="0.95" step="0.05" data-setting="islandTransparency"></label>
         <label><span data-i18n="lblRoadColor">Road color</span> <input type="color" data-setting="roadColor"></label>
@@ -294,6 +293,6 @@
 
     <div id="osm-credit" class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> <span data-i18n="osmContributors">contributors</span></div>
 
-    <script type="module" src="app.js?v=osm0.8.0"></script>
+    <script type="module" src="app.js?v=osm0.8.1"></script>
 </body>
 </html>

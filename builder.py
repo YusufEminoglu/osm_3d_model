@@ -205,9 +205,9 @@ def _viewer_defaults(latitude: float, has_dem: bool) -> dict:
         "showWaterlines": True,
         "waterlineWidth": 3.0,
         # OSM cycleways drawn as green bike-lane strips (procedural, like PlanX 3D
-        # City); moving bicycles off by default to keep the scene calm.
+        # City); cyclists ride whenever a bike-lane layer is present.
         "showBikeLanes": True,
-        "showBikes": False,
+        "showBikes": True,
         "bikeDensity": 0.1,
         # Procedural sidewalks both sides; pedestrians keep to them, off the road.
         "showSidewalks": True,
@@ -232,7 +232,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.7.0",
+        "version": "0.8.1",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),

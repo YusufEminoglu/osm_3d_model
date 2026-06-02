@@ -553,7 +553,7 @@ const LAYER = {
   carExtra:  0.08
 };
 const FACADE_TEXTURE_SCALE_MULTIPLIER = 4.85;
-const SETTINGS_SCHEMA_VERSION = 10;
+const SETTINGS_SCHEMA_VERSION = 11;
 
 // Match the viewer's local X axis to the QGIS map orientation.
 const LOCAL_X_SIGN = -1;
@@ -954,6 +954,27 @@ const textureSets = {
   }
 };
 
+// Human-readable, systematic labels for the otherwise opaque roof texture keys
+// (RoofA/RoofB/… read as amateur). Keys stay stable for persistence + presets;
+// only the displayed option text changes. Names match each preset's appearance
+// in createRoofPresetTexture().
+const ROOF_TEXTURE_LABELS = {
+  RoofA: 'Clay tile (tan)',
+  RoofB: 'Corrugated metal',
+  RoofC: 'Mission tile (red)',
+  RoofD: 'Flat concrete',
+  GermanTile: 'Slate tile',
+  TurkishTile: 'Terracotta tile',
+  USShingle: 'Asphalt shingle',
+  StandingSeam: 'Standing-seam metal',
+  GreenRoof: 'Green roof',
+  SolarRoof: 'Solar panel',
+  CeramicLight: 'Light ceramic',
+};
+function roofTextureLabel(key) {
+  return ROOF_TEXTURE_LABELS[key] || key;
+}
+
 // The region-specific Turkish facade textures (facade_tr_*.png, ~5 MB) were
 // removed in v0.7.0: this is a global OSM tool, so buildings use the generic
 // facade set below. turkishFacadeMatch()/normalizeFacadeKey() stay generic and
@@ -968,8 +989,8 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Curved Metal', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Dual Recycle', 'Cylinder', 'Compact', 'Solar Compactor'],
     busstops: ['Glass Shelter', 'Minimal Canopy', 'Steel Canopy', 'Wood Cabin', 'Compact Marker'],
-    facades: ['UrbanA', 'UrbanB', 'UrbanC', 'UrbanD', 'UrbanE'],
-    roofs: ['RoofA', 'RoofB', 'GermanTile', 'USShingle', 'StandingSeam'],
+    facades: ['UrbanE', 'CivicStone', 'CampusGlass', 'UrbanB', 'UrbanA'],
+    roofs: ['USShingle', 'StandingSeam', 'GermanTile', 'RoofD', 'RoofB'],
     paving: ['Asphalt', 'StoneA', 'Cobble', 'Concrete', 'PlazaGranite']
   },
   'Modern Turkish': {
@@ -1569,7 +1590,7 @@ const settings = {
   assetTheme: 'Modern Urban',
   showXyzTiles: false,
   xyzTileUrl: '',
-  roofTexture: 'RoofA',
+  roofTexture: 'USShingle',
   roofShape: 'Pyramid',
   roofHeight: 2.0,
   roadStyle: 'Asphalt',
@@ -1643,7 +1664,7 @@ const settings = {
   showWaterlines: false,
   waterlineWidth: 3.0,
   showBikeLanes: false,
-  showBikes: false,
+  showBikes: true,
   bikeLaneWidth: 2.4,
   bikeLaneColor: '#16a34a',
   bikeDensity: 0.1,
@@ -1651,7 +1672,7 @@ const settings = {
   showRoadMarkings: true,
   showLedges: true,
   showStorefronts: true,
-  buildingSetback: 1.2,
+  buildingSetback: 0,
   ledgeProjection: 0.15,
   showZoningEnvelopes: false,
   highlightViolations: true,
@@ -1765,6 +1786,12 @@ function loadPersistedSettings() {
         settings.showBenches = true;
         settings.showBins = true;
         settings.showBusStops = true;
+      }
+      if (schemaVersion < 11) {
+        // New in 0.8.1: setback default → 0, and cyclists on whenever a
+        // bike-lane layer exists. Reset these once for returning users.
+        settings.buildingSetback = 0;
+        settings.showBikes = true;
       }
     }
     settings.roofShape = roofShapeValue(settings.roofShape, 'Pyramid');
@@ -3239,6 +3266,11 @@ function applyManifestDefaults() {
           settings.showBenches = true;
           settings.showBins = true;
           settings.showBusStops = true;
+        }
+        if (schemaVersion < 11) {
+          // New in 0.8.1: setback default → 0, cyclists on with bike lanes.
+          settings.buildingSetback = 0;
+          settings.showBikes = true;
         }
       }
       if (!persisted.assetTheme && projectManifest.assetTheme) settings.assetTheme = projectManifest.assetTheme;
@@ -4846,12 +4878,12 @@ function renderBlockCategoryStyleDock() {
   }
   host.innerHTML = '';
   const islandOptions = Object.keys(textureSets.island);
-  const makeSelect = (options, value) => {
+  const makeSelect = (options, value, labelFn) => {
     const select = document.createElement('select');
     options.forEach((item) => {
       const opt = document.createElement('option');
       opt.value = item;
-      opt.textContent = item;
+      opt.textContent = labelFn ? labelFn(item) : item;
       select.appendChild(opt);
     });
     select.value = value;
@@ -7086,25 +7118,27 @@ function buildFurnitureLayer() {
 
 function getSemanticColor(fn) {
   const f = String(fn || '').toUpperCase();
-  if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE') || f.includes('DETACHED') || f.includes('TERRACE') || f.includes('DORMITORY')) return '#f5e4c2';
-  if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS') || f.includes('COLLEGE') || f.includes('KINDERGARTEN')) return '#bfdbfe';
-  if (f.includes('WORSHIP') || f.includes('MOSQUE') || f.includes('CHURCH') || f.includes('TEMPLE') || f.includes('SYNAGOGUE') || f.includes('CATHEDRAL') || f.includes('CHAPEL')) return '#d8f5e0';
-  if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE') || f.includes('SUPERMARKET') || f.includes('SHOP') || f.includes('KIOSK')) return '#fed7aa';
-  if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC')) return '#fce7f3';
-  if (f.includes('SPORT') || f.includes('PITCH')) return '#e0e7ff';
+  // Muted greys/slates — European & North-American massing rather than sandy
+  // pastels. Subtle hue shifts keep functions distinguishable.
+  if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE') || f.includes('DETACHED') || f.includes('TERRACE') || f.includes('DORMITORY')) return '#c3c7cc';
+  if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS') || f.includes('COLLEGE') || f.includes('KINDERGARTEN')) return '#a9b6c4';
+  if (f.includes('WORSHIP') || f.includes('MOSQUE') || f.includes('CHURCH') || f.includes('TEMPLE') || f.includes('SYNAGOGUE') || f.includes('CATHEDRAL') || f.includes('CHAPEL')) return '#bcc7bf';
+  if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE') || f.includes('SUPERMARKET') || f.includes('SHOP') || f.includes('KIOSK')) return '#aab0b7';
+  if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC')) return '#c7bfc6';
+  if (f.includes('SPORT') || f.includes('PITCH')) return '#aeb6c2';
   if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN') || f.includes('MEADOW') || f.includes('CEMETERY')) return '#bbf7d0';
-  if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC') || f.includes('TOWNHALL')) return '#ede9fe';
-  if (f.includes('INDUSTR') || f.includes('WAREHOUSE') || f.includes('MANUFACTURE') || f.includes('HANGAR')) return '#e2e8f0';
-  if (f.includes('KONUT') || f.includes('YERLEŞİK') || f.includes('MESKEN')) return '#f5e4c2';
-  if (f.includes('OKUL') || f.includes('EĞİTİM') || f.includes('ÜNİVERSİTE')) return '#bfdbfe';
-  if (f.includes('CAMİ') || f.includes('DİNİ') || f.includes('İBADET')) return '#d8f5e0';
-  if (f.includes('TİCARET') || f.includes('ÇARŞI') || f.includes('AVM')) return '#fed7aa';
-  if (f.includes('SAĞLIK') || f.includes('HASTANE') || f.includes('KLİNİK')) return '#fce7f3';
-  if (f.includes('SPOR') || f.includes('STADYUM') || f.includes('ARENA')) return '#e0e7ff';
+  if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC') || f.includes('TOWNHALL')) return '#b3afbd';
+  if (f.includes('INDUSTR') || f.includes('WAREHOUSE') || f.includes('MANUFACTURE') || f.includes('HANGAR')) return '#9aa0a6';
+  if (f.includes('KONUT') || f.includes('YERLEŞİK') || f.includes('MESKEN')) return '#c3c7cc';
+  if (f.includes('OKUL') || f.includes('EĞİTİM') || f.includes('ÜNİVERSİTE')) return '#a9b6c4';
+  if (f.includes('CAMİ') || f.includes('DİNİ') || f.includes('İBADET')) return '#bcc7bf';
+  if (f.includes('TİCARET') || f.includes('ÇARŞI') || f.includes('AVM')) return '#aab0b7';
+  if (f.includes('SAĞLIK') || f.includes('HASTANE') || f.includes('KLİNİK')) return '#c7bfc6';
+  if (f.includes('SPOR') || f.includes('STADYUM') || f.includes('ARENA')) return '#aeb6c2';
   if (f.includes('PARK') || f.includes('YEŞİL') || f.includes('BAHÇE')) return '#bbf7d0';
-  if (f.includes('KAMU') || f.includes('İDARİ') || f.includes('BELEDİYE')) return '#ede9fe';
-  if (f.includes('SANAYİ') || f.includes('ENDÜSTRİ') || f.includes('FABRİKA')) return '#e2e8f0';
-  return '#f1f5f9';
+  if (f.includes('KAMU') || f.includes('İDARİ') || f.includes('BELEDİYE')) return '#b3afbd';
+  if (f.includes('SANAYİ') || f.includes('ENDÜSTRİ') || f.includes('FABRİKA')) return '#9aa0a6';
+  return '#b6bbc1';
 }
 
 function getFunctionIcon(fn) {
@@ -7645,8 +7679,7 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
   });
   const amenityPoints = settings.roadColorMode === 'Amenity distance' ? estimateAmenityPoints() : [];
 
-  for (const f of yollar.features) {
-    if (!f.geometry || f.geometry.type !== 'LineString') continue;
+  for (const f of explodeLineFeatures(yollar)) {
     const xzPts = [];
     for (const c of f.geometry.coordinates) {
       const [x, z] = metersToLocal(c[0], c[1]);
@@ -7861,11 +7894,12 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
 
 // Procedural vehicle factory. Front faces -Z (headlights -Z, brake lights +Z),
 // matching the car animation's lookAt orientation. Returns { group, speedScale }.
+// Mostly city cars/vans; buses ~2%, trucks/lorries ~1%.
 const VEHICLE_TYPES = [
-  { type: 'car', weight: 0.58 },
-  { type: 'van', weight: 0.18 },
-  { type: 'bus', weight: 0.12 },
-  { type: 'truck', weight: 0.12 },
+  { type: 'car', weight: 0.82 },
+  { type: 'van', weight: 0.15 },
+  { type: 'bus', weight: 0.02 },
+  { type: 'truck', weight: 0.01 },
 ];
 
 function pickVehicleType() {
@@ -8068,8 +8102,7 @@ function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = scen
   const swWidth = 1.3;
   const swMat = new THREE.MeshStandardMaterial({ color: 0xc9bfa2, roughness: 0.95, metalness: 0.0 });
 
-  for (const f of yollar.features) {
-    if (!f.geometry || f.geometry.type !== 'LineString') continue;
+  for (const f of explodeLineFeatures(yollar)) {
     const xzPtsW = [];
     for (const c of f.geometry.coordinates) {
       const [x, z] = metersToLocal(c[0], c[1]);
@@ -8140,6 +8173,22 @@ function lineSetsFromGeometry(geometry) {
   if (geometry.type === 'LineString') return [geometry.coordinates];
   if (geometry.type === 'MultiLineString') return geometry.coordinates || [];
   return [];
+}
+
+// Flatten a line GeoJSON into single-part LineString features, preserving each
+// source feature's properties. Lets the road/sidewalk builders treat dissolved
+// MultiLineString roads as a set of clean single lines instead of skipping them
+// (the dissolve step on export can leave MultiLineString geometries).
+function explodeLineFeatures(geojson) {
+  const out = [];
+  for (const f of geojson?.features || []) {
+    for (const coords of lineSetsFromGeometry(f.geometry)) {
+      if (coords && coords.length >= 2) {
+        out.push({ properties: f.properties || {}, geometry: { type: 'LineString', coordinates: coords } });
+      }
+    }
+  }
+  return out;
 }
 
 function buildPedestrianPathStrip(coords, width, mat, buildToken) {
@@ -9689,7 +9738,8 @@ function populateDockSelects() {
   document.querySelectorAll('.dock-panel select[data-setting]').forEach((select) => {
     const key = select.dataset.setting;
     if (!selectOptions[key]) return;
-    select.innerHTML = selectOptions[key].map((value) => `<option value="${value}">${value}</option>`).join('');
+    const label = key === 'roofTexture' ? roofTextureLabel : (v) => v;
+    select.innerHTML = selectOptions[key].map((value) => `<option value="${value}">${label(value)}</option>`).join('');
   });
 }
 
@@ -9721,12 +9771,12 @@ function renderFunctionStyleDock() {
   const facadeOptions = uniqueAssetVariants('facades', Object.keys(textureSets.facade))
     .filter((value) => Object.prototype.hasOwnProperty.call(textureSets.facade, value));
   const roofOptions = Object.keys(textureSets.roof);
-  const makeSelect = (options, value) => {
+  const makeSelect = (options, value, labelFn) => {
     const select = document.createElement('select');
     options.forEach((item) => {
       const opt = document.createElement('option');
       opt.value = item;
-      opt.textContent = item;
+      opt.textContent = labelFn ? labelFn(item) : item;
       select.appendChild(opt);
     });
     select.value = value;
@@ -9795,7 +9845,7 @@ function renderFunctionStyleDock() {
       rebuildScene();
     });
 
-    const roofTexture = makeSelect(roofOptions, style.roofTexture);
+    const roofTexture = makeSelect(roofOptions, style.roofTexture, roofTextureLabel);
     roofTexture.addEventListener('change', () => {
       style.roofTexture = presetValue(roofTexture.value, textureSets.roof, 'RoofA');
       saveFunctionBuildingStyles();

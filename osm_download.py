@@ -36,7 +36,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.7.0 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.8.1 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 
