@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2] - 2026-06-02
+
+- Restored the six apartment/residential facade textures (renamed from the old region-specific set) and made them the default building facade, kept with the grey massing colours.
+- Roads are now used as raw OpenStreetMap geometry; removed the snap+dissolve `connect_roads` step (it fragmented geometry without improving the network).
+- Model base buffer around the study circle: 20 m → 10 m.
+- Changed the dashboard toggle button icon (☰ → ▦).
+
 ## [0.8.1] - 2026-06-02
 
 - Fixed the QGIS Plugin Hub upload error caused by a literal `%` in the changelog (ConfigParser interpolation); reworded so metadata parses.

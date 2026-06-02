@@ -10,7 +10,7 @@ City viewer engine.
    feature(s)** in the active layer.
 2. The plugin fits the **largest circle that fits inside your selection** as the
    study boundary, clamped to a maximum area (default 150 ha, up to ~300 ha). The
-   **model base extends +20 m beyond that circle**, so the city sits on a small
+   **model base extends +10 m beyond that circle**, so the city sits on a small
    platform margin while the OSM data stays clipped to the inner circle.
 3. It downloads OpenStreetMap **buildings, roads, cycleways, waterways, greens,
    trees and street furniture** (bus stops, benches, street lamps, waste baskets)
@@ -37,7 +37,7 @@ City viewer engine.
   ribbons whose width scales with the waterway class — **on by default**.
 - **Street furniture:** bus stops, benches, street lamps and waste baskets —
   **on by default**; street lamps glow after dark.
-- **Boundary:** largest inscribed circle; model base buffered +20 m; terrain
+- **Boundary:** largest inscribed circle; model base buffered +10 m; terrain
   clipped to the base.
 - **DEM:** optional — pick a raster in the dialog and it is clipped to the circle.
   Without a DEM the base is flat.

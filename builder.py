@@ -27,14 +27,14 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QVariant
 
-from .osm_download import connect_roads, download_osm_for_circle, save_layer_to_geojson, utm_epsg_for
+from .osm_download import download_osm_for_circle, save_layer_to_geojson, utm_epsg_for
 
 MODEL_NAME = "3D OSM Model"
 MAX_STUDY_HA_DEFAULT = 300.0
 MIN_RADIUS_M = 30.0
 # The model base/island extends this many metres beyond the OSM study circle, so
 # the city sits on a small platform margin (OSM data stays clipped to the circle).
-BASE_BUFFER_M = 20.0
+BASE_BUFFER_M = 10.0
 
 # Salmon-tinted grey ("yavru agzi") palette for the viewer defaults.
 THEME = {
@@ -232,7 +232,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.8.1",
+        "version": "0.8.2",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -300,8 +300,10 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
 
     # OSM download + clip (to the inner circle, not the buffered base).
     osm = download_osm_for_circle(circle_utm, epsg_dest, feedback=feedback)
-    # Weld road segments into a connected network (snap + dissolve, best-effort).
-    osm["roads"] = connect_roads(osm["roads"], tolerance_m=2.0, feedback=feedback)
+    # Roads are used as raw OSM ways (single-part LineStrings). The earlier
+    # snap+dissolve "connect_roads" step was removed: it produced MultiLineString
+    # geometries and did not actually improve the network, so the native OSM
+    # roads are kept as-is.
 
     # Write GeoJSON the viewer expects.
     web_path = Path(web_root)

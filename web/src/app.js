@@ -927,6 +927,12 @@ const textureSets = {
     PlazaGranite: 'PlazaGranite'
   },
   facade: {
+    ResidentialA: 'assets/facade_resid_a.png',
+    ResidentialB: 'assets/facade_resid_b.png',
+    ResidentialC: 'assets/facade_resid_c.png',
+    ResidentialD: 'assets/facade_resid_d.png',
+    ResidentialE: 'assets/facade_resid_e.png',
+    ResidentialF: 'assets/facade_resid_f.png',
     UrbanA: 'assets/facade.png',
     UrbanB: 'assets/facade2.png',
     UrbanC: 'assets/facade3.png',
@@ -989,7 +995,7 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Curved Metal', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Dual Recycle', 'Cylinder', 'Compact', 'Solar Compactor'],
     busstops: ['Glass Shelter', 'Minimal Canopy', 'Steel Canopy', 'Wood Cabin', 'Compact Marker'],
-    facades: ['UrbanE', 'CivicStone', 'CampusGlass', 'UrbanB', 'UrbanA'],
+    facades: ['ResidentialA', 'ResidentialB', 'ResidentialC', 'ResidentialD', 'ResidentialE', 'ResidentialF'],
     roofs: ['USShingle', 'StandingSeam', 'GermanTile', 'RoofD', 'RoofB'],
     paving: ['Asphalt', 'StoneA', 'Cobble', 'Concrete', 'PlazaGranite']
   },
