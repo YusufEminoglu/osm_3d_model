@@ -2,7 +2,7 @@
 name=3D OSM Model
 qgisMinimumVersion=3.28
 description=Pick an area, download OpenStreetMap data, and instantly view it as a procedural 3D city in the browser.
-version=0.7.0
+version=0.8.0
 author=Yusuf Eminoglu
 email=yusuf.eminoglu@deu.edu.tr
 about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, cycleways, waterways, greens, trees and street furniture (bus stops, benches, lamps, bins) using their native OSM tags, fits the largest circle inside your selection as the study boundary (the model base extends 20 m beyond it), and opens an interactive, English-only Three.js 3D city viewer. Roads, sidewalks and bike lanes are drawn procedurally with lane markings; pedestrians keep to the sidewalks and cars to the carriageway; buildings are coloured by OSM function and default to a function-aware floor count when no level data exists. An external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
@@ -19,6 +19,10 @@ hasProcessingProvider=no
 plugin_dependencies=
 license=MIT
 changelog=
+    3D OSM Model 0.8.0 - Elite unified viewer toolbar.
+        - The viewer's floating circular toolbar buttons were absolutely positioned at fixed pixel offsets, which left visible dead gaps where the old language and advanced buttons used to sit. They are now a single self-packing glass tray with even spacing and hairline separators that group the dashboard, dock toggles, walk mode and tools.
+        - Dock toggle buttons (Layers, Style, Scene & Sun, Model Studio) now light up with an active state so it is always clear which panel is currently open.
+        - Removed the stale "Switch language (TR/EN)" row from the Help & shortcuts overlay; the viewer has been English-only since 0.7.0.
     3D OSM Model 0.7.0 - 100% OpenStreetMap schema, procedural roads & bike lanes, simpler English viewer.
         - The export now carries raw OpenStreetMap columns (building, building_levels, highway, waterway, leisure/landuse/natural, width) instead of a translated schema; the viewer maps these straight to floors, function colours, road hierarchy and widths.
         - Roads, sidewalks and bike lanes are fully procedural again (per-road ribbons with lane markings, sidewalks on both sides, green cycleway strips from OSM highway=cycleway), matching the PlanX 3D City engine; the dissolved-canvas road surface was removed.

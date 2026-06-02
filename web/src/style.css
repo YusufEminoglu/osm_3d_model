@@ -1754,3 +1754,84 @@ body.measuring #map { cursor: crosshair; }
 }
 .osm-credit a { color: #fbcfe8; text-decoration: none; font-weight: 700; }
 .osm-credit a:hover { text-decoration: underline; }
+
+/* ====================================================================== */
+/* v0.8.0 — unified toolbar tray. Replaces the absolutely-positioned       */
+/* floating circle buttons (hardcoded left: values that left dead gaps)    */
+/* with a single self-packing flex tray: even spacing, grouped by          */
+/* separators, flat icon buttons with hover + active feedback.             */
+/* ====================================================================== */
+.toolbar {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 5px;
+    width: max-content;
+    max-width: calc(100vw - 40px);
+    pointer-events: auto;
+    background: var(--planx-bg-toolbar);
+    border: 1px solid var(--planx-border-strong);
+    border-radius: var(--planx-radius-md);
+    box-shadow: var(--planx-shadow-md);
+    backdrop-filter: blur(var(--planx-blur)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--planx-blur)) saturate(150%);
+}
+
+/* Neutralise the legacy absolute positioning + per-class left: offsets and
+   the solid salmon circle; tray buttons are flat icon tiles. */
+.toolbar .panel-btn {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 38px;
+    height: 38px;
+    border-radius: var(--planx-radius-sm);
+    background: transparent;
+    color: #f6ebe6;
+    box-shadow: none;
+    font-size: 1.05rem;
+    line-height: 1;
+    transition: background var(--planx-transition), color var(--planx-transition), transform var(--planx-transition);
+}
+.toolbar .panel-btn:hover {
+    background: var(--planx-accent-glow);
+    color: #ffffff;
+    transform: none;
+}
+.toolbar .panel-btn:active {
+    transform: scale(0.94);
+}
+.toolbar .panel-btn:focus-visible {
+    outline: 2px solid var(--planx-accent-soft);
+    outline-offset: 1px;
+}
+/* Active = the dock/mode this button controls is currently open. */
+.toolbar .panel-btn.active {
+    background: var(--planx-accent);
+    color: #ffffff;
+    box-shadow: 0 2px 10px -2px var(--planx-accent-glow);
+}
+/* Measuring keeps its distinct blue while engaged. */
+.toolbar .measure-btn.active {
+    background: #2563eb;
+    color: #ffffff;
+}
+.toolbar .measure-btn.active:hover {
+    background: #1d4ed8;
+}
+
+/* Group separators between dashboard | docks | walk | tools. */
+.tb-sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 4px 3px;
+    background: var(--planx-border-strong);
+}
+
+/* Toolbar now lives in normal flow at the top of #ui-container, so the
+   dashboard panel only needs a small gap below it (was 50px to clear the
+   absolutely-positioned buttons). */
+#main-panel {
+    margin-top: 12px;
+}

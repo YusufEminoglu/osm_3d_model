@@ -9897,6 +9897,14 @@ function initDockUi() {
   dockUiInitialized = true;
   populateDockSelects();
   updateDockControls();
+  // Keep each dock toggle button's .active state in sync with whether its
+  // dock is currently visible, so the toolbar shows which panel is open.
+  const syncDockButtons = () => {
+    document.querySelectorAll('[data-dock-target]').forEach((b) => {
+      const dock = document.getElementById(b.dataset.dockTarget);
+      b.classList.toggle('active', !!dock && !dock.classList.contains('hidden'));
+    });
+  };
   document.addEventListener('click', (event) => {
     const btn = event.target.closest('[data-dock-target]');
     if (!btn) return;
@@ -9907,7 +9915,8 @@ function initDockUi() {
       if (dock !== target) dock.classList.add('hidden');
     });
     target.classList.toggle('hidden');
-    
+    syncDockButtons();
+
     // Refresh Model Studio lists if opened
     if (target.id === 'model-studio-dock' && !target.classList.contains('hidden')) {
       renderUploadedModelsList();
@@ -9918,8 +9927,12 @@ function initDockUi() {
     }
   });
   document.querySelectorAll('.dock-close').forEach((btn) => {
-    btn.addEventListener('click', () => document.getElementById(btn.dataset.close)?.classList.add('hidden'));
+    btn.addEventListener('click', () => {
+      document.getElementById(btn.dataset.close)?.classList.add('hidden');
+      syncDockButtons();
+    });
   });
+  syncDockButtons();
   document.querySelectorAll('.dock-panel [data-setting]').forEach((el) => {
     const handler = () => applyDockSetting(el.dataset.setting, el.type === 'checkbox' ? el.checked : el.value, el.type);
     el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', handler);
@@ -10180,7 +10193,6 @@ initTourUi();
       ['helpMeasureRow', '📏'],
       ['helpShotRow', '📷'],
       ['helpSceneRow', '☀'],
-      ['helpLangRow', '<span class="help-key">TR</span>/<span class="help-key">EN</span>'],
     ];
   }
   function buildHelp() {

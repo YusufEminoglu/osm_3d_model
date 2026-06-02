@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0] - 2026-06-02
+
+- Elite viewer toolbar: the floating circular buttons (absolutely positioned, which left dead gaps where the language and advanced buttons used to be) are now a single self-packing glass tray with even spacing and hairline separators grouping dashboard / docks / walk / tools.
+- Dock toggle buttons now show an active state, so the toolbar highlights which panel (Layers, Style, Scene, Model Studio) is currently open.
+- Removed the stale "Switch language (TR/EN)" entry from the Help & shortcuts overlay, since the viewer has been English-only since 0.7.0.
+
 ## [0.7.0] - 2026-06-02
 
 - 100% OpenStreetMap schema; procedural roads/sidewalks/bike lanes; pedestrian-vehicle separation; +20m model base; English-only simplified viewer (Urban Controls and tumulus removed); ~5MB lighter assets
