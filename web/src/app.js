@@ -547,7 +547,7 @@ const LAYER = {
   carExtra:  0.08
 };
 const FACADE_TEXTURE_SCALE_MULTIPLIER = 4.85;
-const SETTINGS_SCHEMA_VERSION = 9;
+const SETTINGS_SCHEMA_VERSION = 10;
 
 // Match the viewer's local X axis to the QGIS map orientation.
 const LOCAL_X_SIGN = -1;
@@ -1743,6 +1743,16 @@ function loadPersistedSettings() {
         settings.showIslands = true;
         settings.islandTransparency = 0;
         settings.buildingMode = 'Extruded + roof';
+      }
+      if (schemaVersion < 10) {
+        // New in 0.6.0: OSM water + street furniture layers. Enable them once so
+        // returning users see the new content after upgrading.
+        settings.showWaterlines = true;
+        settings.showFurniture = true;
+        settings.showLights = true;
+        settings.showBenches = true;
+        settings.showBins = true;
+        settings.showBusStops = true;
       }
     }
     settings.roofShape = roofShapeValue(settings.roofShape, 'Pyramid');
@@ -3208,6 +3218,15 @@ function applyManifestDefaults() {
           settings.showIslands = true;
           settings.islandTransparency = 0;
           settings.buildingMode = 'Extruded + roof';
+        }
+        if (schemaVersion < 10) {
+          // New in 0.6.0: enable OSM water + street furniture layers once.
+          settings.showWaterlines = true;
+          settings.showFurniture = true;
+          settings.showLights = true;
+          settings.showBenches = true;
+          settings.showBins = true;
+          settings.showBusStops = true;
         }
       }
       if (!persisted.assetTheme && projectManifest.assetTheme) settings.assetTheme = projectManifest.assetTheme;

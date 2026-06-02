@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.6.0] - 2026-06-02
+
+- Water (rivers/streams/canals), street furniture (stops/benches/lamps/bins) and function-aware default building heights; sample city showcases them
+
 ## [0.5.0] - 2026-06-01
 
 - Dissolved roads with clean intersections (round joins, flat caps); crosswalks and lane markings removed; sidewalks both sides

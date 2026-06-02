@@ -111,9 +111,12 @@ class Osm3dModelPlugin:
         QApplication.restoreOverrideCursor()
 
         counts = summary.get("counts", {})
+        furniture = (counts.get("busstops", 0) + counts.get("benches", 0)
+                     + counts.get("lights", 0) + counts.get("trashbins", 0))
         msg = (
             f"Done. {counts.get('buildings', 0)} buildings, {counts.get('roads', 0)} roads, "
-            f"{counts.get('greens', 0)} greens, {counts.get('trees', 0)} trees | "
+            f"{counts.get('greens', 0)} greens, {counts.get('trees', 0)} trees, "
+            f"{counts.get('waterlines', 0)} waterways, {furniture} furniture | "
             f"r={summary.get('radius_m')} m ({summary.get('area_ha')} ha). Viewer: {url}"
         )
         if self.dialog:

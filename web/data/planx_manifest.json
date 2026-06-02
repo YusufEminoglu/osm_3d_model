@@ -1,7 +1,7 @@
 {
   "schema": "planx-3d-city-manifest/v1",
   "plugin": "osm_3d_model",
-  "version": "0.3.0",
+  "version": "0.6.0",
   "mode": "vector",
   "flexibleInputs": true,
   "exportedAt": "2026-06-01T12:00:00+03:00",
@@ -23,7 +23,8 @@
     "building_floors_field": "katadedi",
     "landuse_function_field": "uipfonksiyon",
     "road_hierarchy_field": "yol_turu",
-    "block_category_field": "uipfonksiyon"
+    "block_category_field": "uipfonksiyon",
+    "waterline_width_field": "genislik"
   },
   "analysisDefaults": {
     "roadColorMode": "Default"
@@ -55,14 +56,19 @@
     "trafficSpeed": 1.0,
     "showPedestrians": true,
     "pedestrianDensity": 0.5,
-    "showFurniture": false,
+    "showFurniture": true,
+    "showLights": true,
+    "showBenches": true,
+    "showBins": true,
+    "showBusStops": true,
+    "showWaterlines": true,
+    "waterlineWidth": 3.0,
     "showCrosswalks": false,
     "showSidewalks": true,
     "showPedestrianPaths": false,
     "showParcels": false,
     "showHardscape": false,
     "showFences": false,
-    "showWaterlines": false,
     "showMosques": false,
     "showTumulus": false,
     "demMeshQuality": 140,

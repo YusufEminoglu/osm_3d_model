@@ -1,1 +1,14 @@
-{"type": "FeatureCollection", "name": "mylights", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": []}
+{"type": "FeatureCollection", "name": "mylights", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": [
+{"type": "Feature", "properties": {"osm_id": "sample_li1"}, "geometry": {"type": "Point", "coordinates": [457810.0, 4350880.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li2"}, "geometry": {"type": "Point", "coordinates": [457808.0, 4350930.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li3"}, "geometry": {"type": "Point", "coordinates": [457806.0, 4350980.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li4"}, "geometry": {"type": "Point", "coordinates": [457804.0, 4351030.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li5"}, "geometry": {"type": "Point", "coordinates": [457860.0, 4350930.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li6"}, "geometry": {"type": "Point", "coordinates": [457920.0, 4350970.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li7"}, "geometry": {"type": "Point", "coordinates": [457980.0, 4351000.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li8"}, "geometry": {"type": "Point", "coordinates": [458040.0, 4351020.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li9"}, "geometry": {"type": "Point", "coordinates": [458100.0, 4351040.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li10"}, "geometry": {"type": "Point", "coordinates": [457950.0, 4350900.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li11"}, "geometry": {"type": "Point", "coordinates": [458010.0, 4350870.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_li12"}, "geometry": {"type": "Point", "coordinates": [457880.0, 4351070.0]}}
+]}

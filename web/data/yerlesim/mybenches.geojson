@@ -1,1 +1,8 @@
-{"type": "FeatureCollection", "name": "mybenches", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": []}
+{"type": "FeatureCollection", "name": "mybenches", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": [
+{"type": "Feature", "properties": {"osm_id": "sample_be1"}, "geometry": {"type": "Point", "coordinates": [457860.0, 4350960.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_be2"}, "geometry": {"type": "Point", "coordinates": [457905.0, 4351010.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_be3"}, "geometry": {"type": "Point", "coordinates": [458010.0, 4350940.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_be4"}, "geometry": {"type": "Point", "coordinates": [458090.0, 4351000.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_be5"}, "geometry": {"type": "Point", "coordinates": [457950.0, 4351080.0]}},
+{"type": "Feature", "properties": {"osm_id": "sample_be6"}, "geometry": {"type": "Point", "coordinates": [458040.0, 4351050.0]}}
+]}

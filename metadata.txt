@@ -2,10 +2,10 @@
 name=3D OSM Model
 qgisMinimumVersion=3.28
 description=Pick an area, download OpenStreetMap data, and instantly view it as a procedural 3D city in the browser.
-version=0.5.0
+version=0.6.0
 author=Yusuf Eminoglu
 email=yusuf.eminoglu@deu.edu.tr
-about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, greens and trees, fits the largest circle inside your selection as the study boundary with a solid base, and opens an interactive Three.js 3D city viewer. Buildings default to 3 floors when no level data exists, roofs and facades follow the PlanX procedural logic (extra procedural detail is off by default), road traces are procedural, and an external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
+about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, waterways, greens, trees and street furniture (bus stops, benches, lamps, bins), fits the largest circle inside your selection as the study boundary with a solid base, and opens an interactive Three.js 3D city viewer. Waterways render as flowing ribbons and street furniture is placed along the roads; buildings default to a function-aware floor count when no level data exists, roofs and facades follow the PlanX procedural logic (extra procedural detail is off by default), road traces are procedural, and an external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
 tracker=https://github.com/YusufEminoglu/osm_3d_model/issues
 repository=https://github.com/YusufEminoglu/osm_3d_model
 category=Web
@@ -19,6 +19,12 @@ hasProcessingProvider=no
 plugin_dependencies=
 license=MIT
 changelog=
+    3D OSM Model 0.6.0 - Water, street furniture & smarter building heights.
+        - New OSM water layer: rivers, streams, canals, drains and ditches are downloaded, clipped to the study circle and drawn as flowing water ribbons whose width scales with the waterway class; the viewer's water layer is now on by default.
+        - New OSM street furniture: bus stops, benches, street lamps and waste baskets are downloaded and placed in the scene aligned to the nearest road; street lamps glow after dark. The furniture layer is on by default.
+        - Smarter default building heights: when OpenStreetMap has no floor or height data, the default floor count now depends on the building's function (housing reads taller than retail, light industry lower), and tagged roof levels are added to the massing.
+        - The bundled sample city now showcases a stream plus bus stops, benches, lamps and bins on first open, before any export.
+        - Synced the internal viewer manifest version and the Overpass User-Agent to the plugin version.
     3D OSM Model 0.5.0 - Dissolved roads with clean intersections; crosswalks removed.
         - Roads now render as a single dissolved surface drawn with rounded joins and flat end caps, so streets merge cleanly and intersections no longer show leftover ribbon edges, z-fighting or lane lines crossing the junction.
         - Removed crosswalks entirely (layer, default and toggle).

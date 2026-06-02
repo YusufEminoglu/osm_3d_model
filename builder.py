@@ -191,15 +191,23 @@ def _viewer_defaults(latitude: float, has_dem: bool) -> dict:
         "trafficSpeed": 1.0,
         "showPedestrians": True,
         "pedestrianDensity": 0.5,
+        # OSM street furniture (bus stops, benches, lamps, bins) on by default;
+        # street lamps glow at night.
+        "showFurniture": True,
+        "showLights": True,
+        "showBenches": True,
+        "showBins": True,
+        "showBusStops": True,
+        # OSM waterways drawn as flowing ribbons; per-feature width via "genislik".
+        "showWaterlines": True,
+        "waterlineWidth": 3.0,
         # Keep the rest off so the scene stays fast.
-        "showFurniture": False,
         "showCrosswalks": False,
         "showSidewalks": True,
         "showPedestrianPaths": False,
         "showParcels": False,
         "showHardscape": False,
         "showFences": False,
-        "showWaterlines": False,
         "showMosques": False,
         "showTumulus": False,
         "demMeshQuality": 140,
@@ -216,7 +224,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.3.0",
+        "version": "0.6.0",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -231,6 +239,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
             "landuse_function_field": "uipfonksiyon",
             "road_hierarchy_field": "yol_turu",
             "block_category_field": "uipfonksiyon",
+            "waterline_width_field": "genislik",
         },
         "analysisDefaults": {"roadColorMode": "Default"},
         "viewerDefaults": _viewer_defaults(latitude, has_dem),
@@ -290,8 +299,14 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
     save_layer_to_geojson(osm["roads"], vector_dir / "myroads.geojson")
     save_layer_to_geojson(osm["trees"], vector_dir / "mytrees.geojson")
     save_layer_to_geojson(osm["greens"], vector_dir / "myblocks.geojson")
+    save_layer_to_geojson(osm["waterlines"], vector_dir / "mywaterlines.geojson")
+    save_layer_to_geojson(osm["busstops"], vector_dir / "mybusstops.geojson")
+    save_layer_to_geojson(osm["benches"], vector_dir / "mybenches.geojson")
+    save_layer_to_geojson(osm["lights"], vector_dir / "mylights.geojson")
+    save_layer_to_geojson(osm["trashbins"], vector_dir / "mytrashbins.geojson")
 
-    written_named = {"mybuildings", "myroads", "mytrees", "myblocks"}
+    written_named = {"mybuildings", "myroads", "mytrees", "myblocks",
+                     "mywaterlines", "mybusstops", "mybenches", "mylights", "mytrashbins"}
     for name in INIT_LOADED_FILES:
         if name not in written_named:
             _write_empty_fc(vector_dir / f"{name}.geojson", name)
@@ -309,7 +324,10 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         roi_layer.setName("OSM Study Circle")
         project.addMapLayer(roi_layer)
         for key, label in (("greens", "OSM Greens"), ("buildings", "OSM Buildings"),
-                           ("roads", "OSM Roads"), ("trees", "OSM Trees")):
+                           ("roads", "OSM Roads"), ("waterlines", "OSM Waterways"),
+                           ("trees", "OSM Trees"), ("busstops", "OSM Bus Stops"),
+                           ("benches", "OSM Benches"), ("lights", "OSM Street Lights"),
+                           ("trashbins", "OSM Trash Bins")):
             layer = osm.get(key)
             if layer is not None and layer.featureCount() > 0:
                 layer.setName(label)

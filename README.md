@@ -11,7 +11,8 @@ City viewer engine.
 2. The plugin fits the **largest circle that fits inside your selection** as the
    study boundary, clamped to a maximum area (default 150 ha, up to ~300 ha), and
    gives it a solid base — just like PlanX 3D City.
-3. It downloads OpenStreetMap **buildings, roads, greens and trees** for that
+3. It downloads OpenStreetMap **buildings, roads, waterways, greens, trees and
+   street furniture** (bus stops, benches, street lamps, waste baskets) for that
    circle, clips them to it, and reprojects to a metric UTM CRS.
 4. It writes the GeoJSON layers + a viewer manifest and opens the 3D viewer.
 
@@ -22,8 +23,14 @@ City viewer engine.
 ## Defaults
 
 - **Buildings:** PlanX roof + facade logic; extra procedural facade detail is
-  **off by default**. Missing floor count → **3 floors**.
+  **off by default**. With no OSM floor/height data the default floor count is
+  **function-aware** (e.g. housing reads taller than retail); tagged roof levels
+  add to the massing.
 - **Roads:** procedural road traces / markings **on**.
+- **Water:** rivers, streams, canals, drains and ditches render as flowing
+  ribbons whose width scales with the waterway class — **on by default**.
+- **Street furniture:** bus stops, benches, street lamps and waste baskets —
+  **on by default**; street lamps glow after dark.
 - **Boundary:** largest inscribed circle + solid base; terrain clipped to the circle.
 - **DEM:** optional — pick a raster in the dialog and it is clipped to the circle.
   Without a DEM the base is flat.
@@ -56,7 +63,8 @@ Open the viewer directly (without running an export) and it loads a small
   attribution, and you must keep it when sharing exports or screenshots.
 - The dialog **remembers your last options** (study-area source and maximum
   area) and offers an *"open viewer automatically after export"* toggle.
-- `web/data/` ships a small sample city and is the runtime export sink: when you
-  run the plugin, the real OSM export overwrites it. Only the optional DEM raster
-  is excluded from the packaged zip.
+- `web/data/` ships a small sample city (now including a stream plus bus stops,
+  benches, lamps and bins) and is the runtime export sink: when you run the
+  plugin, the real OSM export overwrites it. Only the optional DEM raster is
+  excluded from the packaged zip.
 - The viewer runs from a local HTTP server on `127.0.0.1:8120-8139`.

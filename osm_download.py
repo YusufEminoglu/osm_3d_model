@@ -36,7 +36,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.4.0 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.6.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 
@@ -64,10 +64,15 @@ def _overpass_query(min_lat: float, min_lon: float, max_lat: float, max_lon: flo
   way["building"]({bbox});
   relation["building"]({bbox});
   way["highway"]({bbox});
+  way["waterway"~"river|stream|canal|drain|ditch"]({bbox});
   way["leisure"~"park|garden|playground|pitch"]({bbox});
   way["landuse"~"forest|grass|meadow|recreation_ground|cemetery"]({bbox});
   way["natural"~"wood|scrub"]({bbox});
   node["natural"="tree"]({bbox});
+  node["highway"="bus_stop"]({bbox});
+  node["amenity"="bench"]({bbox});
+  node["highway"="street_lamp"]({bbox});
+  node["amenity"="waste_basket"]({bbox});
 );
 out body geom;
 """.strip()
@@ -124,21 +129,80 @@ def fetch_overpass(min_lat: float, min_lon: float, max_lat: float, max_lon: floa
 # --------------------------------------------------------------------------
 # OSM element -> attributes
 # --------------------------------------------------------------------------
-def _building_floors(tags: dict) -> int:
+# Function-aware default floor counts, used only when OSM has no level/height
+# data at all. Housing reads taller than retail; light industry and worship
+# halls read low. KARMA (mixed/unknown) keeps the historical default of 3.
+_DEFAULT_FLOORS_BY_FUNCTION = {
+    "KONUT": 4,
+    "TICARET": 2,
+    "SANAYI": 1,
+    "EGITIM": 3,
+    "SAGLIK": 5,
+    "DINI": 1,
+    "KAMU": 3,
+    "KARMA": 3,
+}
+
+
+def _building_floors(tags: dict, function: str = "KARMA") -> int:
+    """Best-estimate floor count for the viewer's ``katadedi`` field.
+
+    Priority: explicit ``building:levels`` -> ``height`` / 3 m -> a function-aware
+    default. When roof levels are tagged they are added on top, because they add
+    visible massing the extrusion should reflect.
+    """
+    base = None
     for key in ("building:levels", "levels"):
         value = tags.get(key)
         if value:
             try:
-                return max(1, int(float(str(value).split(";")[0])))
+                base = max(1, int(float(str(value).split(";")[0])))
+                break
             except (ValueError, TypeError):
                 pass
-    height = tags.get("height")
-    if height:
+    if base is None:
+        height = tags.get("height")
+        if height:
+            try:
+                base = max(1, int(round(float(str(height).rstrip(" m")) / 3.0)))
+            except (ValueError, TypeError):
+                base = None
+    if base is None:
+        return _DEFAULT_FLOORS_BY_FUNCTION.get(function, 3)
+    roof = tags.get("roof:levels")
+    if roof:
         try:
-            return max(1, int(round(float(str(height).rstrip(" m")) / 3.0)))
+            base += max(0, int(float(str(roof).split(";")[0])))
         except (ValueError, TypeError):
             pass
-    return 3
+    return max(1, base)
+
+
+# Default carriageway/channel width (m) per OSM waterway class, used when the way
+# has no explicit ``width``. The viewer draws each waterline as a ribbon of this
+# width via the manifest's ``waterline_width_field`` mapping.
+_WATERWAY_WIDTH = {
+    "river": 8.0,
+    "canal": 6.0,
+    "stream": 2.5,
+    "drain": 1.5,
+    "ditch": 1.2,
+}
+
+
+def _waterway_class(tags: dict) -> str:
+    return (tags.get("waterway") or "").lower() or "stream"
+
+
+def _waterway_width(tags: dict) -> float:
+    for key in ("width", "est_width"):
+        value = tags.get(key)
+        if value:
+            try:
+                return max(0.5, float(str(value).rstrip(" m")))
+            except (ValueError, TypeError):
+                pass
+    return _WATERWAY_WIDTH.get(_waterway_class(tags), 3.0)
 
 
 def _building_function(tags: dict) -> str:
@@ -314,8 +378,34 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
         "OSM Trees", "Point", epsg_dest,
         [("osm_id", QVariant.String), ("height", QVariant.Double)],
     )
+    # Waterways are clipped like roads; the memory provider accepts multi-part
+    # clip results into a LineString layer (same as the roads layer above).
+    waterlines_layer, w_pr = _make_layer(
+        "OSM Waterlines", "LineString", epsg_dest,
+        [("osm_id", QVariant.String), ("su_turu", QVariant.String),
+         ("genislik", QVariant.Double), ("name", QVariant.String)],
+    )
+    # Street furniture as points — one layer per viewer input (mybusstops,
+    # mybenches, mylights, mytrashbins).
+    busstops_layer, bs_pr = _make_layer(
+        "OSM Bus stops", "Point", epsg_dest,
+        [("osm_id", QVariant.String), ("name", QVariant.String)],
+    )
+    benches_layer, be_pr = _make_layer(
+        "OSM Benches", "Point", epsg_dest, [("osm_id", QVariant.String)],
+    )
+    lights_layer, li_pr = _make_layer(
+        "OSM Street lights", "Point", epsg_dest, [("osm_id", QVariant.String)],
+    )
+    trashbins_layer, tb_pr = _make_layer(
+        "OSM Trash bins", "Point", epsg_dest, [("osm_id", QVariant.String)],
+    )
 
-    counts = {"buildings": 0, "roads": 0, "greens": 0, "trees": 0, "skipped": 0}
+    counts = {
+        "buildings": 0, "roads": 0, "greens": 0, "trees": 0,
+        "waterlines": 0, "busstops": 0, "benches": 0, "lights": 0,
+        "trashbins": 0, "skipped": 0,
+    }
 
     def clip_to_circle(geom_wgs: QgsGeometry):
         g = QgsGeometry(geom_wgs)
@@ -353,6 +443,45 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             counts["trees"] += 1
             continue
 
+        if etype == "node":
+            # Street furniture points: bus stops, benches, street lamps, bins.
+            geom = _node_point(element)
+            if not geom:
+                counts["skipped"] += 1
+                continue
+            g = QgsGeometry(geom)
+            if g.transform(to_utm) or not circle_utm.contains(g):
+                counts["skipped"] += 1
+                continue
+            osm_id = str(element.get("id", ""))
+            if tags.get("highway") == "bus_stop" or tags.get("public_transport") == "platform":
+                feat = QgsFeature()
+                feat.setGeometry(g)
+                feat.setAttributes([osm_id, tags.get("name", "")])
+                bs_pr.addFeatures([feat])
+                counts["busstops"] += 1
+            elif tags.get("amenity") == "bench":
+                feat = QgsFeature()
+                feat.setGeometry(g)
+                feat.setAttributes([osm_id])
+                be_pr.addFeatures([feat])
+                counts["benches"] += 1
+            elif tags.get("highway") == "street_lamp":
+                feat = QgsFeature()
+                feat.setGeometry(g)
+                feat.setAttributes([osm_id])
+                li_pr.addFeatures([feat])
+                counts["lights"] += 1
+            elif tags.get("amenity") == "waste_basket":
+                feat = QgsFeature()
+                feat.setGeometry(g)
+                feat.setAttributes([osm_id])
+                tb_pr.addFeatures([feat])
+                counts["trashbins"] += 1
+            else:
+                counts["skipped"] += 1
+            continue
+
         if etype in ("way", "relation") and tags.get("building"):
             base = _way_polygon(element)
             if not base:
@@ -361,12 +490,13 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             if clipped is None:
                 counts["skipped"] += 1
                 continue
+            function = _building_function(tags)
             feat = QgsFeature()
             feat.setGeometry(clipped)
             feat.setAttributes([
                 str(element.get("id", "")),
-                _building_floors(tags),
-                _building_function(tags),
+                _building_floors(tags, function),
+                function,
                 tags.get("name", ""),
             ])
             b_pr.addFeatures([feat])
@@ -388,6 +518,26 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             counts["roads"] += 1
             continue
 
+        if etype == "way" and tags.get("waterway"):
+            base = _way_polyline(element)
+            if not base:
+                continue
+            clipped = clip_to_circle(base)
+            if clipped is None:
+                counts["skipped"] += 1
+                continue
+            feat = QgsFeature()
+            feat.setGeometry(clipped)
+            feat.setAttributes([
+                str(element.get("id", "")),
+                _waterway_class(tags),
+                round(_waterway_width(tags), 1),
+                tags.get("name", ""),
+            ])
+            w_pr.addFeatures([feat])
+            counts["waterlines"] += 1
+            continue
+
         if etype == "way" and (tags.get("leisure") or tags.get("landuse") or tags.get("natural")):
             base = _way_polygon(element)
             if not base:
@@ -405,7 +555,8 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
 
         counts["skipped"] += 1
 
-    for layer in (buildings_layer, roads_layer, greens_layer, trees_layer):
+    for layer in (buildings_layer, roads_layer, greens_layer, trees_layer,
+                  waterlines_layer, busstops_layer, benches_layer, lights_layer, trashbins_layer):
         layer.updateExtents()
 
     return {
@@ -415,4 +566,9 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
         "roads": roads_layer,
         "greens": greens_layer,
         "trees": trees_layer,
+        "waterlines": waterlines_layer,
+        "busstops": busstops_layer,
+        "benches": benches_layer,
+        "lights": lights_layer,
+        "trashbins": trashbins_layer,
     }
