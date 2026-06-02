@@ -32,6 +32,9 @@ from .osm_download import connect_roads, download_osm_for_circle, save_layer_to_
 MODEL_NAME = "3D OSM Model"
 MAX_STUDY_HA_DEFAULT = 300.0
 MIN_RADIUS_M = 30.0
+# The model base/island extends this many metres beyond the OSM study circle, so
+# the city sits on a small platform margin (OSM data stays clipped to the circle).
+BASE_BUFFER_M = 20.0
 
 # Salmon-tinted grey ("yavru agzi") palette for the viewer defaults.
 THEME = {
@@ -103,8 +106,8 @@ def largest_inscribed_circle(geom_utm: QgsGeometry, max_ha: float):
 # --------------------------------------------------------------------------
 INIT_LOADED_FILES = (
     "myblocks", "mybuildings", "myroads", "mytrees", "mylights", "mybenches",
-    "mytrashbins", "mybusstops", "myfences", "mywaterlines", "mymosques", "mytumulus",
-    "mysidewalks",
+    "mytrashbins", "mybusstops", "myfences", "mywaterlines", "mymosques",
+    "mysidewalks", "mybikelanes",
 )
 
 
@@ -198,18 +201,23 @@ def _viewer_defaults(latitude: float, has_dem: bool) -> dict:
         "showBenches": True,
         "showBins": True,
         "showBusStops": True,
-        # OSM waterways drawn as flowing ribbons; per-feature width via "genislik".
+        # OSM waterways drawn as flowing ribbons; per-feature width via "width".
         "showWaterlines": True,
         "waterlineWidth": 3.0,
+        # OSM cycleways drawn as green bike-lane strips (procedural, like PlanX 3D
+        # City); moving bicycles off by default to keep the scene calm.
+        "showBikeLanes": True,
+        "showBikes": False,
+        "bikeDensity": 0.1,
+        # Procedural sidewalks both sides; pedestrians keep to them, off the road.
+        "showSidewalks": True,
         # Keep the rest off so the scene stays fast.
         "showCrosswalks": False,
-        "showSidewalks": True,
         "showPedestrianPaths": False,
         "showParcels": False,
         "showHardscape": False,
         "showFences": False,
         "showMosques": False,
-        "showTumulus": False,
         "demMeshQuality": 140,
         "latitude": float(latitude),
         "dayOfYear": 172,
@@ -224,7 +232,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.6.0",
+        "version": "0.7.0",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -234,12 +242,16 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
         "terrainTexture": None,
         "baseMapTexture": None,
         "roadAccess": None,
+        # OSM-native column names (the export now carries raw OSM tags, no PlanX
+        # Turkish schema). The viewer maps these through to floors/function/width.
         "fieldMappings": {
-            "building_floors_field": "katadedi",
-            "landuse_function_field": "uipfonksiyon",
-            "road_hierarchy_field": "yol_turu",
-            "block_category_field": "uipfonksiyon",
-            "waterline_width_field": "genislik",
+            "building_floors_field": "building_levels",
+            "building_function_field": "building",
+            "landuse_function_field": "landuse",
+            "road_hierarchy_field": "highway",
+            "block_category_field": "landuse",
+            "waterline_width_field": "width",
+            "bike_lane_width_field": "width",
         },
         "analysisDefaults": {"roadColorMode": "Default"},
         "viewerDefaults": _viewer_defaults(latitude, has_dem),
@@ -279,11 +291,14 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         raise BuildError("Could not reproject the selected area to a metric CRS.")
     center, radius = largest_inscribed_circle(geom_utm, max_ha)
     circle_utm = QgsGeometry.fromPointXY(center).buffer(radius, 96)
+    # Base/island = circle buffered +BASE_BUFFER_M; OSM is still clipped to the
+    # inner circle, only the platform (roi + DEM) uses the wider ring.
+    base_utm = QgsGeometry.fromPointXY(center).buffer(radius + BASE_BUFFER_M, 96)
     area_ha = round(math.pi * radius * radius / 10000.0, 1)
     if feedback:
-        feedback(f"Study circle: r = {radius:.0f} m ({area_ha} ha), EPSG:{epsg_dest}.")
+        feedback(f"Study circle: r = {radius:.0f} m ({area_ha} ha) +{BASE_BUFFER_M:.0f} m base, EPSG:{epsg_dest}.")
 
-    # OSM download + clip.
+    # OSM download + clip (to the inner circle, not the buffered base).
     osm = download_osm_for_circle(circle_utm, epsg_dest, feedback=feedback)
     # Weld road segments into a connected network (snap + dissolve, best-effort).
     osm["roads"] = connect_roads(osm["roads"], tolerance_m=2.0, feedback=feedback)
@@ -293,20 +308,21 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
     vector_dir = web_path / "data" / "yerlesim"
     vector_dir.mkdir(parents=True, exist_ok=True)
 
-    roi_layer = _roi_layer_from_circle(circle_utm, epsg_dest)
+    roi_layer = _roi_layer_from_circle(base_utm, epsg_dest)
     save_layer_to_geojson(roi_layer, vector_dir / "roi.geojson")
     save_layer_to_geojson(osm["buildings"], vector_dir / "mybuildings.geojson")
     save_layer_to_geojson(osm["roads"], vector_dir / "myroads.geojson")
     save_layer_to_geojson(osm["trees"], vector_dir / "mytrees.geojson")
     save_layer_to_geojson(osm["greens"], vector_dir / "myblocks.geojson")
     save_layer_to_geojson(osm["waterlines"], vector_dir / "mywaterlines.geojson")
+    save_layer_to_geojson(osm["bikelanes"], vector_dir / "mybikelanes.geojson")
     save_layer_to_geojson(osm["busstops"], vector_dir / "mybusstops.geojson")
     save_layer_to_geojson(osm["benches"], vector_dir / "mybenches.geojson")
     save_layer_to_geojson(osm["lights"], vector_dir / "mylights.geojson")
     save_layer_to_geojson(osm["trashbins"], vector_dir / "mytrashbins.geojson")
 
     written_named = {"mybuildings", "myroads", "mytrees", "myblocks",
-                     "mywaterlines", "mybusstops", "mybenches", "mylights", "mytrashbins"}
+                     "mywaterlines", "mybikelanes", "mybusstops", "mybenches", "mylights", "mytrashbins"}
     for name in INIT_LOADED_FILES:
         if name not in written_named:
             _write_empty_fc(vector_dir / f"{name}.geojson", name)
@@ -316,7 +332,7 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
     if dem_layer is not None:
         dem_dir = web_path / "data" / "dem"
         dem_dir.mkdir(parents=True, exist_ok=True)
-        has_dem = _export_dem(dem_layer, circle_utm, epsg_dest, dem_dir / "mydem.tif", feedback=feedback)
+        has_dem = _export_dem(dem_layer, base_utm, epsg_dest, dem_dir / "mydem.tif", feedback=feedback)
 
     _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem)
 
@@ -324,7 +340,8 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         roi_layer.setName("OSM Study Circle")
         project.addMapLayer(roi_layer)
         for key, label in (("greens", "OSM Greens"), ("buildings", "OSM Buildings"),
-                           ("roads", "OSM Roads"), ("waterlines", "OSM Waterways"),
+                           ("roads", "OSM Roads"), ("bikelanes", "OSM Bike Lanes"),
+                           ("waterlines", "OSM Waterways"),
                            ("trees", "OSM Trees"), ("busstops", "OSM Bus Stops"),
                            ("benches", "OSM Benches"), ("lights", "OSM Street Lights"),
                            ("trashbins", "OSM Trash Bins")):

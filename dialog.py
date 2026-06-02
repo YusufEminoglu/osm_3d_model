@@ -320,6 +320,7 @@ class Osm3dModelDialog(QDialog):
         self.summary_counts.setText(
             f"<b>{counts.get('buildings', 0)}</b> buildings · "
             f"<b>{counts.get('roads', 0)}</b> roads · "
+            f"<b>{counts.get('bikelanes', 0)}</b> bike lanes · "
             f"<b>{counts.get('greens', 0)}</b> greens · "
             f"<b>{counts.get('trees', 0)}</b> trees · "
             f"<b>{counts.get('waterlines', 0)}</b> waterways · "

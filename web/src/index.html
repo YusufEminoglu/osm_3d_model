@@ -7,7 +7,7 @@
     <meta name="description" content="3D OSM Model: pick an area, download OpenStreetMap, and explore it as an interactive 3D city.">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23b8978a'/%3E%3Crect x='3' y='7' width='3' height='6' fill='%23fffaf7'/%3E%3Crect x='7' y='4' width='3' height='9' fill='%23fffaf7'/%3E%3Crect x='11' y='6' width='2' height='7' fill='%23fffaf7'/%3E%3C/svg%3E">
 
-    <link rel="stylesheet" href="style.css?v=osm0.5.0">
+    <link rel="stylesheet" href="style.css?v=osm0.7.0">
 
     <script type="importmap">
         {
@@ -66,13 +66,11 @@
 
     <div id="ui-container">
         <button id="panel-toggle" class="panel-btn" title="Toggle dashboard" data-i18n-title="togglePanel">☰</button>
-        <button id="lang-toggle" class="panel-btn lang-btn" title="Switch to Turkish" data-i18n-title="toggleLanguage">TR</button>
         <button id="layers-toggle" class="panel-btn layers-btn" data-dock-target="layer-dock" title="Layer dock" data-i18n-title="dockTitleLayers">☷</button>
         <button id="style-toggle" class="panel-btn style-btn" data-dock-target="style-dock" title="Style dock" data-i18n-title="dockTitleStyle">◩</button>
         <button id="scene-toggle" class="panel-btn scene-btn" data-dock-target="scene-dock" title="Scene &amp; Sun" data-i18n-title="dockTitleScene">☀</button>
         <button id="model-studio-toggle" class="panel-btn model-studio-btn" data-dock-target="model-studio-dock" title="Model Studio" data-i18n-title="dockTitleModelStudio">✦</button>
         <button id="walk-toggle" class="panel-btn walk-btn" title="Walk mode" data-i18n-title="dockTitleWalk">W</button>
-        <button id="advanced-toggle" class="panel-btn advanced-btn" title="Advanced controls" data-i18n-title="dockTitleAdvanced">⚙</button>
         <button id="btn-screenshot" class="panel-btn screenshot-btn" title="Save screenshot (PNG)" data-i18n-title="screenshotTitle">📷</button>
         <button id="measure-toggle" class="panel-btn measure-btn" title="Measure distance" data-i18n-title="measureTitle">📏</button>
         <button id="help-toggle" class="panel-btn help-btn" title="Help &amp; shortcuts" data-i18n-title="helpTitle">❔</button>
@@ -106,10 +104,14 @@
         <div class="dock-head"><span data-i18n="dockLayers">Layers</span><button class="dock-close" data-close="layer-dock">x</button></div>
         <label><input type="checkbox" data-setting="showBuildings"> <span data-i18n="lblBuildings">Buildings</span></label>
         <label><input type="checkbox" data-setting="showRoads"> <span data-i18n="lblRoads">Roads</span></label>
+        <label><input type="checkbox" data-setting="showBikeLanes"> <span>Bike lanes</span></label>
+        <label><input type="checkbox" data-setting="showWaterlines"> <span data-i18n="lblWaterlines">Waterways</span></label>
         <label><input type="checkbox" data-setting="showIslands"> <span data-i18n="lblBlocks">Greens / parks</span></label>
         <label><input type="checkbox" data-setting="showTrees"> <span data-i18n="lblTrees">Trees</span></label>
         <label><input type="checkbox" data-setting="showSidewalks"> <span data-i18n="lblSidewalks">Sidewalks</span></label>
+        <label><input type="checkbox" data-setting="showFurniture"> <span>Street furniture</span></label>
         <label><input type="checkbox" data-setting="showCars"> <span data-i18n="lblCars">Cars</span></label>
+        <label><input type="checkbox" data-setting="showBikes"> <span>Cyclists</span></label>
         <label><input type="checkbox" data-setting="showPedestrians"> <span data-i18n="lblPedestrians">Pedestrians</span></label>
         <label><input type="checkbox" data-setting="showOutsideRoiTerrain"> <span data-i18n="lblOutsideRoiTerrain">Outside ROI terrain</span></label>
     </aside>
@@ -196,7 +198,6 @@
             <label><span data-i18n="lblModelCategory">Category</span>
                 <select id="upload-model-category">
                     <option value="mosque" data-i18n="catMosque">Mosque</option>
-                    <option value="tumulus" data-i18n="catTumulus">Tumulus</option>
                     <option value="tree" data-i18n="catTree">Tree</option>
                     <option value="light" data-i18n="catLight">Street Light</option>
                     <option value="bench" data-i18n="catBench">Bench</option>
@@ -224,7 +225,6 @@
             <label><span data-i18n="lblTransformCategory">Category</span>
                 <select id="transform-category">
                     <option value="mosque" data-i18n="catMosque">Mosque</option>
-                    <option value="tumulus" data-i18n="catTumulus">Tumulus</option>
                     <option value="tree" data-i18n="catTree">Tree</option>
                     <option value="light" data-i18n="catLight">Street Light</option>
                     <option value="bench" data-i18n="catBench">Bench</option>
@@ -238,11 +238,6 @@
         <div class="dock-section" style="border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; margin-top: 10px;">
             <h4 data-i18n="mosqueCustomTitle" style="margin: 0 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Mosque Placements & Overrides</h4>
             <div id="mosque-custom-list" class="mosque-custom-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 4px;"></div>
-        </div>
-
-        <div class="dock-section" style="border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; margin-top: 10px;">
-            <h4 data-i18n="tumulusCustomTitle" style="margin: 0 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Tumulus Placements & Overrides</h4>
-            <div id="tumulus-custom-list" class="mosque-custom-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 4px;"></div>
         </div>
     </aside>
 
@@ -294,6 +289,6 @@
 
     <div id="osm-credit" class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> <span data-i18n="osmContributors">contributors</span></div>
 
-    <script type="module" src="app.js?v=osm0.5.0"></script>
+    <script type="module" src="app.js?v=osm0.7.0"></script>
 </body>
 </html>

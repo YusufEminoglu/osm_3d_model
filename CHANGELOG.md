@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.7.0] - 2026-06-02
+
+- 100% OpenStreetMap schema; procedural roads/sidewalks/bike lanes; pedestrian-vehicle separation; +20m model base; English-only simplified viewer (Urban Controls and tumulus removed); ~5MB lighter assets
+
 ## [0.6.0] - 2026-06-02
 
 - Water (rivers/streams/canals), street furniture (stops/benches/lamps/bins) and function-aware default building heights; sample city showcases them

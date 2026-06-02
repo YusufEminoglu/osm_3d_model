@@ -1,7 +1,1 @@
-{"type": "FeatureCollection", "name": "mytrashbins", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": [
-{"type": "Feature", "properties": {"osm_id": "sample_tb1"}, "geometry": {"type": "Point", "coordinates": [457865.0, 4350965.0]}},
-{"type": "Feature", "properties": {"osm_id": "sample_tb2"}, "geometry": {"type": "Point", "coordinates": [457910.0, 4351015.0]}},
-{"type": "Feature", "properties": {"osm_id": "sample_tb3"}, "geometry": {"type": "Point", "coordinates": [458015.0, 4350945.0]}},
-{"type": "Feature", "properties": {"osm_id": "sample_tb4"}, "geometry": {"type": "Point", "coordinates": [458095.0, 4351005.0]}},
-{"type": "Feature", "properties": {"osm_id": "sample_tb5"}, "geometry": {"type": "Point", "coordinates": [457955.0, 4351085.0]}}
-]}
+{"type": "FeatureCollection", "name": "mytrashbins", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": [{"type": "Feature", "properties": {"osm_id": "sample_tb1", "amenity": "waste_basket"}, "geometry": {"type": "Point", "coordinates": [457865.0, 4350965.0]}}, {"type": "Feature", "properties": {"osm_id": "sample_tb2", "amenity": "waste_basket"}, "geometry": {"type": "Point", "coordinates": [457910.0, 4351015.0]}}, {"type": "Feature", "properties": {"osm_id": "sample_tb3", "amenity": "waste_basket"}, "geometry": {"type": "Point", "coordinates": [458015.0, 4350945.0]}}, {"type": "Feature", "properties": {"osm_id": "sample_tb4", "amenity": "waste_basket"}, "geometry": {"type": "Point", "coordinates": [458095.0, 4351005.0]}}, {"type": "Feature", "properties": {"osm_id": "sample_tb5", "amenity": "waste_basket"}, "geometry": {"type": "Point", "coordinates": [457955.0, 4351085.0]}}]}

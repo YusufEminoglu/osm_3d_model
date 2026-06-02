@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -499,6 +498,10 @@ let mosqueGroup = new THREE.Group();
 let tumulusGroup = new THREE.Group();
 let shadowHeatmapMesh = null;
 let carGroup = new THREE.Group();
+let bikeLaneGroup = new THREE.Group();
+let bikeGroup = new THREE.Group();
+let bikeLaneCurves = [];
+let bikes = [];
 let furnitureGroup = new THREE.Group();
 let pedestrianGroup = new THREE.Group();
 let sidewalkGroup = new THREE.Group();
@@ -524,6 +527,8 @@ world.add(treeGroup);
 world.add(mosqueGroup);
 world.add(tumulusGroup);
 world.add(carGroup);
+world.add(bikeLaneGroup);
+world.add(bikeGroup);
 world.add(furnitureGroup);
 world.add(pedestrianGroup);
 world.add(roiBoundaryGroup);
@@ -543,6 +548,7 @@ const LAYER = {
   parcel:    0.94,
   hardscape: 0.98,
   road:      1.36,
+  bikeLane:  1.42,
   sidewalk:  1.52,
   carExtra:  0.08
 };
@@ -743,7 +749,7 @@ function rebuildMinimapBg() {
   for (const f of layerDataCache.adalar?.features || []) {
     for (const poly of getPolygonRings(f.geometry)) {
       const ring = poly[0]; if (!ring) continue;
-      const fn = ((f.properties?.uipfonksiyon || f.properties?.arazi_kull || '')).toString().toUpperCase();
+      const fn = buildingFunctionValue(f.properties || {}).toString().toUpperCase();
       ctx.fillStyle = fn.includes('PARK') || fn.includes('YEŞİL') ? 'rgba(30,90,45,0.65)' : 'rgba(155,155,150,0.45)';
       ctx.beginPath();
       ring.forEach(([cx, cy], i) => {
@@ -780,7 +786,7 @@ function rebuildMinimapBg() {
 
   // Buildings (colored by function)
   for (const f of layerDataCache.yapilar?.features || []) {
-    const fn = (f.properties?.uipfonksiyon || 'BELIRSIZ').toString();
+    const fn = buildingFunctionValue(f.properties || {}).toString();
     ctx.fillStyle = functionColorState[fn] || '#94a3b8';
     for (const poly of getPolygonRings(f.geometry)) {
       const ring = poly[0]; if (!ring) continue;
@@ -948,20 +954,10 @@ const textureSets = {
   }
 };
 
-const TURKISH_FACADE_TYPES = ['A', 'B', 'C', 'D', 'E', 'F'];
-const TURKISH_FACADE_BASE_KEYS = TURKISH_FACADE_TYPES.map((type) => `Urban_TR_${type}`);
-const TURKISH_FACADE_ASSETS = {
-  A: 'assets/facade_tr_a.png',
-  B: 'assets/facade_tr_b.png',
-  C: 'assets/facade_tr_c.png',
-  D: 'assets/facade_tr_d.png',
-  E: 'assets/facade_tr_e.png',
-  F: 'assets/facade_tr_f.png'
-};
-for (const type of TURKISH_FACADE_TYPES) {
-  const baseKey = `Urban_TR_${type}`;
-  textureSets.facade[baseKey] = TURKISH_FACADE_ASSETS[type];
-}
+// The region-specific Turkish facade textures (facade_tr_*.png, ~5 MB) were
+// removed in v0.7.0: this is a global OSM tool, so buildings use the generic
+// facade set below. turkishFacadeMatch()/normalizeFacadeKey() stay generic and
+// simply fall back to a standard facade for any stale Urban_TR_* keys.
 
 const assetThemePresets = {
   'Modern Urban': {
@@ -984,7 +980,7 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Dual Recycle', 'Cylinder', 'Compact'],
     busstops: ['Glass Shelter', 'Steel Canopy', 'Minimal Canopy', 'Compact Marker'],
-    facades: TURKISH_FACADE_BASE_KEYS,
+    facades: ['MediterraneanStucco', 'CoastalWhite', 'UrbanB', 'UrbanD'],
     roofs: ['TurkishTile', 'CeramicLight', 'StandingSeam', 'RoofA'],
     paving: ['Concrete', 'StoneA', 'WarmStone', 'Asphalt', 'PlazaGranite']
   },
@@ -1522,8 +1518,25 @@ function namesWithMapping(mappingKey, fallbackNames) {
   return mapped ? [mapped, ...fallbackNames] : fallbackNames;
 }
 
+const OSM_BUILDING_CATEGORY = {
+  apartments: 'Residential', residential: 'Residential', house: 'Residential', detached: 'Residential',
+  terrace: 'Residential', semidetached_house: 'Residential', dormitory: 'Residential', bungalow: 'Residential',
+  commercial: 'Commercial', retail: 'Commercial', supermarket: 'Commercial', kiosk: 'Commercial', office: 'Office',
+  industrial: 'Industrial', warehouse: 'Industrial', manufacture: 'Industrial', hangar: 'Industrial',
+  school: 'Education', university: 'Education', college: 'Education', kindergarten: 'Education',
+  hospital: 'Health', clinic: 'Health',
+  mosque: 'Worship', church: 'Worship', temple: 'Worship', synagogue: 'Worship', cathedral: 'Worship', chapel: 'Worship',
+  public: 'Civic', civic: 'Civic', government: 'Civic', townhall: 'Civic',
+  garage: 'Utility', garages: 'Utility', shed: 'Utility', hut: 'Utility', roof: 'Utility', carport: 'Utility',
+};
+function titleCaseWord(v) { v = String(v || ''); return v ? v.charAt(0).toUpperCase() + v.slice(1) : v; }
 function buildingFunctionValue(props) {
-  return propFirst(props || {}, namesWithMapping('landuse_function_field', ['uipfonksiyon', 'fonksiyon', 'kullanim', 'landuse', 'arazi_kull'])) || 'BELIRSIZ';
+  // OSM-native: read the `building` tag and map it to an English category.
+  const raw = propFirst(props || {}, namesWithMapping('building_function_field', ['building', 'uipfonksiyon', 'fonksiyon', 'landuse', 'arazi_kull']));
+  if (raw === null || raw === undefined || String(raw).trim() === '') return 'Building';
+  const key = String(raw).trim().toLowerCase();
+  if (OSM_BUILDING_CATEGORY[key]) return OSM_BUILDING_CATEGORY[key];
+  return key === 'yes' ? 'Building' : titleCaseWord(key);
 }
 
 const settings = {
@@ -1584,11 +1597,6 @@ const settings = {
   mosqueScaleY: 1.0,
   mosqueScaleZ: 1.0,
   mosqueRotation: 0.0,
-  showTumulus: true,
-  tumulusScaleX: 1.0,
-  tumulusScaleY: 1.0,
-  tumulusScaleZ: 1.0,
-  tumulusRotation: 0.0,
   showFurniture: false,
   showCars: false,
   showRoads: true,
@@ -1634,6 +1642,12 @@ const settings = {
   fenceColor: '#a1a1aa',
   showWaterlines: false,
   waterlineWidth: 3.0,
+  showBikeLanes: false,
+  showBikes: false,
+  bikeLaneWidth: 2.4,
+  bikeLaneColor: '#16a34a',
+  bikeDensity: 0.1,
+  bikeSpeed: 1.0,
   showRoadMarkings: true,
   showLedges: true,
   showStorefronts: true,
@@ -1649,10 +1663,8 @@ const settings = {
   activeBinModel: 'default',
   activeBusStopModel: 'default',
   activeMosqueModel: 'default',
-  activeTumulusModel: 'default',
   treeModelPool: [],
   mosqueElevation: 0,
-  tumulusElevation: 0,
   treeElevation: 0,
   lightElevation: 0,
   benchElevation: 0,
@@ -1690,9 +1702,8 @@ const PERSISTED_SETTING_KEYS = [
   'floorHeight', 'roofTexture', 'roofShape', 'roofHeight', 'roadStyle', 'roadColor', 'roadColorMode', 'roadWidth',
   'showLights', 'lightStyle', 'showBenches', 'benchStyle', 'showBins', 'binStyle', 'showBusStops', 'stopStyle',
   'showIslands', 'showParcels', 'showHardscape', 'showBuildings', 'showTrees', 'showFurniture', 'showMosques',
-  'showTumulus', 'tumulusScaleX', 'tumulusScaleY', 'tumulusScaleZ', 'tumulusRotation',
   'mosqueScaleX', 'mosqueScaleY', 'mosqueScaleZ', 'mosqueRotation',
-  'mosqueElevation', 'tumulusElevation', 'treeElevation', 'lightElevation', 'benchElevation', 'binElevation', 'busstopElevation',
+  'mosqueElevation', 'treeElevation', 'lightElevation', 'benchElevation', 'binElevation', 'busstopElevation',
   'treeScaleX', 'treeScaleY', 'treeScaleZ', 'lightScaleX', 'lightScaleY', 'lightScaleZ',
   'benchScaleX', 'benchScaleY', 'benchScaleZ', 'binScaleX', 'binScaleY', 'binScaleZ',
   'busstopScaleX', 'busstopScaleY', 'busstopScaleZ',
@@ -1707,10 +1718,11 @@ const PERSISTED_SETTING_KEYS = [
   'terrainTileMeters',
   'showFences', 'fenceHeight', 'fenceThickness', 'fenceTexture', 'fenceColor',
   'showWaterlines', 'waterlineWidth',
+  'showBikeLanes', 'showBikes', 'bikeLaneWidth', 'bikeLaneColor', 'bikeDensity', 'bikeSpeed',
   'showRoadMarkings', 'showLedges', 'showStorefronts', 'buildingSetback', 'ledgeProjection',
   'showZoningEnvelopes', 'highlightViolations', 'zoningSetback', 'zoningMaxHeight',
   'activeTreeModel', 'activeLightModel', 'activeBenchModel', 'activeBinModel', 'activeBusStopModel', 'activeMosqueModel',
-  'activeTumulusModel', 'treeModelPool'
+  'treeModelPool'
 ];
 
 function loadPersistedSettings() {
@@ -3352,10 +3364,14 @@ function keywordList(values) {
 }
 
 function roadAllowsCars(feature) {
+  const props = feature?.properties || {};
+  const hw = String(props[mappedField('road_hierarchy_field') || 'highway'] ?? props.highway ?? '').toLowerCase();
+  // OSM highway classes that are pedestrian/bike-only — keep cars off them.
+  const NO_CAR_HIGHWAY = new Set(['footway', 'path', 'pedestrian', 'steps', 'bridleway', 'corridor', 'track', 'cycleway', 'platform', 'construction', 'proposed']);
+  if (NO_CAR_HIGHWAY.has(hw)) return false;
   const access = projectManifest?.roadAccess;
   const field = access?.field;
   if (!field) return true;
-  const props = feature?.properties || {};
   const raw = props[field];
   if (raw === undefined || raw === null || String(raw).trim() === '') return true;
   const value = normalizeAccessText(raw);
@@ -4745,15 +4761,11 @@ function subdivideShapeGeometry(geometry, maxEdgeLen) {
 
 
 function blockCategoryValue(properties) {
+  const p = properties || {};
   const field = projectManifest?.fieldMappings?.block_category_field;
-  if (field && properties && properties[field] !== undefined && properties[field] !== null) {
-    return properties[field];
-  }
-  const defaults = ['uipfonksiyon', 'arazi_kull', 'planx_category', 'category', 'function', 'fonksiyon'];
-  for (const def of defaults) {
-    if (properties && properties[def] !== undefined && properties[def] !== null) {
-      return properties[def];
-    }
+  // OSM greens carry leisure / landuse / natural; pick the first non-empty.
+  for (const k of [field, 'leisure', 'landuse', 'natural', 'uipfonksiyon', 'arazi_kull', 'category', 'function']) {
+    if (k && p[k] !== undefined && p[k] !== null && String(p[k]).trim() !== '') return p[k];
   }
   return 'Residential';
 }
@@ -4762,6 +4774,12 @@ function defaultBlockCategoryStyle(cat, index = 0) {
   const c = cat.toUpperCase();
   let color = ['#f5e4c2', '#bfdbfe', '#fee2e2', '#dcfce7', '#fef3c7', '#ede9fe'][index % 6];
   let texture = 'None';
+  if (c.includes('GRASS') || c.includes('MEADOW') || c.includes('FOREST') || c.includes('WOOD') || c.includes('RECREATION') || c.includes('CEMETERY') || c.includes('SCRUB') || c.includes('GARDEN')) {
+    return { color: '#5e9e3e', texture: 'ParkGreen' };
+  }
+  if (c.includes('PITCH')) {
+    return { color: '#4a8c30', texture: 'FineGrid' };
+  }
   if (c.includes('PARK') || c.includes('GREEN') || c.includes('YEŞİL') || c.includes('ORMAN') || c.includes('PLAYGROUND') || c.includes('BAHÇE')) {
     color = '#5e9e3e';
     texture = 'ParkGreen';
@@ -7067,7 +7085,16 @@ function buildFurnitureLayer() {
 }
 
 function getSemanticColor(fn) {
-  const f = fn.toUpperCase();
+  const f = String(fn || '').toUpperCase();
+  if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE') || f.includes('DETACHED') || f.includes('TERRACE') || f.includes('DORMITORY')) return '#f5e4c2';
+  if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS') || f.includes('COLLEGE') || f.includes('KINDERGARTEN')) return '#bfdbfe';
+  if (f.includes('WORSHIP') || f.includes('MOSQUE') || f.includes('CHURCH') || f.includes('TEMPLE') || f.includes('SYNAGOGUE') || f.includes('CATHEDRAL') || f.includes('CHAPEL')) return '#d8f5e0';
+  if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE') || f.includes('SUPERMARKET') || f.includes('SHOP') || f.includes('KIOSK')) return '#fed7aa';
+  if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC')) return '#fce7f3';
+  if (f.includes('SPORT') || f.includes('PITCH')) return '#e0e7ff';
+  if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN') || f.includes('MEADOW') || f.includes('CEMETERY')) return '#bbf7d0';
+  if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC') || f.includes('TOWNHALL')) return '#ede9fe';
+  if (f.includes('INDUSTR') || f.includes('WAREHOUSE') || f.includes('MANUFACTURE') || f.includes('HANGAR')) return '#e2e8f0';
   if (f.includes('KONUT') || f.includes('YERLEŞİK') || f.includes('MESKEN')) return '#f5e4c2';
   if (f.includes('OKUL') || f.includes('EĞİTİM') || f.includes('ÜNİVERSİTE')) return '#bfdbfe';
   if (f.includes('CAMİ') || f.includes('DİNİ') || f.includes('İBADET')) return '#d8f5e0';
@@ -7081,7 +7108,16 @@ function getSemanticColor(fn) {
 }
 
 function getFunctionIcon(fn) {
-  const f = fn.toUpperCase();
+  const f = String(fn || '').toUpperCase();
+  if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE')) return '🏠';
+  if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS')) return '🏫';
+  if (f.includes('WORSHIP') || f.includes('MOSQUE') || f.includes('CHURCH')) return '🕌';
+  if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE')) return '🏪';
+  if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC')) return '🏥';
+  if (f.includes('SPORT') || f.includes('PITCH')) return '🏟️';
+  if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN')) return '🌳';
+  if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC')) return '🏛️';
+  if (f.includes('INDUSTR') || f.includes('WAREHOUSE')) return '🏭';
   if (f.includes('KONUT') || f.includes('YERLEŞİK')) return '🏠';
   if (f.includes('OKUL') || f.includes('EĞİTİM')) return '🏫';
   if (f.includes('CAMİ') || f.includes('DİNİ')) return '🕌';
@@ -7485,84 +7521,96 @@ function createPedestrianModel(index = 0) {
 // flat-cap strokes draped on a terrain-following plane. Overlapping roads merge
 // into one continuous painted layer, so intersections have no leftover ribbon
 // edges, no z-fighting and no stray marking lines.
-function buildDissolvedRoadSurface(roadPaints, buildToken = sceneBuildToken) {
-  if (!roadPaints.length || !settings.showRoads) return;
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxW = 0;
-  for (const r of roadPaints) {
-    maxW = Math.max(maxW, r.width);
-    for (const [x, z] of r.pts) {
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-    }
-  }
-  if (!Number.isFinite(minX)) return;
-  const margin = maxW * 0.5 + 2;
-  minX -= margin; maxX += margin; minZ -= margin; maxZ += margin;
-  const spanX = Math.max(1, maxX - minX);
-  const spanZ = Math.max(1, maxZ - minZ);
-
-  // Canvas resolution: ~0.4 m/px, capped so the long side stays <= 2048 px.
-  let mpp = 0.4;
-  const longSpan = Math.max(spanX, spanZ);
-  if (longSpan / mpp > 2048) mpp = longSpan / 2048;
-  const cw = Math.max(8, Math.round(spanX / mpp));
-  const ch = Math.max(8, Math.round(spanZ / mpp));
-  const canvas = document.createElement('canvas');
-  canvas.width = cw; canvas.height = ch;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, cw, ch);
-  ctx.lineJoin = 'round';   // rounded bends/joins
-  ctx.lineCap = 'butt';     // flat caps at road ends
-  // World (local) -> canvas px. Flip Z so it matches the CanvasTexture (flipY) v axis.
-  const toPx = (x, z) => [(x - minX) / mpp, ch - (z - minZ) / mpp];
-  for (const r of roadPaints) {
-    if (r.pts.length < 2) continue;
-    ctx.strokeStyle = r.color;
-    ctx.lineWidth = Math.max(1, r.width / mpp);
-    ctx.beginPath();
-    for (let i = 0; i < r.pts.length; i++) {
-      const [px, py] = toPx(r.pts[i][0], r.pts[i][1]);
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-
-  // Terrain-following plane spanning the road bounds.
-  const segX = Math.min(220, Math.max(1, Math.round(spanX / 4)));
-  const segZ = Math.min(220, Math.max(1, Math.round(spanZ / 4)));
+// --- Bike lanes (OSM cycleways): procedural green strips + optional cyclists ---
+function createBikeLaneTexture() {
+  if (createBikeLaneTexture.tex) return createBikeLaneTexture.tex;
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = settings.bikeLaneColor || '#16a34a'; ctx.fillRect(0, 0, 128, 256);
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 4;
+  for (let y = 16; y < 256; y += 48) { ctx.beginPath(); ctx.moveTo(64, y); ctx.lineTo(64, y + 24); ctx.stroke(); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 8); t.colorSpace = THREE.SRGBColorSpace;
+  createBikeLaneTexture.tex = t; return t;
+}
+function bikeLaneFeatureWidth(feature) {
+  const w = parseNumberProp(feature?.properties || {}, namesWithMapping('bike_lane_width_field', ['width', 'cycleway_width', 'bike_lane_width']), settings.bikeLaneWidth);
+  return Math.max(1.2, Math.min(5, w || settings.bikeLaneWidth || 2.4));
+}
+function createBikeLaneMaterial() {
+  return new THREE.MeshStandardMaterial({ color: 0xffffff, map: createBikeLaneTexture(), roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+}
+function createBikeLaneCurve(coords, closed = false) {
+  const pts = [];
+  for (const c of coords || []) { if (!c || c.length < 2) continue; const [x, z] = metersToLocal(c[0], c[1]); pts.push(new THREE.Vector3(x, 0, z)); }
+  if (pts.length < 2) return null;
+  const xz = new THREE.CatmullRomCurve3(pts, closed, 'centripetal');
+  const len = Math.max(1, xz.getLength());
+  const n = Math.max(pts.length, Math.ceil(len / 3) + 1);
+  const out = [];
+  for (let i = 0; i <= n; i++) { const tp = xz.getPointAt(i / n); tp.y = terrainLocalYAt(tp.x, tp.z) + LAYER.bikeLane; out.push(tp); }
+  return new THREE.CatmullRomCurve3(out, closed, 'centripetal');
+}
+function buildBikeLaneStrip(coords, width, mat, buildToken) {
+  const curve = createBikeLaneCurve(coords, false);
+  if (!curve) return;
+  bikeLaneCurves.push(curve);
+  if (!settings.showBikeLanes) return;
+  const len = Math.max(1, curve.getLength());
+  const centers = curve.getPoints(Math.max(16, Math.ceil(len / 3) * 2));
   const positions = [], uvs = [], indices = [];
-  for (let j = 0; j <= segZ; j++) {
-    for (let i = 0; i <= segX; i++) {
-      const x = minX + spanX * (i / segX);
-      const z = minZ + spanZ * (j / segZ);
-      positions.push(x, terrainLocalYAt(x, z) + LAYER.road, z);
-      uvs.push(i / segX, j / segZ);
-    }
+  for (let i = 0; i < centers.length; i++) {
+    const p = centers[i];
+    const tan = curve.getTangent(i / Math.max(1, centers.length - 1));
+    const nrm = new THREE.Vector3(-tan.z, 0, tan.x).normalize().multiplyScalar(width * 0.5);
+    positions.push(p.x + nrm.x, p.y, p.z + nrm.z, p.x - nrm.x, p.y, p.z - nrm.z);
+    const v = i / Math.max(1, centers.length - 1); const vv = v * len / 12; uvs.push(0, vv, 1, vv);
   }
-  const cols = segX + 1;
-  for (let j = 0; j < segZ; j++) {
-    for (let i = 0; i < segX; i++) {
-      const a = j * cols + i, b = a + 1, c = a + cols, d = c + 1;
-      indices.push(a, c, b, b, c, d);
-    }
-  }
+  for (let i = 0; i < centers.length - 1; i++) { const a = i * 2, b = a + 1, c = a + 2, d = a + 3; indices.push(a, c, b, c, d, b); }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({
-    map: tex, transparent: false, alphaTest: 0.5, roughness: 0.95, metalness: 0.0,
-    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
-  });
-  if (isSceneBuildStale(buildToken)) { geo.dispose(); mat.dispose(); tex.dispose(); return; }
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = true;
-  mesh.renderOrder = 30;
-  roadGroup.add(mesh);
+  geo.setIndex(indices); geo.computeVertexNormals();
+  if (isSceneBuildStale(buildToken)) return;
+  const mesh = new THREE.Mesh(geo, mat); mesh.receiveShadow = true; mesh.renderOrder = 32; bikeLaneGroup.add(mesh);
+}
+function buildBikeLaneLayer(bikeLanes = EMPTY_GEOJSON, buildToken = sceneBuildToken) {
+  clearGroup(bikeLaneGroup); clearGroup(bikeGroup); bikeLaneCurves = []; bikes = [];
+  if ((!settings.showBikeLanes && !settings.showBikes) || !bikeLanes?.features?.length) return;
+  const mat = createBikeLaneMaterial();
+  for (const f of bikeLanes.features) {
+    if (!f.geometry) continue;
+    const width = bikeLaneFeatureWidth(f);
+    for (const line of lineSetsFromGeometry(f.geometry)) { buildBikeLaneStrip(line, width, mat, buildToken); if (isSceneBuildStale(buildToken)) return; }
+  }
+  buildBicycleTraffic();
+}
+function createBicycleModel(index = 0) {
+  const root = new THREE.Group();
+  const frameMat = new THREE.MeshStandardMaterial({ color: [0x0f172a, 0x0f766e, 0x1d4ed8, 0x7c2d12][index % 4], roughness: 0.45, metalness: 0.25 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.62 });
+  const riderMat = new THREE.MeshStandardMaterial({ color: [0xf97316, 0x38bdf8, 0xa3e635, 0xe879f9][index % 4], roughness: 0.8 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xd7a67f, roughness: 0.65 });
+  const wheelGeo = new THREE.TorusGeometry(0.32, 0.035, 8, 18); wheelGeo.rotateY(Math.PI / 2);
+  const rear = new THREE.Mesh(wheelGeo, wheelMat); rear.position.set(0, 0.35, 0.52);
+  const front = new THREE.Mesh(wheelGeo.clone(), wheelMat); front.position.set(0, 0.35, -0.52);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.05), frameMat); frame.position.set(0, 0.68, 0); frame.rotation.x = 0.18;
+  const rider = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.54, 0.18), riderMat); rider.position.set(0, 1.08, 0.05); rider.rotation.x = -0.25;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), skinMat); head.position.set(0, 1.45, -0.06);
+  root.add(rear, front, frame, rider, head);
+  root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return { mesh: root, wheels: [rear, front] };
+}
+function buildBicycleTraffic() {
+  bikes = []; clearGroup(bikeGroup);
+  if (!settings.showBikes || !bikeLaneCurves.length) return;
+  const density = Math.max(0, Math.min(0.4, Number(settings.bikeDensity) || 0));
+  const count = density <= 0 ? 0 : Math.min(60, Math.max(1, Math.round(bikeLaneCurves.length * density * 2)));
+  for (let i = 0; i < count; i++) {
+    const curve = bikeLaneCurves[i % bikeLaneCurves.length];
+    const m = createBicycleModel(i); m.mesh.renderOrder = 42; bikeGroup.add(m.mesh);
+    bikes.push({ mesh: m.mesh, wheels: m.wheels, curve, direction: Math.random() < 0.5 ? -1 : 1, t: Math.random(), speed: 0.00012 + Math.random() * 0.00024 });
+  }
 }
 
 async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
@@ -7596,7 +7644,6 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     polygonOffsetUnits: -4
   });
   const amenityPoints = settings.roadColorMode === 'Amenity distance' ? estimateAmenityPoints() : [];
-  const roadPaints = [];  // {pts:[[x,z]...], width, color} for the dissolved surface
 
   for (const f of yollar.features) {
     if (!f.geometry || f.geometry.type !== 'LineString') continue;
@@ -7620,20 +7667,54 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     }
     const curve = new THREE.CatmullRomCurve3(terrainPts, false, 'centripetal');
     roadCurves.push(curve);
-    if (roadAllowsCars(f)) vehicleRoadCurves.push(curve);
+    if (roadAllowsCars(f) && curve.getLength() > 12) vehicleRoadCurves.push(curve);
     const segments = Math.max(24, terrainPts.length * 3);
     const centers = curve.getPoints(segments);
-    // Collect for the dissolved road surface (painted once, after the loop).
-    roadPaints.push({
-      pts: centers.map((p) => [p.x, p.z]),
-      width: featureWidth,
-      color: '#' + roadVisualColor(f, amenityPoints).getHexString(),
-    });
+    // Per-road ribbon mesh that hugs the terrain (PlanX 3D City road logic).
+    const left = [];
+    const right = [];
+    for (let i = 0; i < centers.length; i++) {
+      const p = centers[i];
+      const tan = curve.getTangent(i / (centers.length - 1));
+      const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize().multiplyScalar(featureWidth * 0.5);
+      left.push(new THREE.Vector3(p.x + n.x, p.y, p.z + n.z));
+      right.push(new THREE.Vector3(p.x - n.x, p.y, p.z - n.z));
+    }
+    const positions = [];
+    const uvs = [];
+    const indices = [];
+    for (let i = 0; i < left.length; i++) {
+      positions.push(left[i].x, left[i].y, left[i].z);
+      positions.push(right[i].x, right[i].y, right[i].z);
+      const v = i / Math.max(1, left.length - 1);
+      uvs.push(0, v, 1, v);
+    }
+    for (let i = 0; i < left.length - 1; i++) {
+      const a = i * 2; const b = a + 1; const c = a + 2; const d = a + 3;
+      indices.push(a, c, b, c, d, b);
+    }
+    const roadGeo = new THREE.BufferGeometry();
+    roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    roadGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    roadGeo.setIndex(indices);
+    roadGeo.computeVertexNormals();
+    const featureColor = roadVisualColor(f, amenityPoints);
+    const featureRoadMat = roadMat.clone();
+    if (settings.roadStyle === 'Asphalt') {
+      featureRoadMat.map = createAsphaltTexture(`#${featureColor.getHexString()}`);
+      featureRoadMat.color = new THREE.Color(0xffffff);
+    } else {
+      featureRoadMat.color = featureColor;
+    }
+    featureRoadMat.needsUpdate = true;
+    if (isSceneBuildStale(buildToken)) return;
+    const roadMesh = new THREE.Mesh(roadGeo, featureRoadMat);
+    roadMesh.receiveShadow = true;
+    roadMesh.renderOrder = 30;
+    roadGroup.add(roadMesh);
 
-    // Procedural lane markings are disabled: roads now render as one dissolved
-    // surface, and per-lane lines would reintroduce the stray marks across
-    // intersections that the dissolved look is meant to remove.
-    if (false) {
+    // Procedural lane markings (centre dashes + shoulder lines).
+    if (settings.showRoadMarkings && settings.showRoads) {
       const roadLenMark = xzCurve.getLength();
       
       const markingMat = new THREE.MeshStandardMaterial({
@@ -7755,7 +7836,6 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     }
   }
 
-  buildDissolvedRoadSurface(roadPaints, buildToken);
 
   if (settings.showCars && vehicleRoadCurves.length > 0) {
     const carVariants = assetPoolVariants('cars');
@@ -8265,10 +8345,10 @@ async function rebuildScene() {
     const benches = await loadGeoJson('../data/yerlesim/mybenches.geojson', { label: 'Benches' });
     const bins = await loadGeoJson('../data/yerlesim/mytrashbins.geojson', { label: 'Trash bins' });
     const busstops = await loadGeoJson('../data/yerlesim/mybusstops.geojson', { label: 'Bus stops' });
+    const bikeLanes = await loadGeoJson('../data/yerlesim/mybikelanes.geojson', { label: 'Bike lanes' });
     const fences = await loadGeoJson('../data/yerlesim/myfences.geojson', { label: 'Fences' });
     const waterlines = await loadGeoJson('../data/yerlesim/mywaterlines.geojson', { label: 'Water lines' });
     const mosques = await loadGeoJson('../data/yerlesim/mymosques.geojson', { label: 'Mosques' });
-    const tumulus = await loadGeoJson('../data/yerlesim/mytumulus.geojson', { label: 'Tumulus' });
 
     const roi = await loadGeoJson('../data/yerlesim/roi.geojson', { required: manifestRequiresInput('roi'), label: 'ROI' });
     layerDataCache = {
@@ -8277,13 +8357,13 @@ async function rebuildScene() {
        yollar: asFeatureCollection(yollar, 'Roads'),
        agaclar: asFeatureCollection(agaclar, 'Trees'),
        mosques: asFeatureCollection(mosques, 'Mosques'),
-       tumulus: asFeatureCollection(tumulus, 'Tumulus'),
        parseller: null,
        hardscape: null,
        sidewalks: null,
        pedestrianPaths: null,
        fences: asFeatureCollection(fences, 'Fences'),
        waterlines: asFeatureCollection(waterlines, 'Water lines'),
+       bikeLanes: asFeatureCollection(bikeLanes, 'Bike lanes'),
        furniture: {
          lights: asFeatureCollection(lights, 'Lights'),
          benches: asFeatureCollection(benches, 'Benches'),
@@ -8328,14 +8408,14 @@ async function rebuildScene() {
   const yollar = asFeatureCollection(layerDataCache.yollar, 'Roads');
   const agaclar = asFeatureCollection(layerDataCache.agaclar, 'Trees');
   const mosques = asFeatureCollection(layerDataCache.mosques, 'Mosques');
-  const tumulus = asFeatureCollection(layerDataCache.tumulus, 'Tumulus');
   const parseller = layerDataCache.parseller ? asFeatureCollection(layerDataCache.parseller, 'Parcels') : null;
   const hardscape = layerDataCache.hardscape ? asFeatureCollection(layerDataCache.hardscape, 'Hardscape') : null;
   const sidewalks = layerDataCache.sidewalks ? asFeatureCollection(layerDataCache.sidewalks, 'Sidewalks') : null;
   const pedestrianPaths = layerDataCache.pedestrianPaths ? asFeatureCollection(layerDataCache.pedestrianPaths, 'Pedestrian paths') : null;
   const fences = layerDataCache.fences ? asFeatureCollection(layerDataCache.fences, 'Fences') : null;
   const waterlines = layerDataCache.waterlines ? asFeatureCollection(layerDataCache.waterlines, 'Water lines') : null;
-  Object.assign(layerDataCache, { adalar, yapilar, yollar, agaclar, parseller, hardscape, sidewalks, pedestrianPaths, fences, waterlines, mosques, tumulus });
+  const bikeLanes = layerDataCache.bikeLanes ? asFeatureCollection(layerDataCache.bikeLanes, 'Bike lanes') : null;
+  Object.assign(layerDataCache, { adalar, yapilar, yollar, agaclar, parseller, hardscape, sidewalks, pedestrianPaths, fences, waterlines, bikeLanes, mosques });
   updateDashboard(layerDataCache);
 
   // Calculate and update stats
@@ -8449,15 +8529,6 @@ async function rebuildScene() {
     }
     treeModel = cachedDefaultTreeModel;
   }
-  // Tumulus has no bundled GLB; the default is a procedural mound built on demand.
-  // An optional ../assets/models/tumulus.glb is used automatically if present.
-  let tumulusModel = null;
-  if (settings.showTumulus && settings.activeTumulusModel === 'default') {
-    if (cachedDefaultTumulusModel === null) {
-      cachedDefaultTumulusModel = await loadGltfModel('../assets/models/tumulus.glb');
-    }
-    tumulusModel = cachedDefaultTumulusModel;
-  }
   if (settings.showIslands && (!isRasterTextureMode() || adalar.features.length)) {
     await runLayerBuild('Blocks', () => buildIslandLayer(adalar, buildToken), () => clearGroup(islandGroup));
   } else {
@@ -8489,6 +8560,7 @@ async function rebuildScene() {
   }
   if (isSceneBuildStale(buildToken)) return;
   await runLayerBuild('Roads', () => buildRoadsAndTraffic(yollar, buildToken), () => { clearGroup(roadGroup); clearGroup(carGroup); clearGroup(pedestrianGroup); });
+  await runLayerBuild('Bike lanes', () => buildBikeLaneLayer(bikeLanes, buildToken), () => { clearGroup(bikeLaneGroup); clearGroup(bikeGroup); bikeLaneCurves = []; bikes = []; });
   if (isSceneBuildStale(buildToken)) return;
   if (settings.showSidewalks) {
     await runLayerBuild('Sidewalks', () => buildSidewalkLayer(yollar, sidewalks, buildToken), () => clearGroup(sidewalkGroup));
@@ -8516,11 +8588,6 @@ async function rebuildScene() {
     await runLayerBuild('Mosques', () => buildMosqueLayer(mosques, mosqueModel), () => clearGroup(mosqueGroup));
   } else {
     clearGroup(mosqueGroup);
-  }
-  if (settings.showTumulus) {
-    await runLayerBuild('Tumulus', () => buildTumulusLayer(tumulus, tumulusModel), () => clearGroup(tumulusGroup));
-  } else {
-    clearGroup(tumulusGroup);
   }
   if (settings.showFurniture) {
     await runLayerBuild('Street furniture', () => buildFurnitureLayer(), () => clearGroup(furnitureGroup));
@@ -8643,15 +8710,14 @@ function updateDashboard(data) {
   if (health) {
     const manifestEmpty = new Set(projectManifest?.summary?.emptyOptionalInputs || []);
     const optional = [
-      ['blocks', 'Blocks', adalar.features.length],
-      ['parcels', 'Parcels', parcelCount],
+      ['blocks', 'Greens', adalar.features.length],
       ['roads', 'Roads', yollar.features.length],
+      ['bike_lanes', 'Bike lanes', layerDataCache.bikeLanes?.features?.length || 0],
+      ['waterlines', 'Waterways', layerDataCache.waterlines?.features?.length || 0],
       ['trees', 'Trees', agaclar.features.length],
-      ['hardscape', 'Hardscape', hardscape?.features?.length || 0],
-      ['sidewalks', 'Sidewalks', sidewalks?.features?.length || 0],
-      ['pedestrian_paths', 'Paths', pedestrianPaths?.features?.length || 0],
       ['lights', 'Lights', furniture.lights?.features?.length || 0],
       ['benches', 'Benches', furniture.benches?.features?.length || 0],
+      ['bins', 'Bins', furniture.bins?.features?.length || 0],
       ['busstops', 'Stops', furniture.busstops?.features?.length || 0],
     ];
     health.innerHTML = optional.map(([key, name, count]) =>
@@ -8664,7 +8730,6 @@ function updateDashboard(data) {
   if (statDiv) {
     let html = `<div class="stat-row"><span>${t('statBld')}</span><span class="stat-val">${bldCount}</span></div>`;
     html += `<div class="stat-row"><span>${t('statBlock')}</span><span class="stat-val">${blockCount}</span></div>`;
-    html += `<div class="stat-row"><span>${t('statParcel')}</span><span class="stat-val">${parcelCount || '-'}</span></div>`;
     html += `<div class="stat-row"><span>${t('statFlr')}</span><span class="stat-val">${avgFlr}</span></div>`;
     topFuncs.forEach(([k, v]) => {
       const icon = getFunctionIcon(k);
@@ -8675,120 +8740,9 @@ function updateDashboard(data) {
 }
 
 function addGui() {
-  if (globalGui) globalGui.destroy();
-  globalGui = new GUI({ title: t('guiTitle') });
-
-  const env = globalGui.addFolder(t('env'));
-  env.add(settings, 'fogDensity', 0.0001, 0.002, 0.0001).name(t('fog')).onChange(checkTimeChange);
-
-  const fx = globalGui.addFolder(t('fxFolder'));
-  fx.add(settings, 'timeOfDay', 0, 24, 0.1).name(t('timeOfDay')).onChange(checkTimeChange);
-  fx.add(settings, 'autoTime').name(t('autoTime'));
-  fx.add(settings, 'autoTimeSpeed', 0.5, 8, 0.5).name(t('autoTimeSpd'));
-  fx.add(settings, 'weather', ['Clear', 'Rain', 'Snow']).name(t('weather')).onChange(updateWeather);
-  fx.add(settings, 'enableSSAO').name(t('sSsa'));
-  fx.add(settings, 'enableBloom').name(t('sBloom')).onChange(checkTimeChange);
-
-  const terrain = globalGui.addFolder(t('terrain'));
-  terrain.add(settings, 'showTerrainTexture').name('Plan texture').onChange(rebuildScene);
-  terrain.add(settings, 'showOutsideRoiTerrain').name(t('lblOutsideRoiTerrain')).onChange(rebuildScene);
-  terrain.add(settings, 'terrainTextureOpacity', 0.1, 1.0, 0.05).name('Texture opacity').onChange(rebuildScene);
-  terrain.add(settings, 'terrainTextureBrightness', 0.5, 1.5, 0.05).name('Texture brightness').onChange(() => { terrainTexture = null; rebuildScene(); });
-  terrain.add(settings, 'terrainTextureContrast', 0.5, 1.8, 0.05).name('Texture contrast').onChange(() => { terrainTexture = null; rebuildScene(); });
-  terrain.addColor(settings, 'terrainOutsideColor').name('Outside ROI color').onChange(rebuildScene);
-  terrain.add(settings, 'showTerrainSides').name('Build sides').onChange(rebuildScene);
-  terrain.add(settings, 'terrainSideDrop', 0, 40, 0.5).name('Side drop from DEM min').onChange(rebuildScene);
-  terrain.addColor(settings, 'terrainSideColor').name('Side color').onChange(rebuildScene);
-  terrain.add(settings, 'demMeshQuality', 48, 360, 8).name('DEM mesh quality').onChange(rebuildScene);
-  terrain.add(settings, 'terrainSmoothingPasses', 0, 5, 1).name('DEM smooth passes').onChange(rebuildScene);
-  terrain.add(settings, 'terrainSmoothingStrength', 0, 0.9, 0.05).name('DEM smooth strength').onChange(rebuildScene);
-  terrain.add(settings, 'terrainMaxSlope', 0.1, 3.0, 0.05).name('DEM max slope').onChange(rebuildScene);
-  terrain.add(settings, 'terrainAnalysisMode', ['Texture', 'Elevation tint', 'Slope tint']).name('Topography view').onChange(rebuildScene);
-  terrain.add(settings, 'flattenIslands').name(t('flattenIslands')).onChange(rebuildScene);
-  terrain.add(settings, 'islandPlateauTransition', 0, 20, 1).name(t('islandPlateauTransition')).onChange(rebuildScene);
-  terrain.add(settings, 'dayOfYear', 1, 365, 1).name(t('dayOfYear')).onChange(updateTimeOfDay);
-  terrain.add(settings, 'latitude', -60, 60, 0.5).name(t('latitude')).onChange(updateTimeOfDay);
-  terrain.add(settings, 'pavementStyle', Object.keys(textureSets.pavement)).name(t('pavement')).onChange(rebuildScene);
-  terrain.add(settings, 'showHardscape').name(t('showHardscape')).onChange(rebuildScene);
-  terrain.add(settings, 'hardscapeStyle', Object.keys(textureSets.hardscape)).name(t('hardTex')).onChange(rebuildScene);
-  terrain.add(settings, 'hardscapeHeight', 0.0, 2.0, 0.05).name(t('hardH')).onChange(rebuildScene);
-  terrain.add(settings, 'showIslands').name(t('lblBlocks')).onChange(rebuildScene);
-  terrain.addColor(settings, 'islandColor').name(t('islCol')).onChange(rebuildScene);
-  terrain.add(settings, 'islandTexture', Object.keys(textureSets.island)).name(t('islTex')).onChange(rebuildScene);
-  terrain.add(settings, 'islandTransparency', 0, 0.95, 0.05).name(t('lblIslandTransparency')).onChange(rebuildScene);
-  terrain.addColor(settings, 'parkColor').name(t('parkCol')).onChange(rebuildScene);
-  terrain.add(settings, 'parkTexture', Object.keys(textureSets.island)).name(t('parkTex')).onChange(rebuildScene);
-  terrain.addColor(settings, 'sportColor').name(t('sportCol')).onChange(rebuildScene);
-
-  const parcels = globalGui.addFolder(t('parcels'));
-  parcels.add(settings, 'showParcels').name(t('showParcels')).onChange(rebuildScene);
-  parcels.addColor(settings, 'parcelBoundaryColor').name(t('boundCol')).onChange(rebuildScene);
-  parcels.add(settings, 'parcelBoundaryOpacity', 0.05, 1.0, 0.01).name(t('boundOp')).onChange(rebuildScene);
-
-  const bld = globalGui.addFolder(t('bld'));
-  bld.add(settings, 'buildingMode', ['Footprint only', 'Extruded', 'Extruded + roof']).name('Building mode').onChange(rebuildScene);
-  bld.add(settings, 'facadeTextureScale', 1.0, 8.0, 0.05).name('Facade scale').onChange(rebuildScene);
-  bld.add(settings, 'floorHeight', 2.5, 5.0, 0.05).name(t('floorH')).onChange(rebuildScene);
-  bld.add(settings, 'roofShape', ROOF_SHAPE_OPTIONS).name(t('roofShape')).onChange(rebuildScene);
-  bld.add(settings, 'roofHeight', 0.5, 6.0, 0.1).name(t('roofH')).onChange(rebuildScene);
-  bld.add(settings, 'roofTexture', Object.keys(textureSets.roof)).name(t('roofTex')).onChange(rebuildScene);
-
-  const roads = globalGui.addFolder(t('roads'));
-  roads.add(settings, 'roadStyle', Object.keys(textureSets.road)).name('Asphalt Style').onChange(rebuildScene);
-  roads.add(settings, 'showCars').name(t('showCars')).onChange(rebuildScene);
-  roads.add(settings, 'carDensity', 0.0, 1.0, 0.1).name(t('carDensity')).onChange(rebuildScene);
-  roads.add(settings, 'showRoads').name(t('showRoads')).onChange(rebuildScene);
-  roads.add(settings, 'roadColorMode', ['Default', 'Amenity distance', 'Access / traffic']).name('Road analysis').onChange(rebuildScene);
-  roads.addColor(settings, 'roadColor').name(t('roadCol')).onChange(rebuildScene);
-  roads.add(settings, 'roadWidth', 5.0, 20.0, 0.5).name(t('roadW')).onChange(rebuildScene);
-  roads.add(settings, 'trafficSpeed', 0, 5, 0.1).name(t('trafficSpd'));
-  roads.add(settings, 'showSidewalks').name(t('showSidewalks')).onChange(rebuildScene);
-  roads.add(settings, 'showPedestrianPaths').name(t('showPedestrianPaths')).onChange(rebuildScene);
-  roads.add(settings, 'showPedestrians').onChange(rebuildScene);
-  roads.add(settings, 'pedestrianDensity', 0.0, 1.0, 0.1).name(t('pedDensity')).onChange(rebuildScene);
-
-  const analysis = globalGui.addFolder('Plan Analysis');
-  analysis.add(settings, 'showWindPlumes').name('Wind plume risk').onChange(rebuildScene);
-  analysis.add(settings, 'windDirectionDeg', 0, 359, 1).name('Wind direction').onChange(rebuildScene);
-  analysis.add(settings, 'windPlumeDistance', 40, 600, 10).name('Plume distance').onChange(rebuildScene);
-  
-  const sfGroup = globalGui.addFolder(t('sfFolder'));
-  sfGroup.add(settings, 'showLights').name(t('sfLights')).onChange(rebuildScene);
-  sfGroup.add(settings, 'lightStyle', uniqueAssetVariants('lights', ['Modern Arc', 'Classic Post', 'Dual Head', 'Slim Post'])).onChange(rebuildScene);
-  sfGroup.add(settings, 'showBenches').name(t('sfBenches')).onChange(rebuildScene);
-  sfGroup.add(settings, 'benchStyle', uniqueAssetVariants('benches', ['Wood Plank', 'Concrete Slab', 'Curved Metal'])).onChange(rebuildScene);
-  sfGroup.add(settings, 'showBins').name(t('sfBins')).onChange(rebuildScene);
-  sfGroup.add(settings, 'binStyle', uniqueAssetVariants('bins', ['Square Box', 'Cylinder', 'Dual Recycle'])).onChange(rebuildScene);
-  sfGroup.add(settings, 'showBusStops').name(t('sfStops')).onChange(rebuildScene);
-  sfGroup.add(settings, 'stopStyle', uniqueAssetVariants('busstops', ['Glass Shelter', 'Minimal Canopy', 'Wood Cabin'])).onChange(rebuildScene);
-
-  const style = globalGui.addFolder(t('funcCol'));
-  const facade = globalGui.addFolder(t('funcFac'));
-  const refreshFunctionGui = async () => {
-    const styleCtrls = [...style.controllers];
-    styleCtrls.forEach((c) => c.destroy());
-    const facadeCtrls = [...facade.controllers];
-    facadeCtrls.forEach((c) => c.destroy());
-    const keys = Object.keys(functionColorState);
-    keys.forEach((k) => {
-      ensureFunctionBuildingStyle(k);
-      style.addColor(functionColorState, k).name(k.slice(0, 16)).onFinishChange(() => {
-        syncLegacyFunctionStyle(k);
-        saveFunctionBuildingStyles();
-        rebuildScene();
-      });
-      facade.add(functionFacadeState, k, uniqueAssetVariants('facades', Object.keys(textureSets.facade)).filter((value) => Object.prototype.hasOwnProperty.call(textureSets.facade, value))).name(k.slice(0, 16)).onFinishChange(() => {
-        syncLegacyFunctionStyle(k);
-        saveFunctionBuildingStyles();
-        rebuildScene();
-      });
-    });
-  };
-
-  functionGuiRefs = { refreshFunctionGui };
-  if (Object.keys(functionColorState).length > 0) refreshFunctionGui();
-  globalGui.close();
-  if (globalGui.domElement) globalGui.domElement.style.display = 'none';
+  // The lil-gui "Urban Controls" panel was removed for a simpler, dock-only
+  // UI (v0.7.0). Function colour/facade editing lives in the Style dock.
+  functionGuiRefs = { refreshFunctionGui: () => {} };
 }
 
 addGui();
@@ -8836,10 +8790,10 @@ window.addEventListener('mousemove', (e) => {
   _doHoverBuilding(hits[0].object);
   if (hoverTip) {
     const p = hits[0].object.userData || {};
-    const icon = getFunctionIcon(p.uipfonksiyon || '');
+    const icon = getFunctionIcon(buildingFunctionValue(p) || '');
     const floorVal = buildingLevelsRaw(p);
     const floors = floorVal != null ? `${floorVal} ${t('biKat').toLowerCase()}` : '-';
-    hoverTip.innerHTML = `<div class="tooltip-title">${icon} ${(p.uipfonksiyon || '-').slice(0, 26)}</div><div class="tooltip-row"><span>${t('biKat')}</span><span>${floors}</span></div>`;
+    hoverTip.innerHTML = `<div class="tooltip-title">${icon} ${(buildingFunctionValue(p) || '-').slice(0, 26)}</div><div class="tooltip-row"><span>${t('biKat')}</span><span>${floors}</span></div>`;
     hoverTip.style.display = 'block';
     const tx = Math.min(e.clientX + 16, innerWidth - 200);
     const ty = Math.max(e.clientY - 60, 8);
@@ -8866,7 +8820,7 @@ window.addEventListener('click', (e) => {
     return;
   }
   const p = hits[0].object.userData || {};
-  const icon = getFunctionIcon(p.uipfonksiyon || '');
+  const icon = getFunctionIcon(buildingFunctionValue(p) || '');
   const areaStr = p.aream2 ? `${parseFloat(p.aream2).toFixed(0)} m²` : '-';
   const calcFootprintArea = parseNumberProp(p, ['planx_calc_footprint_area', 'taban_alani', 'footprint_area'], null);
   const calcFloorArea = parseNumberProp(p, ['planx_calc_floor_area', 'toplam_insaat', 'insaat_alani'], null);
@@ -8882,7 +8836,7 @@ window.addEventListener('click', (e) => {
   if (detailTip) {
     detailTip.innerHTML = `
       <div class="tooltip-title">${icon} ${t('binaInfo')} <span class="tip-close" onclick="this.closest('#bldg-detail-tip').style.display='none'">✕</span></div>
-      <div class="tooltip-row"><span>${t('biFonk')}</span><span>${(p.uipfonksiyon || '-').slice(0, 24)}</span></div>
+      <div class="tooltip-row"><span>${t('biFonk')}</span><span>${(buildingFunctionValue(p) || '-').slice(0, 24)}</span></div>
       <div class="tooltip-row"><span>${t('biKat')}</span><span>${buildingLevelsRaw(p) ?? '-'}</span></div>
       <div class="tooltip-row"><span>${t('biNiz')}</span><span>${p.nizam || '-'}</span></div>
       ${p.taks != null ? `<div class="tooltip-row"><span>TAKS</span><span>${p.taks}</span></div>` : ''}
@@ -9127,6 +9081,19 @@ function animate() {
       c.car.lookAt(pos.x - tan.x / horiz, roadY, pos.z - tan.z / horiz);
     }
   }
+  for (const b of bikes) {
+    b.t += b.speed * Math.max(0, settings.bikeSpeed || 0);
+    if (b.t > 1) b.t = 0;
+    const sample = b.direction > 0 ? b.t : 1 - b.t;
+    const safe = Math.min(Math.max(sample, 0.01), 0.99);
+    const pos = b.curve.getPointAt(safe);
+    const tan = b.curve.getTangentAt(safe).multiplyScalar(b.direction);
+    const bikeY = terrainLocalYAt(pos.x, pos.z) + LAYER.bikeLane + 0.08;
+    b.mesh.position.set(pos.x, bikeY, pos.z);
+    const h = Math.sqrt(tan.x * tan.x + tan.z * tan.z);
+    if (h > 0.001) b.mesh.lookAt(pos.x - tan.x / h, bikeY, pos.z - tan.z / h);
+    for (const wheel of b.wheels || []) wheel.rotation.x -= 0.15 * (settings.bikeSpeed || 0);
+  }
   for (const p of pedestrians) {
     p.t += p.speed;
     if (p.t > 1) p.t = 0;
@@ -9316,15 +9283,6 @@ if (panelToggleBtn) {
   panelToggleBtn.addEventListener('click', () => {
     const mainPanel = document.getElementById('main-panel');
     if (mainPanel) mainPanel.classList.toggle('collapsed');
-  });
-}
-
-const langToggleBtn = document.getElementById('lang-toggle');
-if (langToggleBtn) {
-  langToggleBtn.addEventListener('click', () => {
-    currentLang = currentLang === 'TR' ? 'EN' : 'TR';
-    updateHtmlLang();
-    addGui(); // Rebuild GUI with new language
   });
 }
 
@@ -9958,10 +9916,6 @@ function initDockUi() {
       renderMosqueCustomizationsList();
       renderTumulusCustomizationsList();
     }
-  });
-  document.getElementById('advanced-toggle')?.addEventListener('click', () => {
-    if (!globalGui?.domElement) return;
-    globalGui.domElement.style.display = globalGui.domElement.style.display === 'none' ? '' : 'none';
   });
   document.querySelectorAll('.dock-close').forEach((btn) => {
     btn.addEventListener('click', () => document.getElementById(btn.dataset.close)?.classList.add('hidden'));

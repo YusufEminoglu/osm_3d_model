@@ -36,7 +36,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.6.0 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.7.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 
@@ -129,52 +129,53 @@ def fetch_overpass(min_lat: float, min_lon: float, max_lat: float, max_lon: floa
 # --------------------------------------------------------------------------
 # OSM element -> attributes
 # --------------------------------------------------------------------------
-# Function-aware default floor counts, used only when OSM has no level/height
-# data at all. Housing reads taller than retail; light industry and worship
-# halls read low. KARMA (mixed/unknown) keeps the historical default of 3.
-_DEFAULT_FLOORS_BY_FUNCTION = {
-    "KONUT": 4,
-    "TICARET": 2,
-    "SANAYI": 1,
-    "EGITIM": 3,
-    "SAGLIK": 5,
-    "DINI": 1,
-    "KAMU": 3,
-    "KARMA": 3,
+# Default floor counts by OSM ``building`` type, used only when OSM has no
+# building:levels / height. Housing reads taller than retail; light industry and
+# worship halls read low. Unknown buildings keep the historical default of 3.
+_DEFAULT_FLOORS_BY_OSM = {
+    "apartments": 4, "residential": 4, "dormitory": 5,
+    "house": 2, "detached": 2, "terrace": 2, "semidetached_house": 2, "bungalow": 1,
+    "commercial": 3, "office": 5, "retail": 2, "supermarket": 1, "kiosk": 1,
+    "industrial": 1, "warehouse": 1, "manufacture": 1, "hangar": 1,
+    "school": 3, "university": 4, "college": 4, "kindergarten": 2,
+    "hospital": 5, "clinic": 3,
+    "church": 1, "mosque": 1, "temple": 1, "synagogue": 1, "cathedral": 2, "chapel": 1,
+    "public": 3, "civic": 3, "government": 4, "townhall": 3,
+    "garage": 1, "garages": 1, "shed": 1, "hut": 1, "roof": 1, "carport": 1,
 }
 
 
-def _building_floors(tags: dict, function: str = "KARMA") -> int:
-    """Best-estimate floor count for the viewer's ``katadedi`` field.
+def _parse_osm_number(value):
+    """Parse an OSM numeric tag ('12', '12.5', '12 m', '3;4') -> float or None."""
+    if value is None:
+        return None
+    try:
+        return float(str(value).split(";")[0].strip().rstrip(" m").strip())
+    except (ValueError, TypeError):
+        return None
 
-    Priority: explicit ``building:levels`` -> ``height`` / 3 m -> a function-aware
-    default. When roof levels are tagged they are added on top, because they add
-    visible massing the extrusion should reflect.
+
+def _building_levels(tags: dict) -> int:
+    """Floor count for the export's OSM-native ``building_levels`` column.
+
+    Priority: building:levels (+ roof:levels) -> height / 3 m -> a default by the
+    OSM ``building`` type -> 3.
     """
     base = None
     for key in ("building:levels", "levels"):
-        value = tags.get(key)
-        if value:
-            try:
-                base = max(1, int(float(str(value).split(";")[0])))
-                break
-            except (ValueError, TypeError):
-                pass
+        n = _parse_osm_number(tags.get(key))
+        if n is not None:
+            base = max(1, int(round(n)))
+            break
     if base is None:
-        height = tags.get("height")
-        if height:
-            try:
-                base = max(1, int(round(float(str(height).rstrip(" m")) / 3.0)))
-            except (ValueError, TypeError):
-                base = None
+        h = _parse_osm_number(tags.get("height"))
+        if h is not None and h > 0:
+            base = max(1, int(round(h / 3.0)))
     if base is None:
-        return _DEFAULT_FLOORS_BY_FUNCTION.get(function, 3)
-    roof = tags.get("roof:levels")
+        return _DEFAULT_FLOORS_BY_OSM.get((tags.get("building") or "").lower(), 3)
+    roof = _parse_osm_number(tags.get("roof:levels"))
     if roof:
-        try:
-            base += max(0, int(float(str(roof).split(";")[0])))
-        except (ValueError, TypeError):
-            pass
+        base += max(0, int(round(roof)))
     return max(1, base)
 
 
@@ -196,58 +197,15 @@ def _waterway_class(tags: dict) -> str:
 
 def _waterway_width(tags: dict) -> float:
     for key in ("width", "est_width"):
-        value = tags.get(key)
-        if value:
-            try:
-                return max(0.5, float(str(value).rstrip(" m")))
-            except (ValueError, TypeError):
-                pass
+        n = _parse_osm_number(tags.get(key))
+        if n is not None and n > 0:
+            return max(0.5, n)
     return _WATERWAY_WIDTH.get(_waterway_class(tags), 3.0)
 
 
-def _building_function(tags: dict) -> str:
-    raw = (tags.get("building") or "").lower()
-    if raw in ("apartments", "residential", "house", "detached", "terrace", "dormitory"):
-        return "KONUT"
-    if raw in ("commercial", "retail", "supermarket", "kiosk", "office"):
-        return "TICARET"
-    if raw in ("school", "university", "college", "kindergarten"):
-        return "EGITIM"
-    if raw in ("hospital", "clinic"):
-        return "SAGLIK"
-    if raw in ("industrial", "warehouse", "manufacture"):
-        return "SANAYI"
-    if raw in ("mosque", "church", "temple", "synagogue", "cathedral", "chapel"):
-        return "DINI"
-    if raw in ("public", "civic", "government", "townhall"):
-        return "KAMU"
-    if raw in ("yes", "") and tags.get("amenity"):
-        amenity = tags["amenity"].lower()
-        if amenity in ("school", "university"):
-            return "EGITIM"
-        if amenity in ("hospital", "clinic"):
-            return "SAGLIK"
-        if amenity in ("place_of_worship",):
-            return "DINI"
-    return "KARMA"
-
-
-def _road_class(tags: dict) -> str:
-    return (tags.get("highway") or "").lower() or "unknown"
-
-
-def _green_function(tags: dict) -> str:
-    if tags.get("leisure") in ("park", "garden", "playground"):
-        return "PARK"
-    if tags.get("leisure") == "pitch":
-        return "SPOR"
-    if tags.get("landuse") in ("forest", "grass", "meadow", "recreation_ground"):
-        return "YESIL_ALAN"
-    if tags.get("landuse") == "cemetery":
-        return "MEZARLIK"
-    if tags.get("natural") in ("wood", "scrub"):
-        return "ORMAN"
-    return "YESIL_ALAN"
+def _tag(tags: dict, key: str) -> str:
+    """Lower-cased OSM tag value, or '' when absent — emitted verbatim as a column."""
+    return (tags.get(key) or "").strip().lower()
 
 
 def _way_polygon(element) -> QgsGeometry | None:
@@ -319,7 +277,7 @@ def connect_roads(roads_layer: QgsVectorLayer, tolerance_m: float = 2.0, feedbac
         })["OUTPUT"]
         dissolved = processing.run("native:dissolve", {
             "INPUT": snapped,
-            "FIELD": ["yol_turu"],
+            "FIELD": ["highway"],
             "OUTPUT": "TEMPORARY_OUTPUT",
         })["OUTPUT"]
         singles = processing.run("native:multiparttosingleparts", {
@@ -361,48 +319,58 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
     if not elements:
         raise OsmDownloadError("Overpass returned 0 elements for this area. Try a different or larger area.")
 
+    # Columns mirror raw OSM tags (no PlanX schema): the viewer maps building_levels
+    # -> floors, building -> colour, highway -> hierarchy, etc. via the manifest.
     buildings_layer, b_pr = _make_layer(
         "OSM Buildings", "Polygon", epsg_dest,
-        [("osm_id", QVariant.String), ("katadedi", QVariant.Int),
-         ("uipfonksiyon", QVariant.String), ("name", QVariant.String)],
+        [("osm_id", QVariant.String), ("building", QVariant.String),
+         ("building_levels", QVariant.Int), ("height", QVariant.Double), ("name", QVariant.String)],
     )
     roads_layer, r_pr = _make_layer(
         "OSM Roads", "LineString", epsg_dest,
-        [("osm_id", QVariant.String), ("yol_turu", QVariant.String), ("name", QVariant.String)],
+        [("osm_id", QVariant.String), ("highway", QVariant.String),
+         ("width", QVariant.Double), ("name", QVariant.String)],
+    )
+    # Dedicated cycleways (highway=cycleway) split off into their own bike-lane layer.
+    bikelanes_layer, bl_pr = _make_layer(
+        "OSM Bike lanes", "LineString", epsg_dest,
+        [("osm_id", QVariant.String), ("highway", QVariant.String),
+         ("width", QVariant.Double), ("name", QVariant.String)],
     )
     greens_layer, g_pr = _make_layer(
         "OSM Greens", "Polygon", epsg_dest,
-        [("osm_id", QVariant.String), ("uipfonksiyon", QVariant.String), ("name", QVariant.String)],
+        [("osm_id", QVariant.String), ("leisure", QVariant.String),
+         ("landuse", QVariant.String), ("natural", QVariant.String), ("name", QVariant.String)],
     )
     trees_layer, t_pr = _make_layer(
         "OSM Trees", "Point", epsg_dest,
-        [("osm_id", QVariant.String), ("height", QVariant.Double)],
+        [("osm_id", QVariant.String), ("natural", QVariant.String), ("height", QVariant.Double)],
     )
     # Waterways are clipped like roads; the memory provider accepts multi-part
     # clip results into a LineString layer (same as the roads layer above).
     waterlines_layer, w_pr = _make_layer(
         "OSM Waterlines", "LineString", epsg_dest,
-        [("osm_id", QVariant.String), ("su_turu", QVariant.String),
-         ("genislik", QVariant.Double), ("name", QVariant.String)],
+        [("osm_id", QVariant.String), ("waterway", QVariant.String),
+         ("width", QVariant.Double), ("name", QVariant.String)],
     )
     # Street furniture as points — one layer per viewer input (mybusstops,
     # mybenches, mylights, mytrashbins).
     busstops_layer, bs_pr = _make_layer(
         "OSM Bus stops", "Point", epsg_dest,
-        [("osm_id", QVariant.String), ("name", QVariant.String)],
+        [("osm_id", QVariant.String), ("highway", QVariant.String), ("name", QVariant.String)],
     )
     benches_layer, be_pr = _make_layer(
-        "OSM Benches", "Point", epsg_dest, [("osm_id", QVariant.String)],
+        "OSM Benches", "Point", epsg_dest, [("osm_id", QVariant.String), ("amenity", QVariant.String)],
     )
     lights_layer, li_pr = _make_layer(
-        "OSM Street lights", "Point", epsg_dest, [("osm_id", QVariant.String)],
+        "OSM Street lights", "Point", epsg_dest, [("osm_id", QVariant.String), ("highway", QVariant.String)],
     )
     trashbins_layer, tb_pr = _make_layer(
-        "OSM Trash bins", "Point", epsg_dest, [("osm_id", QVariant.String)],
+        "OSM Trash bins", "Point", epsg_dest, [("osm_id", QVariant.String), ("amenity", QVariant.String)],
     )
 
     counts = {
-        "buildings": 0, "roads": 0, "greens": 0, "trees": 0,
+        "buildings": 0, "roads": 0, "bikelanes": 0, "greens": 0, "trees": 0,
         "waterlines": 0, "busstops": 0, "benches": 0, "lights": 0,
         "trashbins": 0, "skipped": 0,
     }
@@ -431,14 +399,10 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             if g.transform(to_utm) or not circle_utm.contains(g):
                 counts["skipped"] += 1
                 continue
-            height = tags.get("height")
-            try:
-                height_val = float(str(height).rstrip(" m")) if height else 6.0
-            except (ValueError, TypeError):
-                height_val = 6.0
+            height_val = _parse_osm_number(tags.get("height")) or 6.0
             feat = QgsFeature()
             feat.setGeometry(g)
-            feat.setAttributes([str(element.get("id", "")), round(height_val, 1)])
+            feat.setAttributes([str(element.get("id", "")), "tree", round(height_val, 1)])
             t_pr.addFeatures([feat])
             counts["trees"] += 1
             continue
@@ -457,25 +421,25 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             if tags.get("highway") == "bus_stop" or tags.get("public_transport") == "platform":
                 feat = QgsFeature()
                 feat.setGeometry(g)
-                feat.setAttributes([osm_id, tags.get("name", "")])
+                feat.setAttributes([osm_id, _tag(tags, "highway") or "bus_stop", tags.get("name", "")])
                 bs_pr.addFeatures([feat])
                 counts["busstops"] += 1
             elif tags.get("amenity") == "bench":
                 feat = QgsFeature()
                 feat.setGeometry(g)
-                feat.setAttributes([osm_id])
+                feat.setAttributes([osm_id, "bench"])
                 be_pr.addFeatures([feat])
                 counts["benches"] += 1
             elif tags.get("highway") == "street_lamp":
                 feat = QgsFeature()
                 feat.setGeometry(g)
-                feat.setAttributes([osm_id])
+                feat.setAttributes([osm_id, "street_lamp"])
                 li_pr.addFeatures([feat])
                 counts["lights"] += 1
             elif tags.get("amenity") == "waste_basket":
                 feat = QgsFeature()
                 feat.setGeometry(g)
-                feat.setAttributes([osm_id])
+                feat.setAttributes([osm_id, "waste_basket"])
                 tb_pr.addFeatures([feat])
                 counts["trashbins"] += 1
             else:
@@ -490,13 +454,14 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             if clipped is None:
                 counts["skipped"] += 1
                 continue
-            function = _building_function(tags)
+            height_val = _parse_osm_number(tags.get("height"))
             feat = QgsFeature()
             feat.setGeometry(clipped)
             feat.setAttributes([
                 str(element.get("id", "")),
-                _building_floors(tags, function),
-                function,
+                _tag(tags, "building"),
+                _building_levels(tags),
+                round(height_val, 1) if height_val else None,
                 tags.get("name", ""),
             ])
             b_pr.addFeatures([feat])
@@ -511,11 +476,22 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             if clipped is None:
                 counts["skipped"] += 1
                 continue
+            highway = _tag(tags, "highway")
+            width = _parse_osm_number(tags.get("width"))
             feat = QgsFeature()
             feat.setGeometry(clipped)
-            feat.setAttributes([str(element.get("id", "")), _road_class(tags), tags.get("name", "")])
-            r_pr.addFeatures([feat])
-            counts["roads"] += 1
+            feat.setAttributes([
+                str(element.get("id", "")), highway,
+                round(width, 1) if width else None, tags.get("name", ""),
+            ])
+            # Dedicated cycle tracks go to the bike-lane layer; everything else
+            # (incl. footways/paths, which the viewer keeps cars off) stays a road.
+            if highway == "cycleway":
+                bl_pr.addFeatures([feat])
+                counts["bikelanes"] += 1
+            else:
+                r_pr.addFeatures([feat])
+                counts["roads"] += 1
             continue
 
         if etype == "way" and tags.get("waterway"):
@@ -530,7 +506,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             feat.setGeometry(clipped)
             feat.setAttributes([
                 str(element.get("id", "")),
-                _waterway_class(tags),
+                _tag(tags, "waterway"),
                 round(_waterway_width(tags), 1),
                 tags.get("name", ""),
             ])
@@ -548,14 +524,18 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
                 continue
             feat = QgsFeature()
             feat.setGeometry(clipped)
-            feat.setAttributes([str(element.get("id", "")), _green_function(tags), tags.get("name", "")])
+            feat.setAttributes([
+                str(element.get("id", "")),
+                _tag(tags, "leisure"), _tag(tags, "landuse"), _tag(tags, "natural"),
+                tags.get("name", ""),
+            ])
             g_pr.addFeatures([feat])
             counts["greens"] += 1
             continue
 
         counts["skipped"] += 1
 
-    for layer in (buildings_layer, roads_layer, greens_layer, trees_layer,
+    for layer in (buildings_layer, roads_layer, bikelanes_layer, greens_layer, trees_layer,
                   waterlines_layer, busstops_layer, benches_layer, lights_layer, trashbins_layer):
         layer.updateExtents()
 
@@ -564,6 +544,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
         "counts": counts,
         "buildings": buildings_layer,
         "roads": roads_layer,
+        "bikelanes": bikelanes_layer,
         "greens": greens_layer,
         "trees": trees_layer,
         "waterlines": waterlines_layer,

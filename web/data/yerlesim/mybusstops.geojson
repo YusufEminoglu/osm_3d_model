@@ -1,5 +1,1 @@
-{"type": "FeatureCollection", "name": "mybusstops", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": [
-{"type": "Feature", "properties": {"osm_id": "sample_bs1", "name": ""}, "geometry": {"type": "Point", "coordinates": [457815.0, 4350950.0]}},
-{"type": "Feature", "properties": {"osm_id": "sample_bs2", "name": ""}, "geometry": {"type": "Point", "coordinates": [458050.0, 4350980.0]}},
-{"type": "Feature", "properties": {"osm_id": "sample_bs3", "name": ""}, "geometry": {"type": "Point", "coordinates": [457980.0, 4351120.0]}}
-]}
+{"type": "FeatureCollection", "name": "mybusstops", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32635"}}, "features": [{"type": "Feature", "properties": {"osm_id": "sample_bs1", "name": "", "highway": "bus_stop"}, "geometry": {"type": "Point", "coordinates": [457815.0, 4350950.0]}}, {"type": "Feature", "properties": {"osm_id": "sample_bs2", "name": "", "highway": "bus_stop"}, "geometry": {"type": "Point", "coordinates": [458050.0, 4350980.0]}}, {"type": "Feature", "properties": {"osm_id": "sample_bs3", "name": "", "highway": "bus_stop"}, "geometry": {"type": "Point", "coordinates": [457980.0, 4351120.0]}}]}

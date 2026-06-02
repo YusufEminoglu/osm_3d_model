@@ -1,10 +1,10 @@
 {
   "schema": "planx-3d-city-manifest/v1",
   "plugin": "osm_3d_model",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "mode": "vector",
   "flexibleInputs": true,
-  "exportedAt": "2026-06-01T12:00:00+03:00",
+  "exportedAt": "2026-06-02T12:00:00+03:00",
   "project": {
     "title": "3D OSM Model (sample)",
     "fileName": ""
@@ -20,11 +20,13 @@
   "baseMapTexture": null,
   "roadAccess": null,
   "fieldMappings": {
-    "building_floors_field": "katadedi",
-    "landuse_function_field": "uipfonksiyon",
-    "road_hierarchy_field": "yol_turu",
-    "block_category_field": "uipfonksiyon",
-    "waterline_width_field": "genislik"
+    "building_floors_field": "building_levels",
+    "building_function_field": "building",
+    "landuse_function_field": "landuse",
+    "road_hierarchy_field": "highway",
+    "block_category_field": "landuse",
+    "waterline_width_field": "width",
+    "bike_lane_width_field": "width"
   },
   "analysisDefaults": {
     "roadColorMode": "Default"
@@ -63,14 +65,16 @@
     "showBusStops": true,
     "showWaterlines": true,
     "waterlineWidth": 3.0,
-    "showCrosswalks": false,
+    "showBikeLanes": true,
+    "showBikes": false,
+    "bikeDensity": 0.1,
     "showSidewalks": true,
+    "showCrosswalks": false,
     "showPedestrianPaths": false,
     "showParcels": false,
     "showHardscape": false,
     "showFences": false,
     "showMosques": false,
-    "showTumulus": false,
     "demMeshQuality": 140,
     "latitude": 39.12,
     "dayOfYear": 172,

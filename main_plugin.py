@@ -115,8 +115,9 @@ class Osm3dModelPlugin:
                      + counts.get("lights", 0) + counts.get("trashbins", 0))
         msg = (
             f"Done. {counts.get('buildings', 0)} buildings, {counts.get('roads', 0)} roads, "
-            f"{counts.get('greens', 0)} greens, {counts.get('trees', 0)} trees, "
-            f"{counts.get('waterlines', 0)} waterways, {furniture} furniture | "
+            f"{counts.get('bikelanes', 0)} bike lanes, {counts.get('greens', 0)} greens, "
+            f"{counts.get('trees', 0)} trees, {counts.get('waterlines', 0)} waterways, "
+            f"{furniture} furniture | "
             f"r={summary.get('radius_m')} m ({summary.get('area_ha')} ha). Viewer: {url}"
         )
         if self.dialog:

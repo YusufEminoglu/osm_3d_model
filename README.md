@@ -9,11 +9,14 @@ City viewer engine.
 1. You choose a study area — the **current map view** or **selected polygon
    feature(s)** in the active layer.
 2. The plugin fits the **largest circle that fits inside your selection** as the
-   study boundary, clamped to a maximum area (default 150 ha, up to ~300 ha), and
-   gives it a solid base — just like PlanX 3D City.
-3. It downloads OpenStreetMap **buildings, roads, waterways, greens, trees and
-   street furniture** (bus stops, benches, street lamps, waste baskets) for that
-   circle, clips them to it, and reprojects to a metric UTM CRS.
+   study boundary, clamped to a maximum area (default 150 ha, up to ~300 ha). The
+   **model base extends +20 m beyond that circle**, so the city sits on a small
+   platform margin while the OSM data stays clipped to the inner circle.
+3. It downloads OpenStreetMap **buildings, roads, cycleways, waterways, greens,
+   trees and street furniture** (bus stops, benches, street lamps, waste baskets)
+   for that circle, clips them to it, and reprojects to a metric UTM CRS. Layers
+   keep their **native OSM columns** (`building`, `building_levels`, `highway`,
+   `waterway`, `leisure`/`landuse`/`natural`, `width`) — no translated schema.
 4. It writes the GeoJSON layers + a viewer manifest and opens the 3D viewer.
 
 ## One button
@@ -22,16 +25,20 @@ City viewer engine.
 
 ## Defaults
 
-- **Buildings:** PlanX roof + facade logic; extra procedural facade detail is
-  **off by default**. With no OSM floor/height data the default floor count is
-  **function-aware** (e.g. housing reads taller than retail); tagged roof levels
-  add to the massing.
-- **Roads:** procedural road traces / markings **on**.
+- **Buildings:** coloured by their **OSM `building` function** (residential,
+  commercial, education, health, …). With no OSM floor/height data the default
+  floor count is **function-aware**; tagged roof levels add to the massing.
+- **Roads & sidewalks:** fully **procedural** — per-road ribbons with lane
+  markings and sidewalks on **both sides** (PlanX 3D City logic). Pedestrians keep
+  to the sidewalks and cars to car-capable roads.
+- **Bike lanes:** OSM cycleways (`highway=cycleway`) render as green bike-lane
+  strips — **on by default**; cyclists are an optional toggle.
 - **Water:** rivers, streams, canals, drains and ditches render as flowing
   ribbons whose width scales with the waterway class — **on by default**.
 - **Street furniture:** bus stops, benches, street lamps and waste baskets —
   **on by default**; street lamps glow after dark.
-- **Boundary:** largest inscribed circle + solid base; terrain clipped to the circle.
+- **Boundary:** largest inscribed circle; model base buffered +20 m; terrain
+  clipped to the base.
 - **DEM:** optional — pick a raster in the dialog and it is clipped to the circle.
   Without a DEM the base is flat.
 - **Look:** the scene opens at **golden hour** — warm low sun, long soft shadows.
@@ -41,14 +48,15 @@ City viewer engine.
 
 ## In the 3D viewer
 
-A lean, OSM-focused toolbar (top-left): **Layers**, **Style**, **Scene & Sun**
-(time of day, weather, theme, effects, camera bookmarks, plus a Life & traffic
-section for traffic speed and car/pedestrian density), **Model Studio**,
-**Walk mode**, **Advanced**, plus **📷 Screenshot** (save a clean PNG of the
-view), **📏 Measure** (pick two ground points to read the distance) and
-**❔ Help** (mouse/keyboard shortcuts). The dashboard shows live counts —
-buildings, greens, average floors, and estimated population, dwellings and
-vehicles.
+The interface is **100% English** and deliberately lean. A small, OSM-focused
+toolbar (top-left): **Layers**, **Style**, **Scene & Sun** (time of day, weather,
+theme, effects, camera bookmarks, plus a Life & traffic section for traffic speed
+and car/pedestrian density), **Model Studio**, **Walk mode**, plus
+**📷 Screenshot**, **📏 Measure** (pick two ground points to read the distance)
+and **❔ Help** (mouse/keyboard shortcuts). The old "Urban Controls" advanced
+panel has been removed. The dashboard shows live counts — buildings, greens,
+average floors, and estimated population, dwellings and vehicles — and lists only
+OSM-derived layers.
 
 Open the viewer directly (without running an export) and it loads a small
 **bundled sample city** so the scene is never empty.
