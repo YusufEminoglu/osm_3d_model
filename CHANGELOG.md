@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.11.1] - 2026-06-03
+
+- Sidewalk width now scales with the OSM road class, clamped to a realistic 0.5–2.5 m: wide along primary/secondary/pedestrian streets, narrow along service ways and paths (was a fixed 1.6 m on every road).
+
 ## [0.11.0] - 2026-06-03
 
 - **Sidewalks on both sides:** procedural sidewalks are now raised kerbs with a curb face on both sides of every road, and use a double-sided material so a road's geometry winding can no longer cull the sidewalk on one side (the cause of sidewalks appearing on only one side). They are a touch wider and lighter for clarity.

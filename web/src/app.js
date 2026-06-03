@@ -5677,6 +5677,24 @@ function featureRoadWidth(feature) {
   return Math.max(5, Math.min(20, settings.roadWidth));
 }
 
+// Sidewalk width per OSM road class (m), clamped to a realistic 0.5–2.5 m:
+// wide along main roads / pedestrian streets, narrow along service ways and paths.
+const SIDEWALK_WIDTH_BY_CLASS = {
+  motorway: 2.5, trunk: 2.5, primary: 2.5,
+  secondary: 2.2, tertiary: 2.0,
+  living_street: 1.9, residential: 1.8, unclassified: 1.6, road: 1.6,
+  pedestrian: 2.4, service: 1.1,
+  track: 0.7, footway: 0.7, path: 0.6, bridleway: 0.6, corridor: 0.6, steps: 0.5
+};
+
+function featureSidewalkWidth(feature) {
+  const props = feature?.properties || {};
+  const field = mappedField('road_hierarchy_field') || 'highway';
+  const cls = String(props[field] ?? props.highway ?? '').toLowerCase().replace(/_link$/, '').trim();
+  const w = SIDEWALK_WIDTH_BY_CLASS[cls];
+  return Math.max(0.5, Math.min(2.5, w != null ? w : 1.4));
+}
+
 function buildingHeightFromProps(props, levels, floorHeight = settings.floorHeight) {
   const explicit = parseNumberProp(props || {}, ['planx_height', 'height', 'yukseklik', 'yükseklik', 'yÃ¼kseklik', 'bina_yuksekligi', 'building_height'], null);
   if (explicit !== null && explicit > 0) return explicit;
@@ -8211,7 +8229,6 @@ function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = scen
   }
   if (!yollar?.features?.length) return;
 
-  const swWidth = 1.6;
   const curbRise = 0.12;
   // DoubleSide so a sidewalk is never culled when a road's winding flips the
   // strip normal (the cause of sidewalks appearing on only one side).
@@ -8225,6 +8242,7 @@ function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = scen
     }
     if (xzPtsW.length < 2) continue;
     const featureWidth = featureRoadWidth(f);
+    const swWidth = featureSidewalkWidth(f); // scaled by road class (0.5–2.5 m)
     const xzCurveW = new THREE.CatmullRomCurve3(xzPtsW, false, 'centripetal');
     const wLen = xzCurveW.getLength();
     const nW = Math.max(xzPtsW.length, Math.ceil(wLen / 6) + 1);
