@@ -999,22 +999,26 @@ const COLOR_THEMES = {
   },
   'Tinted Gray Teal': {
     label: 'Tinted gray + teal',
-    buildings: { resid: '#bcc7c6', educ: '#a6b8b8', worship: '#b3c4bf', commerc: '#a3b3b1', health: '#b9c4c2', sport: '#a6b6b4', green: '#bbf7d0', civic: '#aebcb9', industr: '#94a3a1', default: '#adbdba' },
+    buildings: { resid: '#b9c7c5', educ: '#a3b8b6', worship: '#b0c6bf', commerc: '#9fb5b2', health: '#b6c5c2', sport: '#a3b8b4', green: '#bbf7d0', civic: '#abbdb9', industr: '#8fa6a2', default: '#aabfbb' },
+    facades: ['UrbanE', 'CampusGlass', 'CivicStone', 'CoastalWhite'],
     roadColor: '#36433f', islandColor: '#dde6e3', terrainSideColor: '#7fb0a8', terrainOutsideColor: '#e6efec', parkColor: '#6fa589', sportColor: '#5f9579', roofTexture: 'StandingSeam', assetTheme: 'Modern Urban'
   },
   'Teal & Salmon': {
     label: 'Teal + salmon',
-    buildings: { resid: '#d8c3bb', educ: '#cbb8b2', worship: '#cdc0b6', commerc: '#c9b8b0', health: '#d2c0bc', sport: '#c7b6b2', green: '#bbf7d0', civic: '#c8bdba', industr: '#b8a59d', default: '#cebcb4' },
+    buildings: { resid: '#e3c3b5', educ: '#d8b6ab', worship: '#dcc0b2', commerc: '#d6b8ab', health: '#e0bdb4', sport: '#d3b3a8', green: '#bbf7d0', civic: '#d8bfb6', industr: '#c4a597', default: '#dabdb0' },
+    facades: ['MediterraneanStucco', 'CivicStone', 'CampusGlass', 'CoastalWhite'],
     roadColor: '#2f4a46', islandColor: '#e7d7d0', terrainSideColor: '#4f8c84', terrainOutsideColor: '#dfeae7', parkColor: '#5e9e7e', sportColor: '#4f8e70', roofTexture: 'StandingSeam', assetTheme: 'Modern Urban'
   },
   'Light Purple & Black': {
     label: 'Light purple + soft black',
-    buildings: { resid: '#cbc6d6', educ: '#bcb6cc', worship: '#c4bfd0', commerc: '#bdb6c8', health: '#c8bfce', sport: '#bbb6c8', green: '#c7e8d0', civic: '#c0b6d0', industr: '#a89fb6', default: '#c0b9cc' },
+    buildings: { resid: '#d2c9e4', educ: '#c4b8db', worship: '#cdc2e0', commerc: '#c2b6d8', health: '#cfbfdc', sport: '#c0b6d8', green: '#c7e8d0', civic: '#c6b6de', industr: '#aa9cc2', default: '#c6bcdc' },
+    facades: ['CoastalWhite', 'UrbanE', 'CivicStone', 'CampusGlass'],
     roadColor: '#2a2a30', islandColor: '#e7e2f0', terrainSideColor: '#9b8fb0', terrainOutsideColor: '#efecf6', parkColor: '#8a9e6e', sportColor: '#7a8e60', roofTexture: 'USShingle', assetTheme: 'Modern Urban'
   },
   'Warm Sand & Slate': {
     label: 'Warm sand + slate',
-    buildings: { resid: '#d8cfb9', educ: '#cdc3a8', worship: '#cfc6b0', commerc: '#c9c0a8', health: '#d2c8b6', sport: '#c7bfa8', green: '#bbf7d0', civic: '#c8c0a8', industr: '#b8ad90', default: '#cec6b0' },
+    buildings: { resid: '#e3d6b6', educ: '#d8caa2', worship: '#dccfae', commerc: '#d6c9a2', health: '#e0d2b2', sport: '#d3c5a0', green: '#bbf7d0', civic: '#d8cca0', industr: '#c2b48c', default: '#d8cba8' },
+    facades: ['MediterraneanStucco', 'CivicStone', 'CoastalWhite', 'UrbanE'],
     roadColor: '#46413a', islandColor: '#e8ddc7', terrainSideColor: '#c2a878', terrainOutsideColor: '#efe7d4', parkColor: '#8aa05e', sportColor: '#7a9050', roofTexture: 'GermanTile', assetTheme: 'Modern Urban'
   }
 };
@@ -1206,11 +1210,19 @@ function applyColorTheme(name) {
   applyThemeDefaultsToSettings(true); // reseed facades/paving/furniture from the asset theme
   const rt = pick('roofTexture'); // set roof AFTER the asset-theme reseed so it wins
   if (rt && Object.prototype.hasOwnProperty.call(textureSets.roof, rt)) settings.roofTexture = rt;
-  Object.keys(functionBuildingStyleState).forEach((fn) => {
+  // Reseed per-function building colour/roof, and facade when the theme defines a
+  // (light, tintable) facade set so the building colour reads.
+  const themeFacades = (theme.facades || []).filter((name) => Object.prototype.hasOwnProperty.call(textureSets.facade, name));
+  Object.keys(functionBuildingStyleState).forEach((fn, index) => {
     const st = functionBuildingStyleState[fn];
     if (!st) return;
     st.color = getSemanticColor(fn);
     if (Object.prototype.hasOwnProperty.call(textureSets.roof, settings.roofTexture)) st.roofTexture = settings.roofTexture;
+    if (themeFacades.length) {
+      const facade = normalizeFacadeKey(themeFacades[index % themeFacades.length]);
+      st.facade = facade;
+      functionFacadeState[fn] = facade;
+    }
   });
   saveFunctionBuildingStyles();
 }
@@ -1885,8 +1897,15 @@ function loadPersistedSettings() {
 }
 
 function defaultFunctionBuildingStyle(fn, index = 0) {
-  const facadeOptions = uniqueAssetVariants('facades', Object.keys(textureSets.facade))
+  // Prefer the active colour theme's facade set (light, tintable facades that let
+  // the building colour read) when it defines one; the default theme leaves it
+  // unset and falls back to the historical mixed pool.
+  const themeFacades = (activeColorTheme().facades || [])
     .filter((name) => Object.prototype.hasOwnProperty.call(textureSets.facade, name));
+  const facadeOptions = themeFacades.length
+    ? themeFacades
+    : uniqueAssetVariants('facades', Object.keys(textureSets.facade))
+        .filter((name) => Object.prototype.hasOwnProperty.call(textureSets.facade, name));
   return {
     color: getSemanticColor(fn) || ['#f1f5f9', '#dbeafe', '#fee2e2', '#dcfce7', '#fef3c7', '#ede9fe'][index % 6],
     facade: normalizeFacadeKey(facadeOptions[index % Math.max(1, facadeOptions.length)] || 'UrbanA'),

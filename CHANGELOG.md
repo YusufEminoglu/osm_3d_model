@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.10.1] - 2026-06-03
+
+- Themes now read on the **buildings**, not just the base and roads: each non-default theme uses a set of light, tintable facades (limestone, stucco, glass, off-white) so the building colour palette shows through, and the building tints are a touch more saturated. The default **Plugin tones** theme is unchanged.
+
 ## [0.10.0] - 2026-06-03
 
 - New **Web theme** option in the dialog sets the colour palette of the exported 3D city: Plugin tones (salmon & grey, default), Tinted gray + teal, Teal + salmon, Light purple + soft black, or Warm sand + slate.
