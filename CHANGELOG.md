@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.11.2] - 2026-06-03
+
+- Fixed traffic, cyclists and pedestrians moving too slowly (almost stopped) on some machines: their motion was tied to the frame rate, so it slowed whenever the frame rate dipped. Movement is now frame-rate-independent (calibrated to 60 fps), so speed stays consistent. The kerb sidewalks also no longer cast shadows (a flat ground strip casts none anyway), which restores some frame rate.
+
 ## [0.11.1] - 2026-06-03
 
 - Sidewalk width now scales with the OSM road class, clamped to a realistic 0.5–2.5 m: wide along primary/secondary/pedestrian streets, narrow along service ways and paths (was a fixed 1.6 m on every road).

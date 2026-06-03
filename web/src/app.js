@@ -8289,7 +8289,6 @@ function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = scen
       geo.computeVertexNormals();
       const mesh = new THREE.Mesh(geo, swMat);
       mesh.receiveShadow = true;
-      mesh.castShadow = true;
       mesh.renderOrder = 32;
       sidewalkGroup.add(mesh);
     }
@@ -9378,7 +9377,10 @@ function animate() {
   requestAnimationFrame(animate);
   const time = performance.now();
   const delta = (time - prevTime) / 1000;
-  
+  // fps-independent step for path-following cars/bikes/pedestrians, calibrated to
+  // 60 fps (clamped so a frame-rate dip slows nothing and a stall can't teleport).
+  const dt60 = Math.min(Math.max(delta, 0), 0.1) * 60;
+
   if (isWalkMode) {
     velocity.x -= velocity.x * 10.0 * delta;
     velocity.z -= velocity.z * 10.0 * delta;
@@ -9422,7 +9424,7 @@ function animate() {
   }
   
   for (const c of cars) {
-    c.t += c.speed * settings.trafficSpeed;
+    c.t += c.speed * settings.trafficSpeed * dt60;
     if (c.t > 1) c.t = 0;
     const safe = Math.min(Math.max(c.t, 0.01), 0.99);
     const pos = c.curve.getPointAt(safe);
@@ -9436,7 +9438,7 @@ function animate() {
     }
   }
   for (const b of bikes) {
-    b.t += b.speed * Math.max(0, settings.bikeSpeed || 0);
+    b.t += b.speed * Math.max(0, settings.bikeSpeed || 0) * dt60;
     if (b.t > 1) b.t = 0;
     const sample = b.direction > 0 ? b.t : 1 - b.t;
     const safe = Math.min(Math.max(sample, 0.01), 0.99);
@@ -9446,10 +9448,10 @@ function animate() {
     b.mesh.position.set(pos.x, bikeY, pos.z);
     const h = Math.sqrt(tan.x * tan.x + tan.z * tan.z);
     if (h > 0.001) b.mesh.lookAt(pos.x - tan.x / h, bikeY, pos.z - tan.z / h);
-    for (const wheel of b.wheels || []) wheel.rotation.x -= 0.15 * (settings.bikeSpeed || 0);
+    for (const wheel of b.wheels || []) wheel.rotation.x -= 0.15 * (settings.bikeSpeed || 0) * dt60;
   }
   for (const p of pedestrians) {
-    p.t += p.speed;
+    p.t += p.speed * dt60;
     if (p.t > 1) p.t = 0;
     const safe = Math.min(Math.max(p.t, 0.01), 0.99);
     const pos = p.curve.getPointAt(safe);
