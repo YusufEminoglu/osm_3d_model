@@ -7,7 +7,7 @@
     <meta name="description" content="3D OSM Model: pick an area, download OpenStreetMap, and explore it as an interactive 3D city.">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23b8978a'/%3E%3Crect x='3' y='7' width='3' height='6' fill='%23fffaf7'/%3E%3Crect x='7' y='4' width='3' height='9' fill='%23fffaf7'/%3E%3Crect x='11' y='6' width='2' height='7' fill='%23fffaf7'/%3E%3C/svg%3E">
 
-    <link rel="stylesheet" href="style.css?v=osm0.10.2">
+    <link rel="stylesheet" href="style.css?v=osm0.11.0">
 
     <script type="importmap">
         {
@@ -72,6 +72,7 @@
             <button id="style-toggle" class="panel-btn style-btn" data-dock-target="style-dock" title="Style dock" data-i18n-title="dockTitleStyle">◩</button>
             <button id="scene-toggle" class="panel-btn scene-btn" data-dock-target="scene-dock" title="Scene &amp; Sun" data-i18n-title="dockTitleScene">☀</button>
             <button id="model-studio-toggle" class="panel-btn model-studio-btn" data-dock-target="model-studio-dock" title="Model Studio" data-i18n-title="dockTitleModelStudio">✦</button>
+            <button id="basemap-toggle" class="panel-btn basemap-btn" data-dock-target="basemap-dock" title="Basemap &amp; texture">🗺</button>
             <span class="tb-sep" aria-hidden="true"></span>
             <button id="walk-toggle" class="panel-btn walk-btn" title="Walk mode" data-i18n-title="dockTitleWalk">W</button>
             <span class="tb-sep" aria-hidden="true"></span>
@@ -194,6 +195,31 @@
         <div id="function-style-controls" class="function-style-controls"></div>
     </aside>
 
+    <aside class="dock-panel hidden" id="basemap-dock">
+        <div class="dock-head"><span>Basemap &amp; Texture</span><button class="dock-close" data-close="basemap-dock">x</button></div>
+        <label><input type="checkbox" data-setting="showBasemap"> <span>Show basemap underlay</span></label>
+        <label><span>Opacity</span> <input type="range" min="0" max="1" step="0.05" data-setting="basemapOpacity"></label>
+        <label><span>Blend mode</span>
+            <select data-setting="basemapBlend">
+                <option value="Normal">Normal</option>
+                <option value="Multiply">Multiply (overlay)</option>
+                <option value="Screen">Screen</option>
+                <option value="Add">Add (lighten)</option>
+                <option value="Difference">Difference</option>
+            </select>
+        </label>
+        <label><input type="checkbox" data-setting="basemapReceiveShadow"> <span>Catch building shadows</span></label>
+        <label><span>Drape height (m)</span> <input type="range" min="0" max="3" step="0.05" data-setting="basemapElevation"></label>
+        <div class="dock-section">
+            <p class="dock-section-title">Colour</p>
+            <label><span>Brightness</span> <input type="range" min="0.2" max="2" step="0.05" data-setting="basemapBrightness"></label>
+            <label><span>Contrast</span> <input type="range" min="0.4" max="2" step="0.05" data-setting="basemapContrast"></label>
+            <label><span>Saturation</span> <input type="range" min="0" max="2" step="0.05" data-setting="basemapSaturation"></label>
+            <label><span>Tint</span> <input type="color" data-setting="basemapTint"></label>
+        </div>
+        <p style="opacity:0.7;font-size:11px;margin:8px 4px 2px;">Pick a basemap layer in the QGIS dialog's Advanced section to export it as the underlay. With no basemap, these controls stay idle.</p>
+    </aside>
+
     <aside class="dock-panel hidden" id="model-studio-dock" style="width: 360px;">
         <div class="dock-head"><span data-i18n="dockTitleModelStudio">Model Studio</span><button class="dock-close" data-close="model-studio-dock">x</button></div>
         
@@ -293,6 +319,6 @@
 
     <div id="osm-credit" class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> <span data-i18n="osmContributors">contributors</span></div>
 
-    <script type="module" src="app.js?v=osm0.10.2"></script>
+    <script type="module" src="app.js?v=osm0.11.0"></script>
 </body>
 </html>

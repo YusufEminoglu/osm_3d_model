@@ -268,6 +268,19 @@ class Osm3dModelDialog(QDialog):
         dem_hint.setWordWrap(True)
         dem_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
         adv.addWidget(dem_hint)
+
+        bm_row = QHBoxLayout()
+        bm_row.addWidget(QLabel("Basemap (optional)"))
+        self.basemap_combo = QgsMapLayerComboBox()
+        self.basemap_combo.setAllowEmptyLayer(True)
+        self.basemap_combo.setCurrentIndex(0)
+        bm_row.addWidget(self.basemap_combo, 1)
+        adv.addLayout(bm_row)
+        bm_hint = QLabel("Renders the chosen layer (raster, XYZ/satellite tiles, or vector) as a flat "
+                         "underlay beneath the city. Style it live in the viewer's Basemap & Texture panel.")
+        bm_hint.setWordWrap(True)
+        bm_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
+        adv.addWidget(bm_hint)
         self.adv_container.setVisible(False)
         lay.addWidget(self.adv_container)
         return card
@@ -330,6 +343,7 @@ class Osm3dModelDialog(QDialog):
             "theme": self.theme_combo.currentData() or "Plugin Tones",
             "max_ha": float(self.ha_spin.value()),
             "dem_layer": self.dem_combo.currentLayer(),
+            "basemap_layer": self.basemap_combo.currentLayer(),
             "auto_open": self.auto_open_check.isChecked(),
         }
         self._save_settings()

@@ -11,7 +11,7 @@
 | Stage | File | Responsibility |
 | --- | --- | --- |
 | Plugin lifecycle | `main_plugin.py` | Creates the action, opens the dialog, runs export, starts the viewer. |
-| User options | `dialog.py` | Study-area source, boundary shape, web colour theme, maximum area, optional DEM, last-run summary. |
+| User options | `dialog.py` | Study-area source, boundary shape, web colour theme, maximum area, optional DEM and basemap layer, last-run summary. |
 | OSM fetch | `osm_download.py` | Builds Overpass queries, tries mirrors, parses OSM tags, creates memory layers. |
 | Export | `builder.py` | Resolves the study-area boundary shape, clips data, reprojects to UTM, writes GeoJSON and manifest. |
 | Local serving | `server.py` | Runs a small HTTP server on `127.0.0.1:8120-8139`. |

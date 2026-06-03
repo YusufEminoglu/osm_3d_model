@@ -323,6 +323,64 @@ def _export_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path
 
 
 # --------------------------------------------------------------------------
+# Optional basemap underlay
+# --------------------------------------------------------------------------
+def _export_basemap(basemap_layer, base_utm: QgsGeometry, epsg_dest: int,
+                    out_path: Path, feedback=None):
+    """Render a basemap layer to a transparent PNG over the model base bbox (UTM).
+
+    Works for raster, XYZ/tiled and vector layers via the QGIS map renderer.
+    Returns the bbox dict {minx,miny,maxx,maxy} on success, else None. Any failure
+    (network tiles, missing renderer) is swallowed so the export never breaks.
+    """
+    try:
+        from qgis.core import QgsMapSettings, QgsMapRendererCustomPainterJob
+        from qgis.PyQt.QtCore import QSize
+        from qgis.PyQt.QtGui import QColor, QImage, QPainter
+
+        bbox = base_utm.boundingBox()
+        w_m, h_m = bbox.width(), bbox.height()
+        if w_m <= 0 or h_m <= 0:
+            return None
+        max_px = 2048
+        if w_m >= h_m:
+            wpx, hpx = max_px, max(256, int(round(max_px * h_m / w_m)))
+        else:
+            hpx, wpx = max_px, max(256, int(round(max_px * w_m / h_m)))
+
+        settings = QgsMapSettings()
+        settings.setLayers([basemap_layer])
+        settings.setDestinationCrs(QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest))
+        settings.setExtent(bbox)
+        settings.setOutputSize(QSize(wpx, hpx))
+        settings.setBackgroundColor(QColor(0, 0, 0, 0))  # transparent where the layer has no data
+        try:
+            settings.setFlag(QgsMapSettings.Flag.Antialiasing, True)
+        except Exception:
+            pass
+
+        image = QImage(QSize(wpx, hpx), QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(0)
+        painter = QPainter(image)
+        try:
+            job = QgsMapRendererCustomPainterJob(settings, painter)
+            job.renderSynchronously()
+        finally:
+            painter.end()
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if image.save(str(out_path), "PNG"):
+            return {
+                "minx": bbox.xMinimum(), "miny": bbox.yMinimum(),
+                "maxx": bbox.xMaximum(), "maxy": bbox.yMaximum(),
+            }
+    except Exception as exc:  # basemap is optional; never block the export.
+        if feedback:
+            feedback(f"Basemap skipped ({exc}).")
+    return None
+
+
+# --------------------------------------------------------------------------
 # Manifest
 # --------------------------------------------------------------------------
 def _viewer_defaults(latitude: float, has_dem: bool, theme_name: str = DEFAULT_THEME) -> dict:
@@ -398,12 +456,12 @@ def _viewer_defaults(latitude: float, has_dem: bool, theme_name: str = DEFAULT_T
 
 
 def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bool,
-                    theme_name: str = DEFAULT_THEME) -> Path:
+                    theme_name: str = DEFAULT_THEME, basemap_bbox=None) -> Path:
     theme_name, theme_pal = resolve_theme(theme_name)
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.10.2",
+        "version": "0.11.0",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -412,6 +470,9 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
         "optionalInputs": ["buildings", "roads", "trees", "blocks"],
         "terrainTexture": None,
         "baseMapTexture": None,
+        # Optional QGIS basemap rendered to an image, draped under the city.
+        "basemap": ({"image": "data/basemap/basemap.png", "bbox": basemap_bbox}
+                    if basemap_bbox else None),
         "roadAccess": None,
         # OSM-native column names (the export now carries raw OSM tags, no PlanX
         # Turkish schema). The viewer maps these through to floors/function/width.
@@ -441,7 +502,8 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
 # Orchestration
 # --------------------------------------------------------------------------
 def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenceSystem,
-                     web_root: str, dem_layer=None, max_ha: float = MAX_STUDY_HA_DEFAULT,
+                     web_root: str, dem_layer=None, basemap_layer=None,
+                     max_ha: float = MAX_STUDY_HA_DEFAULT,
                      add_to_project: bool = True, shape: str = SHAPE_CIRCLE,
                      theme: str = DEFAULT_THEME, feedback=None) -> dict:
     if source_geom is None or source_geom.isEmpty():
@@ -514,7 +576,17 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         dem_dir.mkdir(parents=True, exist_ok=True)
         has_dem = _export_dem(dem_layer, base_utm, epsg_dest, dem_dir / "mydem.tif", feedback=feedback)
 
-    _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem, theme)
+    # Optional basemap underlay rendered to a PNG over the base bbox.
+    basemap_bbox = None
+    if basemap_layer is not None:
+        if feedback:
+            feedback("Rendering basemap underlay...")
+        basemap_bbox = _export_basemap(
+            basemap_layer, base_utm, epsg_dest,
+            web_path / "data" / "basemap" / "basemap.png", feedback=feedback,
+        )
+
+    _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem, theme, basemap_bbox)
 
     if add_to_project:
         roi_layer.setName("OSM Study Area")

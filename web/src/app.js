@@ -513,6 +513,8 @@ let roiBoundaryGroup = new THREE.Group();
 let fenceGroup = new THREE.Group();
 let waterlineGroup = new THREE.Group();
 let zoningGroup = new THREE.Group();
+let basemapGroup = new THREE.Group();
+world.add(basemapGroup);
 world.add(islandGroup);
 world.add(parcelGroup);
 world.add(hardscapeGroup);
@@ -567,6 +569,7 @@ let layerDataCache = null;
 let projectManifest = null;
 let terrainTexture = null;
 let baseMapTexture = null;
+let basemapTexture = null;
 let terrainOverlayMesh = null;
 let roadCurves = [];
 let vehicleRoadCurves = [];
@@ -1666,6 +1669,16 @@ const settings = {
   terrainTextureOpacity: 1.0,
   terrainTextureBrightness: 1.0,
   terrainTextureContrast: 1.0,
+  // Basemap underlay (a QGIS basemap rendered to an image, draped over the base).
+  showBasemap: true,
+  basemapOpacity: 0.85,
+  basemapBlend: 'Normal',        // Normal | Multiply | Add | Screen | Difference
+  basemapBrightness: 1.0,
+  basemapContrast: 1.0,
+  basemapSaturation: 1.0,
+  basemapTint: '#ffffff',
+  basemapElevation: 0.06,
+  basemapReceiveShadow: true,
   terrainOutsideColor: '#edf2ef',
   terrainSmoothingPasses: 2,
   terrainSmoothingStrength: 0.45,
@@ -1810,6 +1823,7 @@ const settings = {
 const PERSISTED_SETTING_KEYS = [
   'islandColor', 'islandTexture', 'islandTransparency', 'parcelBoundaryColor', 'parcelBoundaryOpacity',
   'showTerrainTexture', 'showOutsideRoiTerrain', 'terrainTextureOpacity', 'terrainTextureBrightness', 'terrainTextureContrast',
+  'showBasemap', 'basemapOpacity', 'basemapBlend', 'basemapBrightness', 'basemapContrast', 'basemapSaturation', 'basemapTint', 'basemapElevation', 'basemapReceiveShadow',
   'terrainOutsideColor', 'terrainSmoothingPasses', 'terrainSmoothingStrength', 'terrainMaxSlope',
   'showTerrainSides', 'terrainSideDrop', 'terrainSideColor',
   'fogDensity', 'autoTime', 'autoTimeSpeed', 'enableSSAO', 'enableBloom',
@@ -8197,8 +8211,11 @@ function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = scen
   }
   if (!yollar?.features?.length) return;
 
-  const swWidth = 1.3;
-  const swMat = new THREE.MeshStandardMaterial({ color: 0xc9bfa2, roughness: 0.95, metalness: 0.0 });
+  const swWidth = 1.6;
+  const curbRise = 0.12;
+  // DoubleSide so a sidewalk is never culled when a road's winding flips the
+  // strip normal (the cause of sidewalks appearing on only one side).
+  const swMat = new THREE.MeshStandardMaterial({ color: 0xcdc4a8, roughness: 0.95, metalness: 0.0, side: THREE.DoubleSide });
 
   for (const f of explodeLineFeatures(yollar)) {
     const xzPtsW = [];
@@ -8228,20 +8245,23 @@ function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = scen
       const uvs = [];
       const indices = [];
 
+      // Per cross-section: innerTop, outerTop, innerFoot (curb-face bottom).
       for (let i = 0; i < centers.length; i++) {
         const p = centers[i];
         const tang = curve.getTangent(i / (centers.length - 1));
         const n = new THREE.Vector3(-tang.z, 0, tang.x).normalize();
-        const li = new THREE.Vector3(p.x + n.x * innerOff, p.y, p.z + n.z * innerOff);
-        const ri = new THREE.Vector3(p.x + n.x * outerOff, p.y, p.z + n.z * outerOff);
-        positions.push(li.x, li.y, li.z, ri.x, ri.y, ri.z);
+        const topY = p.y + curbRise;
+        const ix = p.x + n.x * innerOff, iz = p.z + n.z * innerOff;
+        const ox = p.x + n.x * outerOff, oz = p.z + n.z * outerOff;
+        positions.push(ix, topY, iz, ox, topY, oz, ix, p.y - curbRise, iz);
         const v = i / Math.max(1, centers.length - 1);
-        uvs.push(0, v, 1, v);
+        uvs.push(0, v, 1, v, 0, v);
       }
 
       for (let i = 0; i < centers.length - 1; i++) {
-        const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
-        indices.push(a, c, b, c, d, b);
+        const a = i * 3, b = a + 3;
+        indices.push(a, a + 1, b, a + 1, b + 1, b);   // raised walking surface
+        indices.push(a + 2, a, b + 2, a, b, b + 2);    // curb face on the road side
       }
 
       const geo = new THREE.BufferGeometry();
@@ -8251,6 +8271,7 @@ function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = scen
       geo.computeVertexNormals();
       const mesh = new THREE.Mesh(geo, swMat);
       mesh.receiveShadow = true;
+      mesh.castShadow = true;
       mesh.renderOrder = 32;
       sidewalkGroup.add(mesh);
     }
@@ -8473,6 +8494,164 @@ async function runLayerBuild(label, buildFn, clearFn = null) {
   }
 }
 
+// --- Basemap underlay (Basemap & Texture dock) -----------------------------
+// A QGIS basemap rendered to an image (manifest.basemap.{image,bbox}) is draped
+// over the study-area base, clipped to the ROI, with opacity / blend / colour /
+// shadow controls. Blends with the base colour beneath it for overlay effects.
+async function loadBasemapImage() {
+  const bm = projectManifest?.basemap;
+  if (!bm?.image) return null;
+  return new Promise((resolve) => {
+    texLoader.load('../' + bm.image, (t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = THREE.ClampToEdgeWrapping;
+      t.wrapT = THREE.ClampToEdgeWrapping;
+      t.anisotropy = 4;
+      resolve(t);
+    }, undefined, () => resolve(null));
+  });
+}
+
+function createBasemapRoiMask(bb) {
+  const roi = layerDataCache?.roi;
+  if (!roi?.features?.length) return null;
+  const size = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, size, size);
+  const bw = (bb.maxx - bb.minx) || 1;
+  const bh = (bb.maxy - bb.miny) || 1;
+  ctx.fillStyle = '#ffffff';
+  for (const f of roi.features) {
+    for (const poly of getPolygonRings(f.geometry)) {
+      ctx.beginPath();
+      poly.forEach((ring) => {
+        if (!ring || ring.length < 3) return;
+        ring.forEach((c, i) => {
+          const px = (c[0] - bb.minx) / bw * size;
+          const py = (c[1] - bb.miny) / bh * size;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+      });
+      ctx.fill('evenodd');
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function configureBasemapBlend(mat, name) {
+  if (name === 'Multiply') {
+    mat.blending = THREE.MultiplyBlending;
+  } else if (name === 'Add') {
+    mat.blending = THREE.AdditiveBlending;
+  } else if (name === 'Screen') {
+    mat.blending = THREE.CustomBlending;
+    mat.blendEquation = THREE.AddEquation;
+    mat.blendSrc = THREE.OneFactor;
+    mat.blendDst = THREE.OneMinusSrcColorFactor; // src + dst*(1-src) = screen
+  } else if (name === 'Difference') {
+    mat.blending = THREE.CustomBlending;
+    mat.blendEquation = THREE.ReverseSubtractEquation;
+    mat.blendSrc = THREE.OneFactor;
+    mat.blendDst = THREE.OneFactor; // dst - src (clamped)
+  } else {
+    mat.blending = THREE.NormalBlending;
+  }
+}
+
+function applyBasemapColorAdjust(mat) {
+  mat.userData.uniforms = {
+    uBrightness: { value: Number(settings.basemapBrightness) || 1 },
+    uContrast: { value: Number(settings.basemapContrast) || 1 },
+    uSaturation: { value: Number(settings.basemapSaturation) || 1 }
+  };
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, mat.userData.uniforms);
+    shader.fragmentShader = 'uniform float uBrightness;\nuniform float uContrast;\nuniform float uSaturation;\n' + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#include <map_fragment>
+      diffuseColor.rgb = (diffuseColor.rgb - 0.5) * uContrast + 0.5;
+      diffuseColor.rgb *= uBrightness;
+      float _bmL = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+      diffuseColor.rgb = mix(vec3(_bmL), diffuseColor.rgb, uSaturation);
+      diffuseColor.rgb = clamp(diffuseColor.rgb, 0.0, 1.0);`
+    );
+  };
+}
+
+function buildBasemapOverlay(buildToken = sceneBuildToken) {
+  clearGroup(basemapGroup);
+  if (!settings.showBasemap || !basemapTexture) return;
+  const bb = projectManifest?.basemap?.bbox;
+  if (!bb) return;
+  const width = bounds.maxX - bounds.minX;
+  const depth = bounds.maxY - bounds.minY;
+  if (!(width > 0) || !(depth > 0)) return;
+  const segs = Math.max(48, Math.min(160, currentTerrainSegments()));
+  const geo = new THREE.PlaneGeometry(width, depth, segs, segs);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  const bw = (bb.maxx - bb.minx) || 1;
+  const bh = (bb.maxy - bb.miny) || 1;
+  const lift = LAYER.island + 0.06 + (Number(settings.basemapElevation) || 0);
+  for (let i = 0; i < pos.count; i++) {
+    const lx = pos.getX(i);
+    const lz = pos.getZ(i);
+    pos.setY(i, terrainLocalYAt(lx, lz) + lift);
+    const [wx, wy] = localToMeters(lx, lz);
+    uv.setXY(i, (wx - bb.minx) / bw, (wy - bb.miny) / bh);
+  }
+  pos.needsUpdate = true;
+  uv.needsUpdate = true;
+  geo.computeVertexNormals();
+  const roiMask = createBasemapRoiMask(bb);
+  const opacity = Math.max(0, Math.min(1, Number(settings.basemapOpacity)));
+  const mat = new THREE.MeshStandardMaterial({
+    map: basemapTexture,
+    color: new THREE.Color(settings.basemapTint || '#ffffff'),
+    alphaMap: roiMask || null,
+    alphaTest: roiMask ? 0.02 : 0,
+    transparent: true,
+    opacity,
+    roughness: 0.92,
+    metalness: 0.0,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2
+  });
+  applyBasemapColorAdjust(mat);
+  configureBasemapBlend(mat, settings.basemapBlend);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = !!settings.basemapReceiveShadow;
+  mesh.renderOrder = -28;
+  basemapGroup.add(mesh);
+}
+
+function updateBasemapAppearance() {
+  const mesh = basemapGroup.children[0];
+  if (!mesh) { buildBasemapOverlay(); return; }
+  const mat = mesh.material;
+  mat.opacity = Math.max(0, Math.min(1, Number(settings.basemapOpacity)));
+  mat.color.set(settings.basemapTint || '#ffffff');
+  mesh.receiveShadow = !!settings.basemapReceiveShadow;
+  if (mat.userData.uniforms) {
+    mat.userData.uniforms.uBrightness.value = Number(settings.basemapBrightness) || 1;
+    mat.userData.uniforms.uContrast.value = Number(settings.basemapContrast) || 1;
+    mat.userData.uniforms.uSaturation.value = Number(settings.basemapSaturation) || 1;
+  }
+  configureBasemapBlend(mat, settings.basemapBlend);
+  mat.needsUpdate = true;
+}
+
 async function rebuildScene() {
   const buildToken = ++sceneBuildToken;
   await ensureUploadedModelsLoaded();
@@ -8658,6 +8837,16 @@ async function rebuildScene() {
   setSceneState('sceneTerrain');
   const terrainBuilt = await buildTerrain(adalar, buildToken);
   if (!terrainBuilt || isSceneBuildStale(buildToken)) return;
+
+  // Basemap underlay over the base (Basemap & Texture dock).
+  if (settings.showBasemap && projectManifest?.basemap?.image && !basemapTexture) {
+    try {
+      basemapTexture = await loadBasemapImage();
+    } catch (err) {
+      console.warn('Basemap image could not be loaded', err);
+    }
+  }
+  buildBasemapOverlay(buildToken);
 
   loadingText.innerText = t('processing');
   setSceneState('sceneLayers');
@@ -10033,6 +10222,13 @@ function applyDockSetting(key, value, inputType) {
     checkTimeChange();
   } else if (key === 'autoTime' || key === 'autoTimeSpeed' || key === 'trafficSpeed') {
     updateDockControls();
+  } else if (key === 'showBasemap') {
+    if (settings.showBasemap && projectManifest?.basemap?.image && !basemapTexture) rebuildScene();
+    else buildBasemapOverlay();
+  } else if (key === 'basemapElevation') {
+    buildBasemapOverlay();
+  } else if (key.indexOf('basemap') === 0) {
+    updateBasemapAppearance();
   } else {
     rebuildScene();
   }

@@ -97,6 +97,7 @@ class Osm3dModelPlugin:
             summary = build_and_export(
                 geom, crs, self.web_root,
                 dem_layer=params.get("dem_layer"),
+                basemap_layer=params.get("basemap_layer"),
                 max_ha=float(params.get("max_ha", 300.0)),
                 add_to_project=True,
                 shape=params.get("shape", "circle"),

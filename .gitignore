@@ -3,5 +3,6 @@ __pycache__/
 # web/data ships a small bundled SAMPLE city so the viewer is never empty.
 # The heavy DEM raster is runtime-only and never committed.
 web/data/dem/
+web/data/basemap/
 .DS_Store
 Thumbs.db

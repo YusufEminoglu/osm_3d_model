@@ -75,7 +75,7 @@ http://127.0.0.1:8120/src/
 
 1. Zoom to a small area or select polygon feature(s).
 2. Choose the study area source, boundary shape, and web theme in the dialog.
-3. Optionally pick a DEM raster.
+3. Optionally pick a DEM raster, or a basemap layer to drape under the city.
 4. Click **Create OSM layers & export 3D viewer**.
 5. Explore the generated city in the browser.
 
@@ -161,6 +161,7 @@ The browser viewer is intentionally lean and English-only. The toolbar focuses o
 | Style | Edit road color, textures, assets, trees, buildings, roofs, block categories, and function-specific facades. |
 | Scene & Sun | Time of day, solar animation, weather, fog, theme, shadow quality, bloom, traffic speed, densities, DEM mesh, and bookmarks. |
 | Model Studio | Upload and tune GLB models for trees and street furniture categories. |
+| Basemap & Texture | Drape a QGIS basemap under the city and restyle it live: opacity, blend mode (Multiply, Screen, Add, Difference), brightness, contrast, saturation, tint, and shadow catching. |
 | Walk mode | Enter the model at pedestrian eye height with WASD controls. |
 | Screenshot | Save a clean PNG from the current view. |
 | Measure | Pick two ground points and read distance. |
