@@ -2,10 +2,10 @@
 name=3D OSM Model
 qgisMinimumVersion=3.28
 description=Pick an area, download OpenStreetMap data, and instantly view it as a procedural 3D city in the browser.
-version=0.9.0
+version=0.10.0
 author=Yusuf Eminoglu
 email=yusuf.eminoglu@deu.edu.tr
-about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, cycleways, waterways, greens, trees and street furniture (bus stops, benches, lamps, bins) using their native OSM tags, builds the study boundary as the shape you choose - inscribed circle, rounded rectangle, rectangle or the exact selected polygon (the model base extends 10 m beyond it with softly rounded corners), and opens an interactive, English-only Three.js 3D city viewer. Roads, sidewalks and bike lanes are drawn procedurally with lane markings; pedestrians keep to the sidewalks and cars to the carriageway; buildings are coloured by OSM function and default to a function-aware floor count when no level data exists. An external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
+about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, cycleways, waterways, greens, trees and street furniture (bus stops, benches, lamps, bins) using their native OSM tags, builds the study boundary as the shape you choose - inscribed circle, rounded rectangle, rectangle or the exact selected polygon (the model base extends 10 m beyond it with softly rounded corners), and opens an interactive, English-only Three.js 3D city viewer. An easy "Web theme" picker recolours the city content - buildings, roads, base and roofs - with a handful of ready palettes (salmon and grey, gray-teal, teal and salmon, light purple, warm sand), leaving the viewer chrome untouched. Roads, sidewalks and bike lanes are drawn procedurally with lane markings; pedestrians keep to the sidewalks and cars to the carriageway; buildings are coloured by OSM function and default to a function-aware floor count when no level data exists. An external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
 tracker=https://github.com/YusufEminoglu/osm_3d_model/issues
 repository=https://github.com/YusufEminoglu/osm_3d_model
 category=Web
@@ -19,6 +19,11 @@ hasProcessingProvider=no
 plugin_dependencies=
 license=MIT
 changelog=
+    3D OSM Model 0.10.0 - Easy colour themes for the 3D city.
+        - New "Web theme" option in the dialog sets the colour palette of the exported 3D city: Plugin tones (salmon and grey, the default), Tinted gray and teal, Teal and salmon, Light purple and soft black, or Warm sand and slate.
+        - Themes recolour the city content only - buildings, roads, the base/island and its skirt, greens and the roof texture - and never the viewer's toolbar or panels.
+        - The chosen theme is written into the export and applied automatically when the browser viewer opens; re-opening the same export keeps any manual colour tweaks you made in the Style dock.
+        - The viewer's building palette is now theme-driven, with the default theme reproducing the previous muted greys exactly.
     3D OSM Model 0.9.0 - Choose your study-area boundary shape.
         - New "Boundary shape" option in the dialog: inscribed circle (default, the classic look), rounded rectangle, rectangle (extent), or the exact selected polygon. The bundled Three.js viewer renders any of them; earlier versions always used the inscribed circle.
         - The model base still extends 10 m beyond the boundary, now with softly rounded corners on every shape, so a plain rectangle reads as a gently rounded presentation platform in the viewer.

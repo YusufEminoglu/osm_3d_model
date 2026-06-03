@@ -100,6 +100,7 @@ class Osm3dModelPlugin:
                 max_ha=float(params.get("max_ha", 300.0)),
                 add_to_project=True,
                 shape=params.get("shape", "circle"),
+                theme=params.get("theme", "Plugin Tones"),
                 feedback=feedback,
             )
             url = self.server.start()

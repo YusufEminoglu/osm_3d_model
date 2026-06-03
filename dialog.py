@@ -64,6 +64,22 @@ _SHAPE_SHORT = {
     "extent": "rectangle",
     "polygon": "exact polygon",
 }
+
+# Easy colour themes for the 3D web output (value, label). Values match
+# builder._THEMES and app.js COLOR_THEMES. These recolour the city content
+# (buildings, roads, base, greens, roofs) — not the viewer's toolbar/panels.
+THEME_OPTIONS = (
+    ("Plugin Tones", "Plugin tones — salmon & grey"),
+    ("Tinted Gray Teal", "Tinted gray + teal"),
+    ("Teal & Salmon", "Teal + salmon"),
+    ("Light Purple & Black", "Light purple + soft black"),
+    ("Warm Sand & Slate", "Warm sand + slate"),
+)
+_THEME_TOOLTIP = (
+    "Colour palette for the exported 3D city — buildings, roads, the base/island, "
+    "greens and roofs. It does not change the viewer's toolbar or panels.\n"
+    "Pick the look in QGIS; the browser viewer opens in that theme."
+)
 _SHAPE_TOOLTIP = (
     "How the study boundary is derived from your area:\n"
     "• Inscribed circle — the largest circle that fits inside it (classic look).\n"
@@ -211,6 +227,17 @@ class Osm3dModelDialog(QDialog):
         ha_row.addWidget(self.ha_spin)
         lay.addLayout(ha_row)
 
+        theme_row = QHBoxLayout()
+        theme_label = QLabel("Web theme")
+        self.theme_combo = QComboBox()
+        for value, label in THEME_OPTIONS:
+            self.theme_combo.addItem(label, value)
+        self.theme_combo.setToolTip(_THEME_TOOLTIP)
+        self.theme_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        theme_row.addWidget(theme_label)
+        theme_row.addWidget(self.theme_combo, 1)
+        lay.addLayout(theme_row)
+
         self.auto_open_check = QCheckBox("Open the 3D viewer automatically after export")
         self.auto_open_check.setChecked(True)
         lay.addWidget(self.auto_open_check)
@@ -300,6 +327,7 @@ class Osm3dModelDialog(QDialog):
         params = {
             "source": "selection" if self.radio_selection.isChecked() else "canvas",
             "shape": self.shape_combo.currentData() or "circle",
+            "theme": self.theme_combo.currentData() or "Plugin Tones",
             "max_ha": float(self.ha_spin.value()),
             "dem_layer": self.dem_combo.currentLayer(),
             "auto_open": self.auto_open_check.isChecked(),
@@ -322,6 +350,10 @@ class Osm3dModelDialog(QDialog):
         shape_index = self.shape_combo.findData(saved_shape)
         if shape_index >= 0:
             self.shape_combo.setCurrentIndex(shape_index)
+        saved_theme = str(s.value(f"{_SETTINGS_PREFIX}/theme", "Plugin Tones"))
+        theme_index = self.theme_combo.findData(saved_theme)
+        if theme_index >= 0:
+            self.theme_combo.setCurrentIndex(theme_index)
         auto = s.value(f"{_SETTINGS_PREFIX}/auto_open", True)
         self.auto_open_check.setChecked(str(auto).lower() not in ("false", "0", "no"))
 
@@ -331,6 +363,7 @@ class Osm3dModelDialog(QDialog):
         s.setValue(f"{_SETTINGS_PREFIX}/source",
                    "selection" if self.radio_selection.isChecked() else "canvas")
         s.setValue(f"{_SETTINGS_PREFIX}/shape", self.shape_combo.currentData() or "circle")
+        s.setValue(f"{_SETTINGS_PREFIX}/theme", self.theme_combo.currentData() or "Plugin Tones")
         s.setValue(f"{_SETTINGS_PREFIX}/auto_open", self.auto_open_check.isChecked())
 
     def showEvent(self, event):  # noqa: N802 (Qt override)

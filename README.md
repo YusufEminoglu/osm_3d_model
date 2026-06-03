@@ -74,7 +74,7 @@ http://127.0.0.1:8120/src/
 ### Use it inside QGIS
 
 1. Zoom to a small area or select polygon feature(s).
-2. Choose the study area source and boundary shape in the dialog.
+2. Choose the study area source, boundary shape, and web theme in the dialog.
 3. Optionally pick a DEM raster.
 4. Click **Create OSM layers & export 3D viewer**.
 5. Explore the generated city in the browser.
@@ -112,6 +112,20 @@ Pick how the study boundary is derived from your map extent or selected polygon,
 | **Exact polygon** | The selected polygon used as-is (falls back to the canvas rectangle). |
 
 Whatever shape you choose, the model base extends 10 m beyond the boundary with softly rounded corners, so the city always sits on a small, presentation-ready platform. OSM data stays clipped to the inner boundary; only the platform uses the wider ring.
+
+### Easy colour themes
+
+Pick a **Web theme** in the dialog to set the colour palette of the exported 3D city. Themes recolour the **content only** — buildings, roads, the base/island and its skirt, greens, and roof texture — and never the viewer's toolbar or panels.
+
+| Theme | Mood |
+| --- | --- |
+| **Plugin tones** | Salmon and warm grey — the signature look (default). |
+| **Tinted gray + teal** | Cool neutral greys with teal accents. |
+| **Teal + salmon** | Deep teal streets against a warm salmon base. |
+| **Light purple + soft black** | Light lavender base with near-black roads. |
+| **Warm sand + slate** | Warm sand platform with slate roofs and roads. |
+
+The chosen theme travels with the export and is applied automatically when the viewer opens. Re-opening the same export keeps any manual colour edits you made in the Style dock.
 
 ### Native OpenStreetMap schema
 

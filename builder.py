@@ -39,15 +39,47 @@ MIN_RADIUS_M = 30.0
 # the city sits on a small platform margin (OSM data stays clipped to the boundary).
 BASE_BUFFER_M = 10.0
 
-# Salmon-tinted grey ("yavru agzi") palette for the viewer defaults.
-THEME = {
-    "islandColor": "#dcc7bd",
-    "terrainOutsideColor": "#e7d7d0",
-    "terrainSideColor": "#b8978a",
-    "roadColor": "#9a8c84",
-    "parkColor": "#9fae8a",
-    "sportColor": "#8fa07c",
+# Easy colour themes for the exported city. These recolour the 3D content only
+# (buildings, roads, base/island, greens, roofs) — never the viewer's toolbar/panel
+# chrome. The scene colours here mirror app.js COLOR_THEMES so a fresh export and a
+# live theme switch in the viewer look identical. The per-function BUILDING palette
+# lives only in the viewer (getSemanticColor); here we carry the scene colours plus
+# the matching roof texture and asset theme. "Plugin Tones" is the historical
+# salmon-and-grey default.
+DEFAULT_THEME = "Plugin Tones"
+_THEMES = {
+    "Plugin Tones": {
+        "islandColor": "#dcc7bd", "terrainOutsideColor": "#e7d7d0", "terrainSideColor": "#b8978a",
+        "roadColor": "#9a8c84", "parkColor": "#9fae8a", "sportColor": "#8fa07c",
+        "roofTexture": "USShingle", "assetTheme": "Modern Urban",
+    },
+    "Tinted Gray Teal": {
+        "islandColor": "#dde6e3", "terrainOutsideColor": "#e6efec", "terrainSideColor": "#7fb0a8",
+        "roadColor": "#36433f", "parkColor": "#6fa589", "sportColor": "#5f9579",
+        "roofTexture": "StandingSeam", "assetTheme": "Modern Urban",
+    },
+    "Teal & Salmon": {
+        "islandColor": "#e7d7d0", "terrainOutsideColor": "#dfeae7", "terrainSideColor": "#4f8c84",
+        "roadColor": "#2f4a46", "parkColor": "#5e9e7e", "sportColor": "#4f8e70",
+        "roofTexture": "StandingSeam", "assetTheme": "Modern Urban",
+    },
+    "Light Purple & Black": {
+        "islandColor": "#e7e2f0", "terrainOutsideColor": "#efecf6", "terrainSideColor": "#9b8fb0",
+        "roadColor": "#2a2a30", "parkColor": "#8a9e6e", "sportColor": "#7a8e60",
+        "roofTexture": "USShingle", "assetTheme": "Modern Urban",
+    },
+    "Warm Sand & Slate": {
+        "islandColor": "#e8ddc7", "terrainOutsideColor": "#efe7d4", "terrainSideColor": "#c2a878",
+        "roadColor": "#46413a", "parkColor": "#8aa05e", "sportColor": "#7a9050",
+        "roofTexture": "GermanTile", "assetTheme": "Modern Urban",
+    },
 }
+
+
+def resolve_theme(name: str) -> tuple:
+    """Return (theme_name, palette) for a requested theme, falling back to default."""
+    name = name if name in _THEMES else DEFAULT_THEME
+    return name, _THEMES[name]
 
 
 class BuildError(RuntimeError):
@@ -293,24 +325,28 @@ def _export_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path
 # --------------------------------------------------------------------------
 # Manifest
 # --------------------------------------------------------------------------
-def _viewer_defaults(latitude: float, has_dem: bool) -> dict:
+def _viewer_defaults(latitude: float, has_dem: bool, theme_name: str = DEFAULT_THEME) -> dict:
+    name, pal = resolve_theme(theme_name)
     return {
+        # Easy colour theme (content colours only; the viewer reapplies it by name).
+        "colorTheme": name,
         # Visible content
         "showBuildings": True,
         "showRoads": True,
         "showTrees": True,
         "showIslands": True,
-        # Circular study area + solid base
+        # Study area + solid base, coloured by the active theme.
         "showTerrainSides": True,
         "terrainSideDrop": 8.0,
-        "terrainSideColor": THEME["terrainSideColor"],
+        "terrainSideColor": pal["terrainSideColor"],
         "showOutsideRoiTerrain": False,
-        "terrainOutsideColor": THEME["terrainOutsideColor"],
-        "islandColor": THEME["islandColor"],
+        "terrainOutsideColor": pal["terrainOutsideColor"],
+        "islandColor": pal["islandColor"],
         "islandTransparency": 0.0,
-        "parkColor": THEME["parkColor"],
-        "sportColor": THEME["sportColor"],
-        "roadColor": THEME["roadColor"],
+        "parkColor": pal["parkColor"],
+        "sportColor": pal["sportColor"],
+        "roadColor": pal["roadColor"],
+        "roofTexture": pal["roofTexture"],
         "flattenIslands": True,
         # Procedural detail OFF by default, procedural road traces ON
         "showLedges": False,
@@ -320,7 +356,7 @@ def _viewer_defaults(latitude: float, has_dem: bool) -> dict:
         # Lively scene: realistic trees plus moving pedestrians and mixed traffic
         # (cars, vans, buses, trucks).
         "treeRenderMode": "Realistic",
-        "assetTheme": "Modern Urban",
+        "assetTheme": pal["assetTheme"],
         "showCars": True,
         # Sparse default traffic: ~1/5 of the previous density (user request).
         "carDensity": 0.09,
@@ -361,11 +397,13 @@ def _viewer_defaults(latitude: float, has_dem: bool) -> dict:
     }
 
 
-def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bool) -> Path:
+def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bool,
+                    theme_name: str = DEFAULT_THEME) -> Path:
+    theme_name, theme_pal = resolve_theme(theme_name)
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.9.0",
+        "version": "0.10.0",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -387,8 +425,9 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
             "bike_lane_width_field": "width",
         },
         "analysisDefaults": {"roadColorMode": "Default"},
-        "viewerDefaults": _viewer_defaults(latitude, has_dem),
-        "assetTheme": "Modern Urban",
+        "viewerDefaults": _viewer_defaults(latitude, has_dem, theme_name),
+        "assetTheme": theme_pal["assetTheme"],
+        "colorTheme": theme_name,
         "inputs": [],
         "summary": {"source": "OpenStreetMap", "epsg": epsg_dest, "hasDem": has_dem},
     }
@@ -404,7 +443,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
 def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenceSystem,
                      web_root: str, dem_layer=None, max_ha: float = MAX_STUDY_HA_DEFAULT,
                      add_to_project: bool = True, shape: str = SHAPE_CIRCLE,
-                     feedback=None) -> dict:
+                     theme: str = DEFAULT_THEME, feedback=None) -> dict:
     if source_geom is None or source_geom.isEmpty():
         raise BuildError("No area selected. Draw/select a polygon or zoom to the area first.")
 
@@ -475,7 +514,7 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         dem_dir.mkdir(parents=True, exist_ok=True)
         has_dem = _export_dem(dem_layer, base_utm, epsg_dest, dem_dir / "mydem.tif", feedback=feedback)
 
-    _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem)
+    _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem, theme)
 
     if add_to_project:
         roi_layer.setName("OSM Study Area")
@@ -495,6 +534,7 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         "epsg": epsg_dest,
         "shape": area_info["shape"],
         "shape_label": area_info["shape_label"],
+        "theme": resolve_theme(theme)[0],
         "radius_m": area_info.get("radius_m"),
         "width_m": area_info.get("width_m"),
         "depth_m": area_info.get("depth_m"),

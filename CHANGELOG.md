@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0] - 2026-06-03
+
+- New **Web theme** option in the dialog sets the colour palette of the exported 3D city: Plugin tones (salmon & grey, default), Tinted gray + teal, Teal + salmon, Light purple + soft black, or Warm sand + slate.
+- Themes recolour the city **content only** — buildings, roads, the base/island and its skirt, greens, and the roof texture — and never the viewer's toolbar or panels.
+- The chosen theme is written into the export and applied automatically when the viewer opens. Re-opening the same export keeps any manual colour tweaks made in the Style dock; choosing a new theme in QGIS overrides them.
+- The viewer building palette (`getSemanticColor`) and base/road/green colours are now driven by `COLOR_THEMES` (viewer) / `_THEMES` (builder); the default theme reproduces the previous muted greys exactly.
+- Bumped the settings schema to 12 and the asset cache-bust to `osm0.10.0`; synced metadata, viewer manifest, sample manifest, and Overpass User-Agent to 0.10.0.
+
 ## [0.9.0] - 2026-06-03
 
 - New **Boundary shape** option in the dialog: inscribed circle (default), rounded rectangle, rectangle (extent), or the exact selected polygon. The viewer renders any of them — previous exports always used the inscribed circle.

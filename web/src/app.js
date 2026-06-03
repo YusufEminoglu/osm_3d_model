@@ -553,7 +553,7 @@ const LAYER = {
   carExtra:  0.08
 };
 const FACADE_TEXTURE_SCALE_MULTIPLIER = 4.85;
-const SETTINGS_SCHEMA_VERSION = 11;
+const SETTINGS_SCHEMA_VERSION = 12;
 
 // Match the viewer's local X axis to the QGIS map orientation.
 const LOCAL_X_SIGN = -1;
@@ -986,6 +986,39 @@ function roofTextureLabel(key) {
 // facade set below. turkishFacadeMatch()/normalizeFacadeKey() stay generic and
 // simply fall back to a standard facade for any stale Urban_TR_* keys.
 
+// Easy colour themes for the exported city. These recolour the 3D CONTENT only
+// (buildings, roads, base/island, greens, roofs) — never the toolbar/panel chrome.
+// `buildings` is a function-distinct palette consumed by getSemanticColor(); the
+// scene colours mirror builder._THEMES so a fresh export and a live switch match.
+// 'Plugin Tones' reproduces the historical salmon-and-grey look (the default).
+const COLOR_THEMES = {
+  'Plugin Tones': {
+    label: 'Plugin tones — salmon & grey',
+    buildings: { resid: '#c3c7cc', educ: '#a9b6c4', worship: '#bcc7bf', commerc: '#aab0b7', health: '#c7bfc6', sport: '#aeb6c2', green: '#bbf7d0', civic: '#b3afbd', industr: '#9aa0a6', default: '#b6bbc1' },
+    roadColor: '#9a8c84', islandColor: '#dcc7bd', terrainSideColor: '#b8978a', terrainOutsideColor: '#e7d7d0', parkColor: '#9fae8a', sportColor: '#8fa07c', roofTexture: 'USShingle', assetTheme: 'Modern Urban'
+  },
+  'Tinted Gray Teal': {
+    label: 'Tinted gray + teal',
+    buildings: { resid: '#bcc7c6', educ: '#a6b8b8', worship: '#b3c4bf', commerc: '#a3b3b1', health: '#b9c4c2', sport: '#a6b6b4', green: '#bbf7d0', civic: '#aebcb9', industr: '#94a3a1', default: '#adbdba' },
+    roadColor: '#36433f', islandColor: '#dde6e3', terrainSideColor: '#7fb0a8', terrainOutsideColor: '#e6efec', parkColor: '#6fa589', sportColor: '#5f9579', roofTexture: 'StandingSeam', assetTheme: 'Modern Urban'
+  },
+  'Teal & Salmon': {
+    label: 'Teal + salmon',
+    buildings: { resid: '#d8c3bb', educ: '#cbb8b2', worship: '#cdc0b6', commerc: '#c9b8b0', health: '#d2c0bc', sport: '#c7b6b2', green: '#bbf7d0', civic: '#c8bdba', industr: '#b8a59d', default: '#cebcb4' },
+    roadColor: '#2f4a46', islandColor: '#e7d7d0', terrainSideColor: '#4f8c84', terrainOutsideColor: '#dfeae7', parkColor: '#5e9e7e', sportColor: '#4f8e70', roofTexture: 'StandingSeam', assetTheme: 'Modern Urban'
+  },
+  'Light Purple & Black': {
+    label: 'Light purple + soft black',
+    buildings: { resid: '#cbc6d6', educ: '#bcb6cc', worship: '#c4bfd0', commerc: '#bdb6c8', health: '#c8bfce', sport: '#bbb6c8', green: '#c7e8d0', civic: '#c0b6d0', industr: '#a89fb6', default: '#c0b9cc' },
+    roadColor: '#2a2a30', islandColor: '#e7e2f0', terrainSideColor: '#9b8fb0', terrainOutsideColor: '#efecf6', parkColor: '#8a9e6e', sportColor: '#7a8e60', roofTexture: 'USShingle', assetTheme: 'Modern Urban'
+  },
+  'Warm Sand & Slate': {
+    label: 'Warm sand + slate',
+    buildings: { resid: '#d8cfb9', educ: '#cdc3a8', worship: '#cfc6b0', commerc: '#c9c0a8', health: '#d2c8b6', sport: '#c7bfa8', green: '#bbf7d0', civic: '#c8c0a8', industr: '#b8ad90', default: '#cec6b0' },
+    roadColor: '#46413a', islandColor: '#e8ddc7', terrainSideColor: '#c2a878', terrainOutsideColor: '#efe7d4', parkColor: '#8aa05e', sportColor: '#7a9050', roofTexture: 'GermanTile', assetTheme: 'Modern Urban'
+  }
+};
+
 const assetThemePresets = {
   'Modern Urban': {
     pedestrians: ['Commuter', 'Urban Casual', 'Office', 'Student', 'Evening'],
@@ -1147,6 +1180,49 @@ function applyThemeDefaultsToSettings(resetFunctionFacades = true) {
     });
     saveFunctionBuildingStyles();
   }
+}
+
+function activeColorTheme() {
+  return COLOR_THEMES[settings.colorTheme] || COLOR_THEMES['Plugin Tones'];
+}
+
+// Apply an easy colour theme to the scene settings (content colours only — never
+// the UI chrome). Scene colours come from the manifest viewerDefaults when present
+// (builder._THEMES, authoritative on export) and fall back to COLOR_THEMES so a
+// live switch works too. Per-function building colours/roofs are reseeded.
+function applyColorTheme(name) {
+  const theme = COLOR_THEMES[name] || COLOR_THEMES['Plugin Tones'];
+  settings.colorTheme = COLOR_THEMES[name] ? name : 'Plugin Tones';
+  const vd = (typeof projectManifest !== 'undefined' && projectManifest) ? (projectManifest.viewerDefaults || {}) : {};
+  const pick = (key) => (vd[key] != null ? vd[key] : theme[key]);
+  settings.roadColor = pick('roadColor') || settings.roadColor;
+  settings.islandColor = pick('islandColor') || settings.islandColor;
+  settings.terrainSideColor = pick('terrainSideColor') || settings.terrainSideColor;
+  settings.terrainOutsideColor = pick('terrainOutsideColor') || settings.terrainOutsideColor;
+  settings.parkColor = pick('parkColor') || settings.parkColor;
+  settings.sportColor = pick('sportColor') || settings.sportColor;
+  const at = pick('assetTheme');
+  if (at && assetThemePresets[at]) settings.assetTheme = at;
+  applyThemeDefaultsToSettings(true); // reseed facades/paving/furniture from the asset theme
+  const rt = pick('roofTexture'); // set roof AFTER the asset-theme reseed so it wins
+  if (rt && Object.prototype.hasOwnProperty.call(textureSets.roof, rt)) settings.roofTexture = rt;
+  Object.keys(functionBuildingStyleState).forEach((fn) => {
+    const st = functionBuildingStyleState[fn];
+    if (!st) return;
+    st.color = getSemanticColor(fn);
+    if (Object.prototype.hasOwnProperty.call(textureSets.roof, settings.roofTexture)) st.roofTexture = settings.roofTexture;
+  });
+  saveFunctionBuildingStyles();
+}
+
+// On export load, adopt the manifest's colour theme when it is new (so a theme
+// chosen in QGIS wins), but keep the user's Style-dock tweaks when re-opening the
+// same theme.
+function maybeApplyColorThemeFromManifest(persisted) {
+  const mTheme = (typeof projectManifest !== 'undefined' && projectManifest) ? (projectManifest.viewerDefaults || {}).colorTheme : null;
+  if (!mTheme || !COLOR_THEMES[mTheme]) return;
+  if (persisted && persisted.colorTheme === mTheme) return;
+  applyColorTheme(mTheme);
 }
 
 function assetColor(name, fallback = 0x64748b) {
@@ -1594,6 +1670,7 @@ const settings = {
   buildingMode: 'Extruded + roof',
   terrainAnalysisMode: 'Texture',
   assetTheme: 'Modern Urban',
+  colorTheme: 'Plugin Tones',
   showXyzTiles: false,
   xyzTileUrl: '',
   roofTexture: 'USShingle',
@@ -1725,7 +1802,7 @@ const PERSISTED_SETTING_KEYS = [
   'showTerrainSides', 'terrainSideDrop', 'terrainSideColor',
   'fogDensity', 'autoTime', 'autoTimeSpeed', 'enableSSAO', 'enableBloom',
   'pavementStyle', 'hardscapeStyle', 'hardscapeHeight', 'buildingMode', 'facadeTextureScale', 'terrainAnalysisMode', 'showXyzTiles', 'xyzTileUrl',
-  'assetTheme',
+  'assetTheme', 'colorTheme',
   'floorHeight', 'roofTexture', 'roofShape', 'roofHeight', 'roadStyle', 'roadColor', 'roadColorMode', 'roadWidth',
   'showLights', 'lightStyle', 'showBenches', 'benchStyle', 'showBins', 'binStyle', 'showBusStops', 'stopStyle',
   'showIslands', 'showParcels', 'showHardscape', 'showBuildings', 'showTrees', 'showFurniture', 'showMosques',
@@ -3284,6 +3361,7 @@ function applyManifestDefaults() {
       if (projectManifest.assetTheme) settings.assetTheme = projectManifest.assetTheme;
     }
     applyThemeDefaultsToSettings(false);
+    maybeApplyColorThemeFromManifest(persisted);
     return;
   }
   const defaults = { ...(projectManifest.viewerDefaults || {}), ...(projectManifest.analysisDefaults || {}) };
@@ -3292,6 +3370,7 @@ function applyManifestDefaults() {
     if (key in settings && value !== null && value !== undefined) settings[key] = value;
   }
   applyThemeDefaultsToSettings(false);
+  maybeApplyColorThemeFromManifest(null);
 }
 
 async function loadTexture(path, repeatX = 1, repeatY = 1) {
@@ -7124,27 +7203,20 @@ function buildFurnitureLayer() {
 
 function getSemanticColor(fn) {
   const f = String(fn || '').toUpperCase();
-  // Muted greys/slates — European & North-American massing rather than sandy
-  // pastels. Subtle hue shifts keep functions distinguishable.
-  if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE') || f.includes('DETACHED') || f.includes('TERRACE') || f.includes('DORMITORY')) return '#c3c7cc';
-  if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS') || f.includes('COLLEGE') || f.includes('KINDERGARTEN')) return '#a9b6c4';
-  if (f.includes('WORSHIP') || f.includes('MOSQUE') || f.includes('CHURCH') || f.includes('TEMPLE') || f.includes('SYNAGOGUE') || f.includes('CATHEDRAL') || f.includes('CHAPEL')) return '#bcc7bf';
-  if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE') || f.includes('SUPERMARKET') || f.includes('SHOP') || f.includes('KIOSK')) return '#aab0b7';
-  if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC')) return '#c7bfc6';
-  if (f.includes('SPORT') || f.includes('PITCH')) return '#aeb6c2';
-  if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN') || f.includes('MEADOW') || f.includes('CEMETERY')) return '#bbf7d0';
-  if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC') || f.includes('TOWNHALL')) return '#b3afbd';
-  if (f.includes('INDUSTR') || f.includes('WAREHOUSE') || f.includes('MANUFACTURE') || f.includes('HANGAR')) return '#9aa0a6';
-  if (f.includes('KONUT') || f.includes('YERLEŞİK') || f.includes('MESKEN')) return '#c3c7cc';
-  if (f.includes('OKUL') || f.includes('EĞİTİM') || f.includes('ÜNİVERSİTE')) return '#a9b6c4';
-  if (f.includes('CAMİ') || f.includes('DİNİ') || f.includes('İBADET')) return '#bcc7bf';
-  if (f.includes('TİCARET') || f.includes('ÇARŞI') || f.includes('AVM')) return '#aab0b7';
-  if (f.includes('SAĞLIK') || f.includes('HASTANE') || f.includes('KLİNİK')) return '#c7bfc6';
-  if (f.includes('SPOR') || f.includes('STADYUM') || f.includes('ARENA')) return '#aeb6c2';
-  if (f.includes('PARK') || f.includes('YEŞİL') || f.includes('BAHÇE')) return '#bbf7d0';
-  if (f.includes('KAMU') || f.includes('İDARİ') || f.includes('BELEDİYE')) return '#b3afbd';
-  if (f.includes('SANAYİ') || f.includes('ENDÜSTRİ') || f.includes('FABRİKA')) return '#9aa0a6';
-  return '#b6bbc1';
+  // Function-distinct palette driven by the active colour theme (activeColorTheme).
+  // Subtle per-function shifts keep functions readable; the default 'Plugin Tones'
+  // theme reproduces the historical muted greys/slates.
+  const pal = activeColorTheme().buildings || {};
+  if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE') || f.includes('DETACHED') || f.includes('TERRACE') || f.includes('DORMITORY') || f.includes('KONUT') || f.includes('YERLEŞİK') || f.includes('MESKEN')) return pal.resid;
+  if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS') || f.includes('COLLEGE') || f.includes('KINDERGARTEN') || f.includes('OKUL') || f.includes('EĞİTİM') || f.includes('ÜNİVERSİTE')) return pal.educ;
+  if (f.includes('WORSHIP') || f.includes('MOSQUE') || f.includes('CHURCH') || f.includes('TEMPLE') || f.includes('SYNAGOGUE') || f.includes('CATHEDRAL') || f.includes('CHAPEL') || f.includes('CAMİ') || f.includes('DİNİ') || f.includes('İBADET')) return pal.worship;
+  if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE') || f.includes('SUPERMARKET') || f.includes('SHOP') || f.includes('KIOSK') || f.includes('TİCARET') || f.includes('ÇARŞI') || f.includes('AVM')) return pal.commerc;
+  if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC') || f.includes('SAĞLIK') || f.includes('HASTANE') || f.includes('KLİNİK')) return pal.health;
+  if (f.includes('SPORT') || f.includes('PITCH') || f.includes('SPOR') || f.includes('STADYUM') || f.includes('ARENA')) return pal.sport;
+  if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN') || f.includes('MEADOW') || f.includes('CEMETERY') || f.includes('PARK') || f.includes('YEŞİL') || f.includes('BAHÇE')) return pal.green;
+  if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC') || f.includes('TOWNHALL') || f.includes('KAMU') || f.includes('İDARİ') || f.includes('BELEDİYE')) return pal.civic;
+  if (f.includes('INDUSTR') || f.includes('WAREHOUSE') || f.includes('MANUFACTURE') || f.includes('HANGAR') || f.includes('SANAYİ') || f.includes('ENDÜSTRİ') || f.includes('FABRİKA')) return pal.industr;
+  return pal.default || '#b6bbc1';
 }
 
 function getFunctionIcon(fn) {
