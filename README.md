@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/github-hero.svg" alt="3D OSM Model GitHub hero showing an OpenStreetMap study circle becoming a procedural 3D city" width="100%">
+  <img src="docs/assets/github-hero.svg" alt="3D OSM Model GitHub hero showing an OpenStreetMap study area becoming a procedural 3D city" width="100%">
 </p>
 
 <h1 align="center">3D OSM Model</h1>
@@ -37,7 +37,7 @@
 The plugin keeps the workflow deliberately simple:
 
 1. Pick the current map extent or selected polygon feature in QGIS.
-2. The plugin fits the largest safe study circle inside that area and caps the request size.
+2. Choose a boundary shape — inscribed circle, rounded rectangle, rectangle, or the exact polygon — and the plugin caps the request size.
 3. It downloads OSM buildings, roads, cycleways, waterways, greens, trees, bus stops, benches, lamps, and bins.
 4. It exports native-tag GeoJSON layers plus a manifest.
 5. It opens a local browser viewer powered by the PlanX 3D City engine.
@@ -74,7 +74,7 @@ http://127.0.0.1:8120/src/
 ### Use it inside QGIS
 
 1. Zoom to a small area or select polygon feature(s).
-2. Choose the study area source in the dialog.
+2. Choose the study area source and boundary shape in the dialog.
 3. Optionally pick a DEM raster.
 4. Click **Create OSM layers & export 3D viewer**.
 5. Explore the generated city in the browser.
@@ -100,9 +100,18 @@ http://127.0.0.1:8120/src/
 
 The plugin handles Overpass download, clipping, reprojection, layer export, manifest creation, local server startup, and browser launch in one flow.
 
-### Study area that behaves
+### Study area, your shape
 
-The study boundary is the largest inscribed circle that fits inside the selected area, clamped to a polite maximum request size. The model base extends 10 m beyond that circle so the city sits on a small presentation platform.
+Pick how the study boundary is derived from your map extent or selected polygon, then let the plugin clamp it to a polite maximum request size:
+
+| Boundary shape | What you get |
+| --- | --- |
+| **Inscribed circle** | The largest circle that fits inside the area — the classic, clean look (default). |
+| **Rounded rectangle** | The bounding box with generously rounded corners. |
+| **Rectangle (extent)** | The bounding box, kept tidy — corners are softened just slightly on the base. |
+| **Exact polygon** | The selected polygon used as-is (falls back to the canvas rectangle). |
+
+Whatever shape you choose, the model base extends 10 m beyond the boundary with softly rounded corners, so the city always sits on a small, presentation-ready platform. OSM data stays clipped to the inner boundary; only the platform uses the wider ring.
 
 ### Native OpenStreetMap schema
 
@@ -164,7 +173,7 @@ See [docs/SHOWCASE.md](docs/SHOWCASE.md) for a full media and demo script.
 | `main_plugin.py` | QGIS plugin lifecycle, action wiring, export orchestration. |
 | `dialog.py` | QGIS dialog, study area options, DEM selector, status and summary UI. |
 | `osm_download.py` | Overpass query, mirror fallback, OSM tag parsing, vector layer creation. |
-| `builder.py` | Study circle, clipping, reprojection, GeoJSON export, manifest writing. |
+| `builder.py` | Study-area boundary shapes, clipping, reprojection, GeoJSON export, manifest writing. |
 | `server.py` | Local HTTP server for the viewer. |
 | `web/src/` | Three.js viewer, UI, controls, styling, procedural 3D scene. |
 | `web/data/` | Bundled sample city and runtime export sink. |

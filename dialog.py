@@ -18,6 +18,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QButtonGroup,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFrame,
@@ -47,6 +48,31 @@ ERR = "#b91c1c"
 
 _ICON = os.path.join(os.path.dirname(__file__), "icons", "icon_main.svg")
 _RUN_LABEL = "Create OSM layers & export 3D viewer"
+
+# Boundary-shape options (value, label). Values match builder.SHAPE_* and are
+# persisted in QgsSettings. The model base extends 10 m beyond whichever shape,
+# with softly rounded corners.
+SHAPE_OPTIONS = (
+    ("circle", "Inscribed circle — largest fit"),
+    ("rounded", "Rounded rectangle"),
+    ("extent", "Rectangle (extent)"),
+    ("polygon", "Exact polygon / selection"),
+)
+_SHAPE_SHORT = {
+    "circle": "inscribed circle",
+    "rounded": "rounded rectangle",
+    "extent": "rectangle",
+    "polygon": "exact polygon",
+}
+_SHAPE_TOOLTIP = (
+    "How the study boundary is derived from your area:\n"
+    "• Inscribed circle — the largest circle that fits inside it (classic look).\n"
+    "• Rounded rectangle — its bounding box with rounded corners.\n"
+    "• Rectangle (extent) — its bounding box.\n"
+    "• Exact polygon / selection — the selected polygon as-is "
+    "(falls back to the canvas rectangle).\n"
+    "The model base extends 10 m beyond the boundary with softly rounded corners."
+)
 
 
 class Osm3dModelDialog(QDialog):
@@ -129,8 +155,8 @@ class Osm3dModelDialog(QDialog):
         title = QLabel("3D OSM Model")
         title.setObjectName("headerTitle")
         subtitle = QLabel(
-            "Pick an area, download OpenStreetMap, and open it as an interactive 3D city. "
-            "The largest circle that fits your selection becomes the study area."
+            "Pick an area and a boundary shape, download OpenStreetMap, and open it as an "
+            "interactive 3D city. The model sits on a base that extends 10 m beyond the boundary."
         )
         subtitle.setObjectName("headerSub")
         subtitle.setWordWrap(True)
@@ -151,6 +177,18 @@ class Osm3dModelDialog(QDialog):
         self.radio_canvas.toggled.connect(self._refresh_area_summary)
         lay.addWidget(self.radio_canvas)
         lay.addWidget(self.radio_selection)
+
+        shape_row = QHBoxLayout()
+        shape_label = QLabel("Boundary shape")
+        self.shape_combo = QComboBox()
+        for value, label in SHAPE_OPTIONS:
+            self.shape_combo.addItem(label, value)
+        self.shape_combo.setToolTip(_SHAPE_TOOLTIP)
+        self.shape_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.shape_combo.currentIndexChanged.connect(self._refresh_area_summary)
+        shape_row.addWidget(shape_label)
+        shape_row.addWidget(self.shape_combo, 1)
+        lay.addLayout(shape_row)
 
         self.area_readout = QLabel("—")
         self.area_readout.setObjectName("readout")
@@ -199,7 +237,7 @@ class Osm3dModelDialog(QDialog):
         self.dem_combo.setCurrentIndex(0)
         dem_row.addWidget(self.dem_combo, 1)
         adv.addLayout(dem_row)
-        dem_hint = QLabel("Drapes the city over an elevation raster (clipped to the study circle).")
+        dem_hint = QLabel("Drapes the city over an elevation raster (clipped to the study boundary).")
         dem_hint.setWordWrap(True)
         dem_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
         adv.addWidget(dem_hint)
@@ -261,6 +299,7 @@ class Osm3dModelDialog(QDialog):
     def _emit_run(self):
         params = {
             "source": "selection" if self.radio_selection.isChecked() else "canvas",
+            "shape": self.shape_combo.currentData() or "circle",
             "max_ha": float(self.ha_spin.value()),
             "dem_layer": self.dem_combo.currentLayer(),
             "auto_open": self.auto_open_check.isChecked(),
@@ -279,6 +318,10 @@ class Osm3dModelDialog(QDialog):
             self.radio_selection.setChecked(True)
         else:
             self.radio_canvas.setChecked(True)
+        saved_shape = str(s.value(f"{_SETTINGS_PREFIX}/shape", "circle"))
+        shape_index = self.shape_combo.findData(saved_shape)
+        if shape_index >= 0:
+            self.shape_combo.setCurrentIndex(shape_index)
         auto = s.value(f"{_SETTINGS_PREFIX}/auto_open", True)
         self.auto_open_check.setChecked(str(auto).lower() not in ("false", "0", "no"))
 
@@ -287,6 +330,7 @@ class Osm3dModelDialog(QDialog):
         s.setValue(f"{_SETTINGS_PREFIX}/max_ha", float(self.ha_spin.value()))
         s.setValue(f"{_SETTINGS_PREFIX}/source",
                    "selection" if self.radio_selection.isChecked() else "canvas")
+        s.setValue(f"{_SETTINGS_PREFIX}/shape", self.shape_combo.currentData() or "circle")
         s.setValue(f"{_SETTINGS_PREFIX}/auto_open", self.auto_open_check.isChecked())
 
     def showEvent(self, event):  # noqa: N802 (Qt override)
@@ -301,6 +345,10 @@ class Osm3dModelDialog(QDialog):
             text = self.area_probe(source)
         except Exception as exc:  # never let a probe error break the dialog
             text = str(exc)
+        # Append the chosen boundary shape to a valid estimate (not to error text).
+        if text and " ha" in text:
+            shape = _SHAPE_SHORT.get(self.shape_combo.currentData(), "shape")
+            text = f"{text}  ·  {shape} boundary"
         self.set_area_summary(text)
 
     def set_area_summary(self, text: str):
@@ -326,10 +374,17 @@ class Osm3dModelDialog(QDialog):
             f"<b>{counts.get('waterlines', 0)}</b> waterways · "
             f"<b>{furniture}</b> furniture"
         )
-        circle = f"Study circle r = {summary.get('radius_m', '?')} m ({summary.get('area_ha', '?')} ha)"
+        label = summary.get("shape_label", "Study area")
+        area_ha = summary.get("area_ha", "?")
+        if summary.get("radius_m"):
+            line = f"{label}: r = {summary['radius_m']} m ({area_ha} ha)"
+        elif summary.get("width_m"):
+            line = f"{label}: {summary['width_m']} × {summary['depth_m']} m ({area_ha} ha)"
+        else:
+            line = f"{label} · {area_ha} ha"
         if url:
-            circle += f"  ·  {url}"
-        self.summary_circle.setText(circle)
+            line += f"  ·  {url}"
+        self.summary_circle.setText(line)
         self.summary_card.setVisible(True)
 
     # -- Style --------------------------------------------------------------
@@ -366,6 +421,17 @@ class Osm3dModelDialog(QDialog):
         QDoubleSpinBox {{
             padding: 4px 6px; border: 1px solid {CARD_BORDER};
             border-radius: 6px; background: #ffffff; min-width: 92px;
+        }}
+        QComboBox {{
+            padding: 4px 8px; border: 1px solid {CARD_BORDER};
+            border-radius: 6px; background: #ffffff; min-width: 92px; color: {TEXT};
+        }}
+        QComboBox:hover {{ border-color: {ACCENT}; }}
+        QComboBox::drop-down {{ border: 0; width: 18px; }}
+        QComboBox QAbstractItemView {{
+            background: #ffffff; color: {TEXT};
+            selection-background-color: {ACCENT_SOFT}; selection-color: {ACCENT_DARK};
+            border: 1px solid {CARD_BORDER}; outline: 0;
         }}
         #advToggle {{ border: 0; color: {ACCENT_DARK}; font-weight: 700; padding: 2px; }}
         #advToggle:hover {{ color: {ACCENT}; }}

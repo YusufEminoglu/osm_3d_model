@@ -2,8 +2,8 @@
 """OpenStreetMap download + clip for the 3D OSM Model plugin.
 
 Fetches buildings, roads, greens and trees from the public Overpass API for the
-bounding box of a study circle, reprojects to a metric UTM CRS, and clips every
-feature to the circle. Building floor count defaults to 3 when OSM has no level
+bounding box of a study boundary, reprojects to a metric UTM CRS, and clips every
+feature to that boundary. Building floor count defaults to 3 when OSM has no level
 data, matching the viewer's expectation.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.8.2 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.9.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 
@@ -249,60 +249,15 @@ def save_layer_to_geojson(layer: QgsVectorLayer, path) -> None:
     )
 
 
-def connect_roads(roads_layer: QgsVectorLayer, tolerance_m: float = 2.0, feedback=None) -> QgsVectorLayer:
-    """Best-effort: weld road segments into one connected network.
-
-    OSM ways are normally noded at junctions, but clipping to the study circle and
-    small data gaps can leave near-but-not-touching segment ends. We:
-      1. snap each road's END POINTS to the nearest road within ``tolerance_m``
-         (interior vertices are left untouched, so road curves are not distorted),
-      2. dissolve by road class so contiguous same-class runs merge,
-      3. explode back to single-part LineStrings (the viewer renders LineString
-         roads only; MultiLineString features would be skipped).
-    On any failure the original layer is returned so the export never breaks.
-    """
-    if roads_layer is None or roads_layer.featureCount() == 0:
-        return roads_layer
-    try:
-        import processing  # noqa: WPS433 (QGIS runtime import)
-
-        if feedback:
-            feedback(f"Connecting roads (snap {tolerance_m:g} m + dissolve)...")
-        snapped = processing.run("native:snapgeometries", {
-            "INPUT": roads_layer,
-            "REFERENCE_LAYER": roads_layer,
-            "TOLERANCE": float(tolerance_m),
-            "BEHAVIOR": 5,  # move end points only, prefer closest point (no interior distortion)
-            "OUTPUT": "TEMPORARY_OUTPUT",
-        })["OUTPUT"]
-        dissolved = processing.run("native:dissolve", {
-            "INPUT": snapped,
-            "FIELD": ["highway"],
-            "OUTPUT": "TEMPORARY_OUTPUT",
-        })["OUTPUT"]
-        singles = processing.run("native:multiparttosingleparts", {
-            "INPUT": dissolved,
-            "OUTPUT": "TEMPORARY_OUTPUT",
-        })["OUTPUT"]
-        out = QgsVectorLayer(singles, "OSM Roads", "ogr") if isinstance(singles, str) else singles
-        if out is not None and out.isValid() and out.featureCount() > 0:
-            if feedback:
-                feedback(f"Roads connected: {roads_layer.featureCount()} -> {out.featureCount()} segments.")
-            return out
-    except Exception as exc:  # never block the export on geometry cleanup
-        if feedback:
-            feedback(f"Road connect skipped ({exc}).")
-    return roads_layer
-
-
 # --------------------------------------------------------------------------
 # Main download + clip
 # --------------------------------------------------------------------------
-def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=None) -> dict:
-    """Fetch OSM for the circle's bbox, reproject to UTM, clip to the circle.
+def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None) -> dict:
+    """Fetch OSM for the boundary's bbox, reproject to UTM, clip to the boundary.
 
-    ``circle_utm`` is the study-circle polygon in the EPSG:``epsg_dest`` metric CRS.
-    Returns a dict of memory layers keyed by role plus feature counts.
+    ``area_utm`` is the study-boundary polygon (circle, rounded rectangle,
+    rectangle or exact polygon) in the EPSG:``epsg_dest`` metric CRS. Returns a
+    dict of memory layers keyed by role plus feature counts.
     """
     project = QgsProject.instance()
     dst_crs = QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest)
@@ -310,7 +265,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
     to_wgs = QgsCoordinateTransform(dst_crs, wgs_crs, project)
     to_utm = QgsCoordinateTransform(wgs_crs, dst_crs, project)
 
-    wgs_rect = to_wgs.transformBoundingBox(circle_utm.boundingBox())
+    wgs_rect = to_wgs.transformBoundingBox(area_utm.boundingBox())
     min_lon, min_lat = wgs_rect.xMinimum(), wgs_rect.yMinimum()
     max_lon, max_lat = wgs_rect.xMaximum(), wgs_rect.yMaximum()
 
@@ -375,16 +330,16 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
         "trashbins": 0, "skipped": 0,
     }
 
-    def clip_to_circle(geom_wgs: QgsGeometry):
+    def clip_to_area(geom_wgs: QgsGeometry):
         g = QgsGeometry(geom_wgs)
         if g.transform(to_utm):
             return None
-        if not g.intersects(circle_utm):
+        if not g.intersects(area_utm):
             return None
-        clipped = g.intersection(circle_utm)
+        clipped = g.intersection(area_utm)
         if clipped.isEmpty() or not clipped.isGeosValid():
             # Fall back to the original geometry if the intersection is degenerate.
-            return g if g.within(circle_utm) else None
+            return g if g.within(area_utm) else None
         return clipped
 
     for element in elements:
@@ -396,7 +351,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             if not geom:
                 continue
             g = QgsGeometry(geom)
-            if g.transform(to_utm) or not circle_utm.contains(g):
+            if g.transform(to_utm) or not area_utm.contains(g):
                 counts["skipped"] += 1
                 continue
             height_val = _parse_osm_number(tags.get("height")) or 6.0
@@ -414,7 +369,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
                 counts["skipped"] += 1
                 continue
             g = QgsGeometry(geom)
-            if g.transform(to_utm) or not circle_utm.contains(g):
+            if g.transform(to_utm) or not area_utm.contains(g):
                 counts["skipped"] += 1
                 continue
             osm_id = str(element.get("id", ""))
@@ -450,7 +405,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             base = _way_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_circle(base)
+            clipped = clip_to_area(base)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -472,7 +427,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             base = _way_polyline(element)
             if not base:
                 continue
-            clipped = clip_to_circle(base)
+            clipped = clip_to_area(base)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -498,7 +453,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             base = _way_polyline(element)
             if not base:
                 continue
-            clipped = clip_to_circle(base)
+            clipped = clip_to_area(base)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -518,7 +473,7 @@ def download_osm_for_circle(circle_utm: QgsGeometry, epsg_dest: int, feedback=No
             base = _way_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_circle(base)
+            clipped = clip_to_area(base)
             if clipped is None:
                 counts["skipped"] += 1
                 continue

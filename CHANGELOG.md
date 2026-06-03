@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0] - 2026-06-03
+
+- New **Boundary shape** option in the dialog: inscribed circle (default), rounded rectangle, rectangle (extent), or the exact selected polygon. The viewer renders any of them — previous exports always used the inscribed circle.
+- The model base still extends 10 m beyond the boundary, now with softly rounded corners on every shape, so a plain rectangle reads as a gently rounded presentation platform.
+- Rectangle and polygon boundaries are area-clamped about their centre, keeping the OSM request within the maximum study area like the circle.
+- The chosen shape is remembered between runs and shown in the live area estimate and the last-run summary.
+- Internal cleanup: removed the unused `connect_roads` snap-and-dissolve helper; renamed the circle-specific export internals (`download_osm_for_area`, `compute_study_area`) to be shape-agnostic; synced the viewer manifest and Overpass User-Agent to 0.9.0.
+
 ## [0.8.2] - 2026-06-02
 
 - Restored the six apartment/residential facade textures (renamed from the old region-specific set) and made them the default building facade, kept with the grey massing colours.

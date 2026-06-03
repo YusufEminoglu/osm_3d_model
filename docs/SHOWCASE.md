@@ -12,11 +12,12 @@ The aim is simple: show that a real OSM area can become a useful, readable, attr
 
 1. Open QGIS with 3D OSM Model enabled.
 2. Zoom to a compact urban area or select a polygon.
-3. Keep the maximum study area small enough for a fast Overpass response.
-4. Click **Create OSM layers & export 3D viewer**.
-5. In the viewer, open the dashboard and show live counts.
-6. Toggle Layers, Style, Scene & Sun, and Walk mode.
-7. Take a screenshot from a low golden-hour camera angle.
+3. Pick a boundary shape — inscribed circle, rounded rectangle, rectangle, or the exact polygon.
+4. Keep the maximum study area small enough for a fast Overpass response.
+5. Click **Create OSM layers & export 3D viewer**.
+6. In the viewer, open the dashboard and show live counts.
+7. Toggle Layers, Style, Scene & Sun, and Walk mode.
+8. Take a screenshot from a low golden-hour camera angle.
 
 ## Showcase Recipes
 
@@ -26,6 +27,7 @@ The aim is simple: show that a real OSM area can become a useful, readable, attr
 | Complete street | Street with cycleway tags and street furniture | Bike lanes, cyclists, bus stops, benches, lamps, bins, traffic density. |
 | Waterfront corridor | River, stream, canal, or drainage route | Water ribbons, tree belts, greens, sun angle, measurement. |
 | Campus or civic core | Selected polygon around public buildings | Selected-area workflow, walk mode, camera bookmarks, clean screenshot. |
+| Boundary shapes | One area, exported four ways | Inscribed circle, rounded rectangle, rectangle, and exact-polygon platforms compared. |
 | Hillside district | Area with optional DEM available | Terrain base, DEM mesh quality, time-of-day shadows, topography view. |
 
 ## Screenshot Checklist
@@ -43,6 +45,7 @@ Capture these five images for an elite GitHub presentation:
 ## Suggested Captions
 
 - "One QGIS click turns OSM tags into a procedural 3D city."
+- "Pick a boundary shape: inscribed circle, rounded rectangle, rectangle, or your exact polygon."
 - "Native OSM fields stay alive all the way into the viewer."
 - "Roads, sidewalks, cyclists, pedestrians, and street furniture are separate readable systems."
 - "The sample city means the viewer never opens empty."

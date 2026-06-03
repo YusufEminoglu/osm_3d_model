@@ -90,7 +90,7 @@ class Osm3dModelPlugin:
             return
 
         if self.dialog:
-            self.dialog.set_status("Computing study circle...", busy=True)
+            self.dialog.set_status("Computing study area...", busy=True)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         try:
@@ -99,6 +99,7 @@ class Osm3dModelPlugin:
                 dem_layer=params.get("dem_layer"),
                 max_ha=float(params.get("max_ha", 300.0)),
                 add_to_project=True,
+                shape=params.get("shape", "circle"),
                 feedback=feedback,
             )
             url = self.server.start()

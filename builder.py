@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Study-circle computation, OSM clip/export and viewer manifest writing.
+"""Study-area computation, OSM clip/export and viewer manifest writing.
 
 Given a source area geometry (selected polygon or map-canvas extent), this module:
   1. picks a metric UTM CRS,
-  2. fits the largest inscribed circle inside the area (pole of inaccessibility),
-  3. clamps it to a maximum study area (~300 ha),
-  4. downloads + clips OSM data to the circle,
+  2. resolves the chosen boundary shape (inscribed circle, rounded rectangle,
+     rectangle or the exact polygon), clamped to a maximum study area (~300 ha),
+  3. downloads + clips OSM data to that boundary,
+  4. buffers the boundary +BASE_BUFFER_M (soft corners) into the model base,
   5. writes the GeoJSON layers + manifest the bundled viewer reads.
 """
 from __future__ import annotations
@@ -22,18 +23,20 @@ from qgis.core import (
     QgsField,
     QgsGeometry,
     QgsProject,
+    QgsRectangle,
     QgsVectorLayer,
     QgsWkbTypes,
 )
 from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtGui import QTransform
 
-from .osm_download import download_osm_for_circle, save_layer_to_geojson, utm_epsg_for
+from .osm_download import download_osm_for_area, save_layer_to_geojson, utm_epsg_for
 
 MODEL_NAME = "3D OSM Model"
 MAX_STUDY_HA_DEFAULT = 300.0
 MIN_RADIUS_M = 30.0
-# The model base/island extends this many metres beyond the OSM study circle, so
-# the city sits on a small platform margin (OSM data stays clipped to the circle).
+# The model base/island extends this many metres beyond the OSM study boundary, so
+# the city sits on a small platform margin (OSM data stays clipped to the boundary).
 BASE_BUFFER_M = 10.0
 
 # Salmon-tinted grey ("yavru agzi") palette for the viewer defaults.
@@ -102,6 +105,133 @@ def largest_inscribed_circle(geom_utm: QgsGeometry, max_ha: float):
 
 
 # --------------------------------------------------------------------------
+# Study-area boundary shapes
+# --------------------------------------------------------------------------
+# How the study boundary is derived from the selected area. The viewer reads the
+# resulting polygon (roi.geojson) generically, so any of these shapes renders the
+# same way — only the footprint changes.
+SHAPE_CIRCLE = "circle"     # largest inscribed circle (default; legacy behaviour)
+SHAPE_ROUNDED = "rounded"   # bounding box with visibly rounded corners
+SHAPE_EXTENT = "extent"     # bounding box rectangle (lightly softened on the base)
+SHAPE_POLYGON = "polygon"   # the selected polygon / canvas rectangle as-is
+VALID_SHAPES = (SHAPE_CIRCLE, SHAPE_ROUNDED, SHAPE_EXTENT, SHAPE_POLYGON)
+SHAPE_LABELS = {
+    SHAPE_CIRCLE: "Inscribed circle",
+    SHAPE_ROUNDED: "Rounded rectangle",
+    SHAPE_EXTENT: "Rectangle",
+    SHAPE_POLYGON: "Exact polygon",
+}
+
+
+def _area_max_m2(max_ha: float) -> float:
+    return max(1.0, float(max_ha)) * 10000.0
+
+
+def _scale_about_centroid(geom: QgsGeometry, scale: float) -> QgsGeometry:
+    """Scale ``geom`` by ``scale`` about its own centroid (keeps it centred)."""
+    centre = geom.centroid().asPoint()
+    transform = QTransform()
+    transform.translate(centre.x(), centre.y())
+    transform.scale(scale, scale)
+    transform.translate(-centre.x(), -centre.y())
+    out = QgsGeometry(geom)
+    out.transform(transform)
+    return out
+
+
+def _clamp_polygon_area(geom: QgsGeometry, max_ha: float) -> QgsGeometry:
+    """Shrink a polygon about its centroid so its area never exceeds ``max_ha`` ha."""
+    max_m2 = _area_max_m2(max_ha)
+    area = geom.area()
+    if area <= max_m2 or area <= 0:
+        return geom
+    return _scale_about_centroid(geom, math.sqrt(max_m2 / area))
+
+
+def _clamp_bbox_area(bbox: QgsRectangle, max_ha: float) -> QgsRectangle:
+    """Return ``bbox`` shrunk about its centre so width*height ≤ ``max_ha`` ha (aspect kept)."""
+    max_m2 = _area_max_m2(max_ha)
+    width, height = bbox.width(), bbox.height()
+    if width <= 0 or height <= 0 or width * height <= max_m2:
+        return bbox
+    scale = math.sqrt(max_m2 / (width * height))
+    cx, cy = bbox.center().x(), bbox.center().y()
+    half_w, half_h = width * scale / 2.0, height * scale / 2.0
+    return QgsRectangle(cx - half_w, cy - half_h, cx + half_w, cy + half_h)
+
+
+def _corner_radius(bbox: QgsRectangle) -> float:
+    """A pleasant, size-aware corner radius for the rounded-rectangle boundary."""
+    short = min(bbox.width(), bbox.height())
+    return max(12.0, min(80.0, short * 0.16))
+
+
+def _rounded_rect_geom(bbox: QgsRectangle, radius: float) -> QgsGeometry:
+    """A rectangle with rounded corners: inset by r, then buffer back out by r."""
+    r = max(0.0, float(radius))
+    half = min(bbox.width(), bbox.height()) / 2.0
+    if r <= 0 or half <= 0:
+        return QgsGeometry.fromRect(bbox)
+    r = min(r, half * 0.98)
+    inner = QgsRectangle(
+        bbox.xMinimum() + r, bbox.yMinimum() + r,
+        bbox.xMaximum() - r, bbox.yMaximum() - r,
+    )
+    return QgsGeometry.fromRect(inner).buffer(r, 18)
+
+
+def _soft_base(clip_geom: QgsGeometry) -> QgsGeometry:
+    """Model base/island = boundary buffered +BASE_BUFFER_M with round joins.
+
+    The round-join buffer softens every corner by ``BASE_BUFFER_M`` metres, so a
+    plain rectangle boundary still reads as a gently rounded platform in the viewer.
+    """
+    return clip_geom.buffer(BASE_BUFFER_M, 18)
+
+
+def compute_study_area(geom_utm: QgsGeometry, max_ha: float, shape: str):
+    """Resolve the study boundary for ``shape`` into (clip_geom, base_geom, info).
+
+    ``clip_geom`` is the boundary OSM data is clipped to; ``base_geom`` is the
+    visible model base (``clip_geom`` buffered +BASE_BUFFER_M with soft corners).
+    ``info`` carries human-readable dimensions for the dialog summary.
+    """
+    shape = (shape or SHAPE_CIRCLE).lower()
+    if shape not in VALID_SHAPES:
+        shape = SHAPE_CIRCLE
+
+    if shape == SHAPE_CIRCLE:
+        center, radius = largest_inscribed_circle(geom_utm, max_ha)
+        clip = QgsGeometry.fromPointXY(center).buffer(radius, 96)
+        base = QgsGeometry.fromPointXY(center).buffer(radius + BASE_BUFFER_M, 96)
+        return clip, base, {
+            "shape": shape, "shape_label": SHAPE_LABELS[shape],
+            "radius_m": round(radius, 1),
+            "area_ha": round(math.pi * radius * radius / 10000.0, 1),
+        }
+
+    if shape == SHAPE_POLYGON:
+        clip = _clamp_polygon_area(QgsGeometry(geom_utm), max_ha)
+        fixed = clip.makeValid()
+        if fixed is not None and not fixed.isEmpty():
+            clip = fixed
+    else:  # SHAPE_EXTENT or SHAPE_ROUNDED
+        bbox = _clamp_bbox_area(geom_utm.boundingBox(), max_ha)
+        clip = (_rounded_rect_geom(bbox, _corner_radius(bbox))
+                if shape == SHAPE_ROUNDED else QgsGeometry.fromRect(bbox))
+
+    base = _soft_base(clip)
+    bb = clip.boundingBox()
+    return clip, base, {
+        "shape": shape, "shape_label": SHAPE_LABELS[shape],
+        "radius_m": None,
+        "area_ha": round(clip.area() / 10000.0, 1),
+        "width_m": round(bb.width(), 1),
+        "depth_m": round(bb.height(), 1),
+    }
+
+
+# --------------------------------------------------------------------------
 # GeoJSON writing
 # --------------------------------------------------------------------------
 INIT_LOADED_FILES = (
@@ -118,14 +248,17 @@ def _write_empty_fc(path: Path, name: str) -> None:
     )
 
 
-def _roi_layer_from_circle(circle_utm: QgsGeometry, epsg_dest: int) -> QgsVectorLayer:
-    layer = QgsVectorLayer(f"Polygon?crs=EPSG:{epsg_dest}", "Study circle", "memory")
+def _roi_layer_from_polygon(base_utm: QgsGeometry, epsg_dest: int) -> QgsVectorLayer:
+    """Memory layer holding the model base footprint (any boundary shape)."""
+    layer = QgsVectorLayer(f"MultiPolygon?crs=EPSG:{epsg_dest}", "Study area", "memory")
     pr = layer.dataProvider()
     pr.addAttributes([QgsField("name", QVariant.String)])
     layer.updateFields()
+    geom = QgsGeometry(base_utm)
+    geom.convertToMultiType()  # the provider is MultiPolygon; accept single parts too
     feat = QgsFeature()
-    feat.setGeometry(circle_utm)
-    feat.setAttributes(["3D OSM Model study circle"])
+    feat.setGeometry(geom)
+    feat.setAttributes(["3D OSM Model study area"])
     pr.addFeatures([feat])
     layer.updateExtents()
     return layer
@@ -134,12 +267,12 @@ def _roi_layer_from_circle(circle_utm: QgsGeometry, epsg_dest: int) -> QgsVector
 # --------------------------------------------------------------------------
 # Optional DEM clip
 # --------------------------------------------------------------------------
-def _export_dem(dem_layer, circle_utm: QgsGeometry, epsg_dest: int, dem_path: Path, feedback=None) -> bool:
-    """Best-effort DEM warp/clip to the circle bbox in the target UTM CRS."""
+def _export_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path, feedback=None) -> bool:
+    """Best-effort DEM warp/clip to the model base bbox in the target UTM CRS."""
     try:
         import processing  # noqa: WPS433 (QGIS runtime import)
 
-        bbox = circle_utm.boundingBox()
+        bbox = base_utm.boundingBox()
         extent = f"{bbox.xMinimum()},{bbox.xMaximum()},{bbox.yMinimum()},{bbox.yMaximum()} [EPSG:{epsg_dest}]"
         processing.run("gdal:warpreproject", {
             "INPUT": dem_layer,
@@ -232,7 +365,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.8.2",
+        "version": "0.9.0",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -270,7 +403,8 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
 # --------------------------------------------------------------------------
 def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenceSystem,
                      web_root: str, dem_layer=None, max_ha: float = MAX_STUDY_HA_DEFAULT,
-                     add_to_project: bool = True, feedback=None) -> dict:
+                     add_to_project: bool = True, shape: str = SHAPE_CIRCLE,
+                     feedback=None) -> dict:
     if source_geom is None or source_geom.isEmpty():
         raise BuildError("No area selected. Draw/select a polygon or zoom to the area first.")
 
@@ -284,22 +418,27 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
     epsg_dest = utm_epsg_for(cen_wgs.x(), cen_wgs.y())
     dst_crs = QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest)
 
-    # Source geometry -> UTM, then fit the inscribed circle.
+    # Source geometry -> UTM, then resolve the chosen boundary shape.
     geom_utm = QgsGeometry(source_geom)
     to_utm = QgsCoordinateTransform(source_crs, dst_crs, project)
     if geom_utm.transform(to_utm):
         raise BuildError("Could not reproject the selected area to a metric CRS.")
-    center, radius = largest_inscribed_circle(geom_utm, max_ha)
-    circle_utm = QgsGeometry.fromPointXY(center).buffer(radius, 96)
-    # Base/island = circle buffered +BASE_BUFFER_M; OSM is still clipped to the
-    # inner circle, only the platform (roi + DEM) uses the wider ring.
-    base_utm = QgsGeometry.fromPointXY(center).buffer(radius + BASE_BUFFER_M, 96)
-    area_ha = round(math.pi * radius * radius / 10000.0, 1)
+    # Resolve the chosen boundary shape: ``clip_utm`` is what OSM is clipped to,
+    # ``base_utm`` is the visible model base (clip buffered +BASE_BUFFER_M with
+    # softly rounded corners). OSM stays clipped to the inner boundary; only the
+    # platform (roi + DEM) uses the wider ring.
+    clip_utm, base_utm, area_info = compute_study_area(geom_utm, max_ha, shape)
+    area_ha = area_info["area_ha"]
     if feedback:
-        feedback(f"Study circle: r = {radius:.0f} m ({area_ha} ha) +{BASE_BUFFER_M:.0f} m base, EPSG:{epsg_dest}.")
+        if area_info.get("radius_m"):
+            shape_desc = f"{area_info['shape_label']} r = {area_info['radius_m']:.0f} m"
+        else:
+            shape_desc = (f"{area_info['shape_label']} "
+                          f"{area_info.get('width_m', 0):.0f} × {area_info.get('depth_m', 0):.0f} m")
+        feedback(f"Study area: {shape_desc} ({area_ha} ha) +{BASE_BUFFER_M:.0f} m base, EPSG:{epsg_dest}.")
 
-    # OSM download + clip (to the inner circle, not the buffered base).
-    osm = download_osm_for_circle(circle_utm, epsg_dest, feedback=feedback)
+    # OSM download + clip (to the inner boundary, not the buffered base).
+    osm = download_osm_for_area(clip_utm, epsg_dest, feedback=feedback)
     # Roads are used as raw OSM ways (single-part LineStrings). The earlier
     # snap+dissolve "connect_roads" step was removed: it produced MultiLineString
     # geometries and did not actually improve the network, so the native OSM
@@ -310,7 +449,7 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
     vector_dir = web_path / "data" / "yerlesim"
     vector_dir.mkdir(parents=True, exist_ok=True)
 
-    roi_layer = _roi_layer_from_circle(base_utm, epsg_dest)
+    roi_layer = _roi_layer_from_polygon(base_utm, epsg_dest)
     save_layer_to_geojson(roi_layer, vector_dir / "roi.geojson")
     save_layer_to_geojson(osm["buildings"], vector_dir / "mybuildings.geojson")
     save_layer_to_geojson(osm["roads"], vector_dir / "myroads.geojson")
@@ -339,7 +478,7 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
     _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem)
 
     if add_to_project:
-        roi_layer.setName("OSM Study Circle")
+        roi_layer.setName("OSM Study Area")
         project.addMapLayer(roi_layer)
         for key, label in (("greens", "OSM Greens"), ("buildings", "OSM Buildings"),
                            ("roads", "OSM Roads"), ("bikelanes", "OSM Bike Lanes"),
@@ -354,7 +493,11 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
 
     return {
         "epsg": epsg_dest,
-        "radius_m": round(radius, 1),
+        "shape": area_info["shape"],
+        "shape_label": area_info["shape_label"],
+        "radius_m": area_info.get("radius_m"),
+        "width_m": area_info.get("width_m"),
+        "depth_m": area_info.get("depth_m"),
         "area_ha": area_ha,
         "counts": osm["counts"],
         "has_dem": has_dem,
