@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.10.2] - 2026-06-03
+
+- **Hotfix:** the browser viewer crashed with `persisted is not defined` and stayed stuck on an empty "Waiting for project metadata" scene for anyone whose browser had saved viewer settings from a previous session (most returning users). The colour-theme code added in 0.10.0 referenced a `persisted` variable that was scoped to a `try` block; it is now function-scoped, so the manifest theme applies without crashing. A first-time browser (empty localStorage) was unaffected, which is why automated testing — always run on a fresh profile — missed it.
+
 ## [0.10.1] - 2026-06-03
 
 - Themes now read on the **buildings**, not just the base and roads: each non-default theme uses a set of light, tintable facades (limestone, stucco, glass, off-white) so the building colour palette shows through, and the building tints are a touch more saturated. The default **Plugin tones** theme is unchanged.

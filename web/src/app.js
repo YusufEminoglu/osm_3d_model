@@ -3334,6 +3334,7 @@ function applyManifestDefaults() {
   if (manifestDefaultsApplied || !projectManifest) return;
   manifestDefaultsApplied = true;
   let persistedRaw = null;
+  let persisted = null; // function-scoped so maybeApplyColorThemeFromManifest() can read it
   if (!isPortableMode) {
     try {
       persistedRaw = localStorage.getItem('planx_3d_city_settings');
@@ -3341,7 +3342,7 @@ function applyManifestDefaults() {
   }
   if (persistedRaw) {
     try {
-      const persisted = JSON.parse(persistedRaw);
+      persisted = JSON.parse(persistedRaw);
       const schemaVersion = Number(persisted._schemaVersion || 0);
       const defaults = { ...(projectManifest.viewerDefaults || {}), ...(projectManifest.analysisDefaults || {}) };
       if (projectManifest.assetTheme && !defaults.assetTheme) defaults.assetTheme = projectManifest.assetTheme;
