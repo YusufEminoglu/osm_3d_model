@@ -25,7 +25,7 @@ class Osm3dModelPlugin:
 
     # -- QGIS lifecycle -----------------------------------------------------
     def initGui(self):
-        icon = QIcon(os.path.join(self.plugin_dir, "icons", "icon_main.svg"))
+        icon = QIcon(os.path.join(self.plugin_dir, "icons", "icon.png"))
         self.action = QAction(icon, "3D OSM Model", self.iface.mainWindow())
         self.action.setStatusTip("Download OSM for an area and open it as a 3D city")
         self.action.triggered.connect(self.show_dialog)

@@ -46,7 +46,7 @@ TEXT_MUTED = "#6b5750"
 OK = "#3f6f54"
 ERR = "#b91c1c"
 
-_ICON = os.path.join(os.path.dirname(__file__), "icons", "icon_main.svg")
+_ICON = os.path.join(os.path.dirname(__file__), "icons", "icon.png")
 _RUN_LABEL = "Create OSM layers & export 3D viewer"
 
 # Boundary-shape options (value, label). Values match builder.SHAPE_* and are
