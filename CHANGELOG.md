@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.12.2] - 2026-06-05
+
+- **Smarter roof shapes:** buildings no longer default to a pyramid roof on every block. House-like OSM building types (`house`, `detached`, `terrace`, `bungalow`, …) up to 3 levels get a pitched **gable** roof; everything else (apartments, commercial, industrial, civic, large blocks) gets a **flat** roof, which reads far more like a real city. An explicit OSM `roof_shape` tag, or a per-function roof shape set in the Style dock, still wins.
+
 ## [0.12.1] - 2026-06-05
 
 - **Road widths by class:** roads are now drawn at a width matched to their OSM `highway` class (motorway/trunk/primary wide → service/track/footway narrow) instead of a flat 8 m on every road. The "Road width" control acts as a global multiplier (8 m = 1.0×). Roads with an explicit OSM `width` tag now use that real carriageway width (it was previously ignored because the manifest had no `road_width_field` mapping). Pedestrians follow the sidewalk edge of the actual road they walk along, so they no longer float on wide roads or stand in the carriageway on narrow ones.

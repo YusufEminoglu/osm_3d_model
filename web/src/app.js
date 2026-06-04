@@ -7311,6 +7311,18 @@ function getFunctionIcon(fn) {
   return '🏢';
 }
 
+// House-like OSM building types read better with a pitched (gable) roof; every
+// other building (apartments, commercial, industrial, civic and large blocks)
+// defaults to a flat roof, which looks far more urban than a pyramid on every
+// block. Used only as a smart default — an explicit roof_shape tag or a
+// user-customised per-function roof shape always wins.
+const PITCHED_ROOF_BUILDINGS = /^(house|detached|semidetached_house|semi_detached|terrace|bungalow|cabin|hut|farm|farmhouse|villa|chalet)$/;
+
+function roofShapeForBuilding(props, levels) {
+  const bt = String(propFirst(props, ['building', 'planx_function', 'function']) || '').toLowerCase();
+  return (PITCHED_ROOF_BUILDINGS.test(bt) && (Number(levels) || 0) <= 3) ? 'Gable' : 'Flat';
+}
+
 async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
   clearGroup(buildingGroup);
   buildingFunctionMaterials.clear();
@@ -7353,7 +7365,16 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
     const featureFacade = resolveFacadeForLevels(selectedFacade, levels);
     const featureFacadeScale = Math.max(1, Math.min(8, parseNumberProp(props, ['planx_facade_scale', 'facade_scale', 'cephe_olcegi'], fnStyle.facadeScale)));
     const featureRoofTexture = presetValue(propFirst(props, ['planx_roof_texture', 'roof_texture', 'cati_doku', 'cati_texture']), textureSets.roof, fnStyle.roofTexture);
-    const featureRoofShape = roofShapeValue(propFirst(props, ['planx_roof_shape', 'roof_shape', 'cati_tipi']), fnStyle.roofShape);
+    // Resolve the roof shape: an explicit OSM/PlanX roof tag wins; otherwise, if
+    // the per-function roof shape is still the global default (user hasn't picked
+    // one in the Style dock), use a smart per-building default — gable on houses,
+    // flat on everything else — instead of a pyramid on every building.
+    const globalRoofDefault = roofShapeValue(settings.roofShape, 'Pyramid');
+    const explicitRoof = propFirst(props, ['planx_roof_shape', 'roof_shape', 'cati_tipi']);
+    const smartRoof = (fnStyle.roofShape === globalRoofDefault)
+      ? roofShapeForBuilding(props, levels)
+      : fnStyle.roofShape;
+    const featureRoofShape = roofShapeValue(explicitRoof || smartRoof, fnStyle.roofShape);
     const featureRoofHeight = parseNumberProp(props, ['planx_roof_height', 'roof_height', 'cati_yuksekligi', 'çatı_yüksekliği'], fnStyle.roofHeight);
     const featureRoofColor = normalizeHexColor(propFirst(props, ['planx_roof_color', 'roof_color', 'cati_renk']), '#ffffff');
 
