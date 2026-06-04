@@ -95,6 +95,7 @@ class Osm3dModelDialog(QDialog):
     runRequested = pyqtSignal(dict)
     reopenRequested = pyqtSignal()
     openFolderRequested = pyqtSignal()
+    clearCacheRequested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -281,6 +282,18 @@ class Osm3dModelDialog(QDialog):
         bm_hint.setWordWrap(True)
         bm_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
         adv.addWidget(bm_hint)
+
+        self.clear_cache_button = QPushButton("Clear OSM download cache")
+        self.clear_cache_button.setObjectName("ghostButton")
+        self.clear_cache_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_cache_button.clicked.connect(self.clearCacheRequested.emit)
+        adv.addWidget(self.clear_cache_button)
+        cache_hint = QLabel("OSM responses are cached on disk for a week so re-running the same "
+                            "area skips the download. Clear it to force a fresh fetch.")
+        cache_hint.setWordWrap(True)
+        cache_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
+        adv.addWidget(cache_hint)
+
         self.adv_container.setVisible(False)
         lay.addWidget(self.adv_container)
         return card

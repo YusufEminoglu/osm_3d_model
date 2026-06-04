@@ -461,7 +461,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.11.3",
+        "version": "0.12.0",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -505,7 +505,8 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
                      web_root: str, dem_layer=None, basemap_layer=None,
                      max_ha: float = MAX_STUDY_HA_DEFAULT,
                      add_to_project: bool = True, shape: str = SHAPE_CIRCLE,
-                     theme: str = DEFAULT_THEME, feedback=None) -> dict:
+                     theme: str = DEFAULT_THEME, use_cache: bool = True,
+                     feedback=None) -> dict:
     if source_geom is None or source_geom.isEmpty():
         raise BuildError("No area selected. Draw/select a polygon or zoom to the area first.")
 
@@ -539,7 +540,7 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         feedback(f"Study area: {shape_desc} ({area_ha} ha) +{BASE_BUFFER_M:.0f} m base, EPSG:{epsg_dest}.")
 
     # OSM download + clip (to the inner boundary, not the buffered base).
-    osm = download_osm_for_area(clip_utm, epsg_dest, feedback=feedback)
+    osm = download_osm_for_area(clip_utm, epsg_dest, feedback=feedback, use_cache=use_cache)
     # Roads are used as raw OSM ways (single-part LineStrings). The earlier
     # snap+dissolve "connect_roads" step was removed: it produced MultiLineString
     # geometries and did not actually improve the network, so the native OSM

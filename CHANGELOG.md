@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12.0] - 2026-06-05
+
+- **OSM download cache (new):** Overpass responses are cached on disk for a week, keyed by the exact area query. Re-running the same area — or just nudging a shape/theme option — reuses the cached data and skips the network entirely, which dodges the public Overpass API's frequent HTTP-429 rate limiting. A new "Clear OSM download cache" button in the dialog's Advanced section forces a fresh fetch.
+- **Relation (multipolygon) coverage:** buildings, parks, forests and other green areas mapped as OSM *relations* are now imported. Previously only simple closed ways were read, so large building complexes with inner courtyards and relation-mapped parks/woods were silently dropped.
+
 ## [0.11.3] - 2026-06-04
 
 - Reduced the model base buffer from 10 m to 5 m: the base/island now extends 5 m beyond the study boundary (was 10 m), for a tighter platform margin around the city.

@@ -49,6 +49,7 @@ class Osm3dModelPlugin:
             self.dialog.runRequested.connect(self.run_export)
             self.dialog.reopenRequested.connect(self.reopen_viewer)
             self.dialog.openFolderRequested.connect(self._open_data_folder)
+            self.dialog.clearCacheRequested.connect(self._clear_osm_cache)
             self.dialog.area_probe = self._area_summary
         self.dialog.show()
         self.dialog.raise_()
@@ -164,6 +165,17 @@ class Osm3dModelPlugin:
             os.startfile(folder)  # noqa: B606 - intended Windows shell open
         except Exception:
             webbrowser.open("file://" + folder.replace("\\", "/"))
+
+    def _clear_osm_cache(self):
+        from .osm_download import clear_cache
+
+        removed, freed = clear_cache()
+        mb = freed / (1024 * 1024)
+        msg = (f"Cleared {removed} cached OSM file(s), freed {mb:.1f} MB."
+               if removed else "OSM cache was already empty.")
+        if self.dialog:
+            self.dialog.set_status(msg)
+        self.iface.messageBar().pushInfo("3D OSM Model", msg)
 
     def _fail(self, text: str):
         if self.dialog:

@@ -8,8 +8,13 @@ data, matching the viewer's expectation.
 """
 from __future__ import annotations
 
+import glob
+import hashlib
 import json
 import math
+import os
+import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -36,12 +41,73 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.11.3 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.12.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
+
+# Disk cache for Overpass responses. The public API is frequently rate-limited
+# (HTTP 429); caching the exact-query JSON means re-running on the same area (or
+# nudging a layer/shape option) doesn't hit the network again within the TTL.
+CACHE_TTL_S = 7 * 24 * 3600  # one week
 
 
 class OsmDownloadError(RuntimeError):
     pass
+
+
+# --------------------------------------------------------------------------
+# Overpass response cache (on disk, keyed by the exact query)
+# --------------------------------------------------------------------------
+def _cache_dir() -> str:
+    path = os.path.join(tempfile.gettempdir(), "osm_3d_model_cache")
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError:
+        pass
+    return path
+
+
+def _cache_path(query: str) -> str:
+    # SHA-256 purely as a filename-safe digest of the query (not security).
+    digest = hashlib.sha256(query.encode("utf-8")).hexdigest()[:40]
+    return os.path.join(_cache_dir(), f"{digest}.json")
+
+
+def _read_cache(query: str):
+    """Return cached JSON for this exact query if present and fresh, else None."""
+    path = _cache_path(query)
+    try:
+        if not os.path.isfile(path):
+            return None
+        if time.time() - os.path.getmtime(path) > CACHE_TTL_S:
+            return None
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
+def _write_cache(query: str, payload: dict) -> None:
+    try:
+        with open(_cache_path(query), "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+    except (OSError, TypeError, ValueError):
+        pass
+
+
+def clear_cache():
+    """Delete all cached Overpass responses. Returns (files_removed, bytes_freed)."""
+    removed, freed = 0, 0
+    try:
+        for path in glob.glob(os.path.join(_cache_dir(), "*.json")):
+            try:
+                freed += os.path.getsize(path)
+                os.remove(path)
+                removed += 1
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return removed, freed
 
 
 # --------------------------------------------------------------------------
@@ -66,8 +132,11 @@ def _overpass_query(min_lat: float, min_lon: float, max_lat: float, max_lon: flo
   way["highway"]({bbox});
   way["waterway"~"river|stream|canal|drain|ditch"]({bbox});
   way["leisure"~"park|garden|playground|pitch"]({bbox});
+  relation["leisure"~"park|garden|playground|pitch"]({bbox});
   way["landuse"~"forest|grass|meadow|recreation_ground|cemetery"]({bbox});
+  relation["landuse"~"forest|grass|meadow|recreation_ground|cemetery"]({bbox});
   way["natural"~"wood|scrub"]({bbox});
+  relation["natural"~"wood|scrub"]({bbox});
   node["natural"="tree"]({bbox});
   node["highway"="bus_stop"]({bbox});
   node["amenity"="bench"]({bbox});
@@ -105,9 +174,22 @@ def _fetch_one(endpoint: str, query: str, timeout_s: int) -> dict:
 
 
 def fetch_overpass(min_lat: float, min_lon: float, max_lat: float, max_lon: float,
-                   timeout_s: int = DEFAULT_TIMEOUT_S, feedback=None) -> dict:
-    """Query Overpass, falling back across mirrors until one answers with JSON."""
+                   timeout_s: int = DEFAULT_TIMEOUT_S, feedback=None,
+                   use_cache: bool = True) -> dict:
+    """Query Overpass, falling back across mirrors until one answers with JSON.
+
+    When ``use_cache`` is set, a fresh on-disk response for the exact same query
+    is reused (no network), and successful network responses are written back to
+    the cache. This dodges the public API's frequent HTTP-429 rate limiting on
+    repeated runs of the same area.
+    """
     query = _overpass_query(min_lat, min_lon, max_lat, max_lon)
+    if use_cache:
+        cached = _read_cache(query)
+        if cached is not None:
+            if feedback:
+                feedback("Using cached OSM (no download) ...")
+            return cached
     last_error = None
     for index, endpoint in enumerate(OVERPASS_ENDPOINTS):
         host = urllib.parse.urlparse(endpoint).netloc or endpoint
@@ -115,7 +197,10 @@ def fetch_overpass(min_lat: float, min_lon: float, max_lat: float, max_lon: floa
             prefix = "Querying" if index == 0 else f"Mirror {index} —"
             feedback(f"{prefix} {host} ...")
         try:
-            return _fetch_one(endpoint, query, timeout_s)
+            payload = _fetch_one(endpoint, query, timeout_s)
+            if use_cache:
+                _write_cache(query, payload)
+            return payload
         except OsmDownloadError as exc:
             last_error = exc
             if feedback and index + 1 < len(OVERPASS_ENDPOINTS):
@@ -218,6 +303,56 @@ def _way_polygon(element) -> QgsGeometry | None:
     return QgsGeometry.fromPolygonXY([points])
 
 
+def _ring_from_geometry(geometry) -> QgsGeometry | None:
+    """Build a closed-ring polygon from an Overpass member/way ``geometry`` list."""
+    pts = [QgsPointXY(pt["lon"], pt["lat"])
+           for pt in (geometry or []) if "lon" in pt and "lat" in pt]
+    if len(pts) < 3:
+        return None
+    if pts[0] != pts[-1]:
+        pts.append(pts[0])
+    ring = QgsGeometry.fromPolygonXY([pts])
+    return ring if ring and not ring.isEmpty() else None
+
+
+def _relation_multipolygon(element) -> QgsGeometry | None:
+    """Assemble a (multi)polygon from a relation's outer/inner member ways.
+
+    Overpass ``out geom`` returns each member way with its own ``geometry``. We
+    union the outer rings and subtract the inner rings (holes). Returns None when
+    no usable outer ring exists, so callers fall back to skipping the feature.
+    """
+    outers, inners = [], []
+    for member in (element.get("members") or []):
+        if member.get("type") != "way":
+            continue
+        ring = _ring_from_geometry(member.get("geometry"))
+        if ring is None:
+            continue
+        (inners if (member.get("role") or "").lower() == "inner" else outers).append(ring)
+    if not outers:
+        return None
+    poly = outers[0]
+    for extra in outers[1:]:
+        merged = poly.combine(extra)
+        if merged and not merged.isEmpty():
+            poly = merged
+    for hole in inners:
+        cut = poly.difference(hole)
+        if cut and not cut.isEmpty():
+            poly = cut
+    if poly is None or poly.isEmpty():
+        return None
+    return poly
+
+
+def _element_polygon(element) -> QgsGeometry | None:
+    """Polygon for a building/green element: relation -> multipolygon, else ring."""
+    if element.get("type") == "relation":
+        return _relation_multipolygon(element)
+    return _way_polygon(element)
+
+
 def _way_polyline(element) -> QgsGeometry | None:
     geometry = element.get("geometry") or []
     if len(geometry) < 2:
@@ -252,7 +387,8 @@ def save_layer_to_geojson(layer: QgsVectorLayer, path) -> None:
 # --------------------------------------------------------------------------
 # Main download + clip
 # --------------------------------------------------------------------------
-def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None) -> dict:
+def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
+                          use_cache: bool = True) -> dict:
     """Fetch OSM for the boundary's bbox, reproject to UTM, clip to the boundary.
 
     ``area_utm`` is the study-boundary polygon (circle, rounded rectangle,
@@ -269,7 +405,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None) 
     min_lon, min_lat = wgs_rect.xMinimum(), wgs_rect.yMinimum()
     max_lon, max_lat = wgs_rect.xMaximum(), wgs_rect.yMaximum()
 
-    payload = fetch_overpass(min_lat, min_lon, max_lat, max_lon, feedback=feedback)
+    payload = fetch_overpass(min_lat, min_lon, max_lat, max_lon, feedback=feedback, use_cache=use_cache)
     elements = payload.get("elements") or []
     if not elements:
         raise OsmDownloadError("Overpass returned 0 elements for this area. Try a different or larger area.")
@@ -402,7 +538,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None) 
             continue
 
         if etype in ("way", "relation") and tags.get("building"):
-            base = _way_polygon(element)
+            base = _element_polygon(element)
             if not base:
                 continue
             clipped = clip_to_area(base)
@@ -469,8 +605,8 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None) 
             counts["waterlines"] += 1
             continue
 
-        if etype == "way" and (tags.get("leisure") or tags.get("landuse") or tags.get("natural")):
-            base = _way_polygon(element)
+        if etype in ("way", "relation") and (tags.get("leisure") or tags.get("landuse") or tags.get("natural")):
+            base = _element_polygon(element)
             if not base:
                 continue
             clipped = clip_to_area(base)
