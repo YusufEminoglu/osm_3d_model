@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.11.3] - 2026-06-04
+
+- Reduced the model base buffer from 10 m to 5 m: the base/island now extends 5 m beyond the study boundary (was 10 m), for a tighter platform margin around the city.
+
 ## [0.11.2] - 2026-06-03
 
 - Fixed traffic, cyclists and pedestrians moving too slowly (almost stopped) on some machines: their motion was tied to the frame rate, so it slowed whenever the frame rate dipped. Movement is now frame-rate-independent (calibrated to 60 fps), so speed stays consistent. The kerb sidewalks also no longer cast shadows (a flat ground strip casts none anyway), which restores some frame rate.

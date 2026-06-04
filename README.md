@@ -111,7 +111,7 @@ Pick how the study boundary is derived from your map extent or selected polygon,
 | **Rectangle (extent)** | The bounding box, kept tidy — corners are softened just slightly on the base. |
 | **Exact polygon** | The selected polygon used as-is (falls back to the canvas rectangle). |
 
-Whatever shape you choose, the model base extends 10 m beyond the boundary with softly rounded corners, so the city always sits on a small, presentation-ready platform. OSM data stays clipped to the inner boundary; only the platform uses the wider ring.
+Whatever shape you choose, the model base extends 5 m beyond the boundary with softly rounded corners, so the city always sits on a small, presentation-ready platform. OSM data stays clipped to the inner boundary; only the platform uses the wider ring.
 
 ### Easy colour themes
 

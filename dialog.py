@@ -50,7 +50,7 @@ _ICON = os.path.join(os.path.dirname(__file__), "icons", "icon_main.svg")
 _RUN_LABEL = "Create OSM layers & export 3D viewer"
 
 # Boundary-shape options (value, label). Values match builder.SHAPE_* and are
-# persisted in QgsSettings. The model base extends 10 m beyond whichever shape,
+# persisted in QgsSettings. The model base extends 5 m beyond whichever shape,
 # with softly rounded corners.
 SHAPE_OPTIONS = (
     ("circle", "Inscribed circle — largest fit"),
@@ -87,7 +87,7 @@ _SHAPE_TOOLTIP = (
     "• Rectangle (extent) — its bounding box.\n"
     "• Exact polygon / selection — the selected polygon as-is "
     "(falls back to the canvas rectangle).\n"
-    "The model base extends 10 m beyond the boundary with softly rounded corners."
+    "The model base extends 5 m beyond the boundary with softly rounded corners."
 )
 
 
@@ -172,7 +172,7 @@ class Osm3dModelDialog(QDialog):
         title.setObjectName("headerTitle")
         subtitle = QLabel(
             "Pick an area and a boundary shape, download OpenStreetMap, and open it as an "
-            "interactive 3D city. The model sits on a base that extends 10 m beyond the boundary."
+            "interactive 3D city. The model sits on a base that extends 5 m beyond the boundary."
         )
         subtitle.setObjectName("headerSub")
         subtitle.setWordWrap(True)
