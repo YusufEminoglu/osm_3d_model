@@ -461,7 +461,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.12.0",
+        "version": "0.12.1",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -481,6 +481,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
             "building_function_field": "building",
             "landuse_function_field": "landuse",
             "road_hierarchy_field": "highway",
+            "road_width_field": "width",
             "block_category_field": "landuse",
             "waterline_width_field": "width",
             "bike_lane_width_field": "width",

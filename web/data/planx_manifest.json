@@ -1,7 +1,7 @@
 {
   "schema": "planx-3d-city-manifest/v1",
   "plugin": "osm_3d_model",
-  "version": "0.11.3",
+  "version": "0.12.1",
   "colorTheme": "Plugin Tones",
   "mode": "vector",
   "flexibleInputs": true,
@@ -25,6 +25,7 @@
     "building_function_field": "building",
     "landuse_function_field": "landuse",
     "road_hierarchy_field": "highway",
+    "road_width_field": "width",
     "block_category_field": "landuse",
     "waterline_width_field": "width",
     "bike_lane_width_field": "width"

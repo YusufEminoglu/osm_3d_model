@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.12.1] - 2026-06-05
+
+- **Road widths by class:** roads are now drawn at a width matched to their OSM `highway` class (motorway/trunk/primary wide → service/track/footway narrow) instead of a flat 8 m on every road. The "Road width" control acts as a global multiplier (8 m = 1.0×). Roads with an explicit OSM `width` tag now use that real carriageway width (it was previously ignored because the manifest had no `road_width_field` mapping). Pedestrians follow the sidewalk edge of the actual road they walk along, so they no longer float on wide roads or stand in the carriageway on narrow ones.
+
 ## [0.12.0] - 2026-06-05
 
 - **OSM download cache (new):** Overpass responses are cached on disk for a week, keyed by the exact area query. Re-running the same area — or just nudging a shape/theme option — reuses the cached data and skips the network entirely, which dodges the public Overpass API's frequent HTTP-429 rate limiting. A new "Clear OSM download cache" button in the dialog's Advanced section forces a fresh fetch.

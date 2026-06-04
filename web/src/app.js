@@ -5664,17 +5664,35 @@ function removeShadowHeatmap() {
   shadowHeatmapMesh = null;
 }
 
+// Default carriageway surface width (m) per OSM highway class, used when the way
+// has no explicit `width` tag. The global "Road width" control acts as a
+// multiplier (8 m = 1.0×), so widening it scales every class up together — main
+// roads stay wider than service ways / paths instead of every road being 8 m.
+const ROAD_WIDTH_BY_CLASS = {
+  motorway: 14, trunk: 12, primary: 10, secondary: 8.5, tertiary: 7,
+  living_street: 5.5, residential: 6, unclassified: 6, road: 6,
+  pedestrian: 5, service: 4,
+  track: 3.5, footway: 2.5, path: 2.2, cycleway: 2.5, bridleway: 2.2, corridor: 2.2, steps: 2.5
+};
+
+function roadClassOf(feature) {
+  const props = feature?.properties || {};
+  const field = mappedField('road_hierarchy_field') || 'highway';
+  return String(props[field] ?? props.highway ?? '').toLowerCase().replace(/_link$/, '').trim();
+}
+
 function featureRoadWidth(feature) {
   const widthField = mappedField('road_width_field');
   if (widthField && feature?.properties) {
-    const raw = feature.properties[widthField];
-    const value = parseFloat(raw);
+    const value = parseFloat(feature.properties[widthField]);
     if (Number.isFinite(value) && value > 0) {
-      // Right-of-way width minus ~1.5 m sidewalk on each side, clamped to 5-20 m road surface.
-      return Math.max(5, Math.min(20, value - 3));
+      // Explicit OSM carriageway width, clamped to a sane 2.5–22 m surface.
+      return Math.max(2.5, Math.min(22, value));
     }
   }
-  return Math.max(5, Math.min(20, settings.roadWidth));
+  const base = ROAD_WIDTH_BY_CLASS[roadClassOf(feature)];
+  const scale = (Number(settings.roadWidth) || 8) / 8;
+  return Math.max(2.0, Math.min(22, (Number.isFinite(base) ? base : 8) * scale));
 }
 
 // Sidewalk width per OSM road class (m), clamped to a realistic 0.5–2.5 m:
@@ -7829,6 +7847,9 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
       terrainPts.push(tp);
     }
     const curve = new THREE.CatmullRomCurve3(terrainPts, false, 'centripetal');
+    // Carry this road's half-width (+0.3 m kerb gap) so pedestrians keep to the
+    // sidewalk edge of THIS road rather than a flat global offset.
+    curve.roadHalfWidth = featureWidth * 0.5 + 0.3;
     roadCurves.push(curve);
     if (roadAllowsCars(f) && curve.getLength() > 12) vehicleRoadCurves.push(curve);
     const segments = Math.max(24, terrainPts.length * 3);
@@ -8174,7 +8195,8 @@ function buildPedestrianLayer() {
       phase: Math.random() * Math.PI * 2,
       walkAmplitude: 0.45 + Math.random() * 0.15,
       offsetDir: (Math.random() > 0.5 ? 1 : -1),
-      lateralOffset: route.surface === 'path' ? (Math.random() - 0.5) * 0.45 : null
+      lateralOffset: route.surface === 'path' ? (Math.random() - 0.5) * 0.45 : null,
+      roadHalfWidth: route.curve?.roadHalfWidth || null
     });
   }
 }
@@ -9459,7 +9481,7 @@ function animate() {
     const right = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
     const offsetMag = p.surface === 'path'
       ? (p.lateralOffset || 0)
-      : (settings.roadWidth * 0.5 + 0.3) * p.offsetDir;
+      : (p.roadHalfWidth || (settings.roadWidth * 0.5 + 0.3)) * p.offsetDir;
     pos.add(right.multiplyScalar(offsetMag));
 
     const pedY = terrainLocalYAt(pos.x, pos.z) + (p.surface === 'path' ? LAYER.path + 0.10 : LAYER.sidewalk + 0.08);
