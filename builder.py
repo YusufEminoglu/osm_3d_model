@@ -73,6 +73,32 @@ _THEMES = {
         "roadColor": "#46413a", "parkColor": "#8aa05e", "sportColor": "#7a9050",
         "roofTexture": "GermanTile", "assetTheme": "Modern Urban",
     },
+    # Stylised "look" themes (v0.18.0) — scene colours mirror app.js COLOR_THEMES.
+    "Anime": {
+        "islandColor": "#e9f1e4", "terrainOutsideColor": "#eef5ec", "terrainSideColor": "#b9d0c0",
+        "roadColor": "#7d8a96", "parkColor": "#7fc785", "sportColor": "#6fb8a0",
+        "roofTexture": "CeramicLight", "assetTheme": "Coastal Light",
+    },
+    "Cartoon": {
+        "islandColor": "#fbe7c6", "terrainOutsideColor": "#fdf1da", "terrainSideColor": "#d9b98a",
+        "roadColor": "#4a4540", "parkColor": "#5fbf57", "sportColor": "#4fae87",
+        "roofTexture": "TurkishTile", "assetTheme": "Modern Urban",
+    },
+    "Pixar": {
+        "islandColor": "#ecdcc2", "terrainOutsideColor": "#f4ead6", "terrainSideColor": "#c9a981",
+        "roadColor": "#6f655c", "parkColor": "#7bb069", "sportColor": "#6aa085",
+        "roofTexture": "RoofA", "assetTheme": "Mediterranean",
+    },
+    "Futuristic City": {
+        "islandColor": "#2b3038", "terrainOutsideColor": "#2a3340", "terrainSideColor": "#1f2730",
+        "roadColor": "#1a1d24", "parkColor": "#2f9e7e", "sportColor": "#2f8eae",
+        "roofTexture": "SolarRoof", "assetTheme": "Dense Urban",
+    },
+    "Classic Era": {
+        "islandColor": "#d8c8a8", "terrainOutsideColor": "#e4d6b8", "terrainSideColor": "#b89c72",
+        "roadColor": "#6b6052", "parkColor": "#8a9560", "sportColor": "#7a8550",
+        "roofTexture": "TurkishTile", "assetTheme": "Civic Heritage",
+    },
 }
 
 
@@ -461,7 +487,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "0.17.0",
+        "version": "0.18.0",
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),

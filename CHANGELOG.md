@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.18.0] - 2026-06-06
+
+- **Five stylised look themes (final stable release):** the dialog's "Web theme" picker (and the viewer's `COLOR_THEMES` / builder's `_THEMES`) gain five playful palettes beside the five calm ones — **Anime** (bright cel-shaded pastels, light/coastal asset theme, ceramic roofs), **Cartoon** (bold primary buildings on dark roads, terracotta tile), **Pixar** (warm, friendly creams and oranges, Mediterranean assets, clay roofs), **Futuristic City** (dark neon base + cyan/violet glass towers, Dense-Urban assets, solar roofs) and **Classic Era** (vintage sepia stone, Civic-Heritage assets, terracotta tile). Each leans on the light, tintable procedural facades (so the building colour reads through the facade×colour multiply blend) and, like every theme, recolours the **3D content only** — buildings, roads, base/island, greens and roofs — never the viewer toolbar or panels. No schema bump (themes are export-driven; returning users keep their saved theme). This is the **final planned feature release**; the plugin is now considered stable.
+
 ## [0.17.0] - 2026-06-06
 
 - **Per-building colour variation:** every building of a given function used to be drawn in the *exact* same shade, which reads as one flat artificial mass. Each building now gets a small (±7% HSL-lightness) variation, `jitterBuildingColor`, seeded by its own footprint centroid — so it is **deterministic** (the same area always looks identical, cache-safe), preserves hue & saturation (the active **web theme** still reads), and is **free** (wall materials are already created per building, so no extra draw calls or frame-rate cost). A block of housing or offices now reads as many individual buildings.

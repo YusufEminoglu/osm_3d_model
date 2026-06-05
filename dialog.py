@@ -74,6 +74,11 @@ THEME_OPTIONS = (
     ("Teal & Salmon", "Teal + salmon"),
     ("Light Purple & Black", "Light purple + soft black"),
     ("Warm Sand & Slate", "Warm sand + slate"),
+    ("Anime", "Anime — bright cel pastels"),
+    ("Cartoon", "Cartoon — bold primaries"),
+    ("Pixar", "Pixar — warm & friendly"),
+    ("Futuristic City", "Futuristic — neon & glass"),
+    ("Classic Era", "Classic era — vintage sepia"),
 )
 _THEME_TOOLTIP = (
     "Colour palette for the exported 3D city — buildings, roads, the base/island, "

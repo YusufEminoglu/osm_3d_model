@@ -124,6 +124,11 @@ Pick a **Web theme** in the dialog to set the colour palette of the exported 3D 
 | **Teal + salmon** | Deep teal streets against a warm salmon base. |
 | **Light purple + soft black** | Light lavender base with near-black roads. |
 | **Warm sand + slate** | Warm sand platform with slate roofs and roads. |
+| **Anime** | Bright cel-shaded pastels on a light ground. |
+| **Cartoon** | Bold primary colours over dark roads. |
+| **Pixar** | Warm, friendly creams and oranges. |
+| **Futuristic** | Dark neon base with cyan and violet glass towers. |
+| **Classic era** | Vintage sepia stone with terracotta tile roofs. |
 
 The chosen theme travels with the export and is applied automatically when the viewer opens. Re-opening the same export keeps any manual colour edits you made in the Style dock.
 

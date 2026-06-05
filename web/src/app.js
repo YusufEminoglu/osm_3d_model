@@ -1023,6 +1023,39 @@ const COLOR_THEMES = {
     buildings: { resid: '#e3d6b6', educ: '#d8caa2', worship: '#dccfae', commerc: '#d6c9a2', health: '#e0d2b2', sport: '#d3c5a0', green: '#bbf7d0', civic: '#d8cca0', industr: '#c2b48c', default: '#d8cba8' },
     facades: ['MediterraneanStucco', 'CivicStone', 'CoastalWhite', 'UrbanE'],
     roadColor: '#46413a', islandColor: '#e8ddc7', terrainSideColor: '#c2a878', terrainOutsideColor: '#efe7d4', parkColor: '#8aa05e', sportColor: '#7a9050', roofTexture: 'GermanTile', assetTheme: 'Modern Urban'
+  },
+  // Stylised "look" themes (v0.18.0). Like the palettes above they recolour only
+  // the 3D content; each leans on light, tintable procedural facades so the bright
+  // building colours read through the multiply-blend (facadeTex × buildingColor).
+  'Anime': {
+    label: 'Anime — bright cel pastels',
+    buildings: { resid: '#bfe3f0', educ: '#f3c9d6', worship: '#d8cdee', commerc: '#c4ebd6', health: '#f6d9c0', sport: '#c6d4f2', green: '#b6f2c6', civic: '#e6dcef', industr: '#bcccd6', default: '#d3e3ec' },
+    facades: ['CoastalWhite', 'CampusGlass', 'UrbanE', 'MediterraneanStucco'],
+    roadColor: '#7d8a96', islandColor: '#e9f1e4', terrainSideColor: '#b9d0c0', terrainOutsideColor: '#eef5ec', parkColor: '#7fc785', sportColor: '#6fb8a0', roofTexture: 'CeramicLight', assetTheme: 'Coastal Light'
+  },
+  'Cartoon': {
+    label: 'Cartoon — bold primaries',
+    buildings: { resid: '#f2b8b0', educ: '#b9d6f5', worship: '#f4e2a8', commerc: '#f6c98f', health: '#f3b9cf', sport: '#aee0c4', green: '#aef0bf', civic: '#d8c2ee', industr: '#c2cad2', default: '#f0cfa0' },
+    facades: ['CoastalWhite', 'MediterraneanStucco', 'UrbanE', 'CampusGlass'],
+    roadColor: '#4a4540', islandColor: '#fbe7c6', terrainSideColor: '#d9b98a', terrainOutsideColor: '#fdf1da', parkColor: '#5fbf57', sportColor: '#4fae87', roofTexture: 'TurkishTile', assetTheme: 'Modern Urban'
+  },
+  'Pixar': {
+    label: 'Pixar — warm & friendly',
+    buildings: { resid: '#f0d9bf', educ: '#cdd9e8', worship: '#e3d3c0', commerc: '#f2c7a0', health: '#ecd0d2', sport: '#bcd6cf', green: '#c9ecc4', civic: '#ddd0c6', industr: '#c2b9ab', default: '#ead8c0' },
+    facades: ['MediterraneanStucco', 'CoastalWhite', 'CivicStone', 'UrbanE'],
+    roadColor: '#6f655c', islandColor: '#ecdcc2', terrainSideColor: '#c9a981', terrainOutsideColor: '#f4ead6', parkColor: '#7bb069', sportColor: '#6aa085', roofTexture: 'RoofA', assetTheme: 'Mediterranean'
+  },
+  'Futuristic City': {
+    label: 'Futuristic — neon & glass',
+    buildings: { resid: '#9fc7d6', educ: '#a6b8e0', worship: '#b6a6e0', commerc: '#8fd6cf', health: '#c0a6d6', sport: '#8fb0e0', green: '#9fe0c4', civic: '#aab6e0', industr: '#8a96a8', default: '#9fc0d6' },
+    facades: ['CampusGlass', 'UrbanE', 'CoastalWhite', 'CivicStone'],
+    roadColor: '#1a1d24', islandColor: '#2b3038', terrainSideColor: '#1f2730', terrainOutsideColor: '#2a3340', parkColor: '#2f9e7e', sportColor: '#2f8eae', roofTexture: 'SolarRoof', assetTheme: 'Dense Urban'
+  },
+  'Classic Era': {
+    label: 'Classic era — vintage sepia',
+    buildings: { resid: '#cdb89a', educ: '#c3b194', worship: '#d2c0a0', commerc: '#c0ac8c', health: '#cdbca0', sport: '#b8a888', green: '#b9c79a', civic: '#c8b694', industr: '#ab9c80', default: '#c4b292' },
+    facades: ['CivicStone', 'MediterraneanStucco', 'CoastalWhite', 'UrbanE'],
+    roadColor: '#6b6052', islandColor: '#d8c8a8', terrainSideColor: '#b89c72', terrainOutsideColor: '#e4d6b8', parkColor: '#8a9560', sportColor: '#7a8550', roofTexture: 'TurkishTile', assetTheme: 'Civic Heritage'
   }
 };
 
