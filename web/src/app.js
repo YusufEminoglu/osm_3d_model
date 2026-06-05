@@ -4930,6 +4930,12 @@ function defaultBlockCategoryStyle(cat, index = 0) {
   if (c.includes('PARKING')) {
     return { color: '#73787e', texture: 'CivicGravel' };
   }
+  // Paved public squares/plazas (pedestrian/footway areas, town squares, markets) —
+  // a light stone pavement, distinct from the darker asphalt of car parks. Caught
+  // before the green PARK rule for the same substring reason as parking.
+  if (c.includes('PEDESTRIAN') || c.includes('PLAZA') || c.includes('SQUARE') || c.includes('MARKET')) {
+    return { color: '#bdb8b0', texture: 'CivicGravel' };
+  }
   if (c.includes('GRASS') || c.includes('MEADOW') || c.includes('FOREST') || c.includes('WOOD') || c.includes('RECREATION') || c.includes('CEMETERY') || c.includes('SCRUB') || c.includes('GARDEN') || c.includes('ORCHARD') || c.includes('VINEYARD') || c.includes('FARMLAND') || c.includes('ALLOTMENT') || c.includes('HEATH') || c.includes('NATURE') || c.includes('GOLF') || c.includes('COMMON')) {
     return { color: '#5e9e3e', texture: 'ParkGreen' };
   }

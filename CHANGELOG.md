@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.16.0] - 2026-06-06
+
+- **Pedestrian squares & plazas:** pedestrian/footway *areas* (`highway=pedestrian`/`footway` with `area=yes`), town squares (`place=square`) and marketplaces are now drawn as flat paved **stone** ground (a new `pedestrian` block style, lighter than the asphalt of car parks). Previously a pedestrian area fell through to the road branch and was drawn as a thin **ring tracing its outline** instead of a filled square — a real correctness fix, not just new coverage. An ordinary `highway=pedestrian` way *without* `area=yes` is a pedestrian street and still renders as a road. Verified by the node `defaultBlockCategoryStyle` harness (pedestrian/plaza/square/marketplace → stone, never green or a road) and the qgis-stubbed routing test (a pedestrian *area* → blocks, a pedestrian *street* → roads).
+
 ## [0.15.0] - 2026-06-05
 
 - **Car parks:** OSM `amenity=parking` areas are now downloaded and drawn as flat paved asphalt-grey ground (a new `parking` block style), a common part of real cities that was previously absent. They join the blocks layer as `landuse=parking`; the viewer checks `PARKING` **before** the green `PARK` rule (since `"PARKING".includes("PARK")`) so a car park never renders as a green park.

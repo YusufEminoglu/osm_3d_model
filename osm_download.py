@@ -42,7 +42,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.15.0 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.16.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 # Disk cache for Overpass responses. The public API is frequently rate-limited
@@ -138,8 +138,10 @@ def _overpass_query(min_lat: float, min_lon: float, max_lat: float, max_lon: flo
   relation["landuse"~"forest|grass|meadow|recreation_ground|cemetery|reservoir|basin|village_green|orchard|vineyard|farmland|allotments|greenfield"]({bbox});
   way["natural"~"wood|scrub|water|grassland|heath"]({bbox});
   relation["natural"~"wood|scrub|water|grassland|heath"]({bbox});
-  way["amenity"="parking"]({bbox});
-  relation["amenity"="parking"]({bbox});
+  way["amenity"~"parking|marketplace"]({bbox});
+  relation["amenity"~"parking|marketplace"]({bbox});
+  way["place"="square"]({bbox});
+  relation["place"="square"]({bbox});
   node["natural"="tree"]({bbox});
   node["highway"="bus_stop"]({bbox});
   node["amenity"="bench"]({bbox});
@@ -306,6 +308,20 @@ def _is_water_area(tags: dict) -> bool:
     if tags.get("landuse") in ("reservoir", "basin"):
         return True
     return bool((tags.get("water") or "").strip())
+
+
+def _is_paved_area(tags: dict) -> bool:
+    """True for an OSM polygon that should render as a paved public square/plaza.
+
+    A pedestrian or footway *area* (``area=yes``), a town/market square
+    (``place=square``) or a marketplace. A plain ``highway=pedestrian`` way with no
+    ``area=yes`` is a pedestrian *street* and stays a road, not a plaza.
+    """
+    if tags.get("highway") in ("pedestrian", "footway", "living_street") and tags.get("area") == "yes":
+        return True
+    if tags.get("place") == "square":
+        return True
+    return tags.get("amenity") == "marketplace"
 
 
 # Tree scatter: forests, woods and parks are flat green polygons in the viewer, and
@@ -555,8 +571,9 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
 
     counts = {
         "buildings": 0, "roads": 0, "bikelanes": 0, "greens": 0, "trees": 0,
-        "trees_scattered": 0, "parking": 0, "waterlines": 0, "waterareas": 0,
-        "busstops": 0, "benches": 0, "lights": 0, "trashbins": 0, "skipped": 0,
+        "trees_scattered": 0, "parking": 0, "plazas": 0, "waterlines": 0,
+        "waterareas": 0, "busstops": 0, "benches": 0, "lights": 0,
+        "trashbins": 0, "skipped": 0,
     }
 
     def clip_to_area(geom_wgs: QgsGeometry):
@@ -689,6 +706,25 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             feat.setAttributes([str(element.get("id", "")), "", "parking", "", tags.get("name", "")])
             g_pr.addFeatures([feat])
             counts["parking"] += 1
+            continue
+
+        # Paved public squares/plazas (pedestrian or footway areas, town squares,
+        # marketplaces). Stored as landuse='pedestrian' so the viewer paves them.
+        # Must run before the highway branch, else a pedestrian *area* is drawn as a
+        # ring-shaped road tracing its outline instead of a filled square.
+        if etype in ("way", "relation") and _is_paved_area(tags):
+            base = _element_polygon(element)
+            if not base:
+                continue
+            clipped = clip_to_area(base)
+            if clipped is None:
+                counts["skipped"] += 1
+                continue
+            feat = QgsFeature()
+            feat.setGeometry(clipped)
+            feat.setAttributes([str(element.get("id", "")), "", "pedestrian", "", tags.get("name", "")])
+            g_pr.addFeatures([feat])
+            counts["plazas"] += 1
             continue
 
         if etype == "way" and tags.get("highway"):

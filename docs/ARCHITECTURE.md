@@ -27,7 +27,7 @@ The viewer expects data in `web/data/yerlesim/` after export. The bundled sample
 | `myroads.geojson` | OSM roads, excluding dedicated cycleways. |
 | `mybikelanes.geojson` | OSM `highway=cycleway` features as bike-lane strips. |
 | `mywaterlines.geojson` | Linear rivers, streams, canals, drains, and ditches. |
-| `myblocks.geojson` | Greens, parks, landuse, natural, and leisure polygons. Water areas (lakes, ponds, riverbanks, reservoirs, bays) are included here normalized to `natural=water` (drawn blue), and car parks as `landuse=parking` (drawn paved grey), so the viewer's block styling renders each correctly. |
+| `myblocks.geojson` | Greens, parks, landuse, natural, and leisure polygons. Water areas (lakes, ponds, riverbanks, reservoirs, bays) are included here normalized to `natural=water` (drawn blue), car parks as `landuse=parking` (paved asphalt grey), and pedestrian squares/plazas as `landuse=pedestrian` (paved stone), so the viewer's block styling renders each correctly. |
 | `mytrees.geojson` | OSM tree nodes, plus procedural trees scattered inside wooded greens (forest, wood, park, …) so they don't render bald. Scatter is capped and deterministic per polygon. |
 | `mybusstops.geojson` | Bus stops and public transport platform points. |
 | `mybenches.geojson` | Bench points. |

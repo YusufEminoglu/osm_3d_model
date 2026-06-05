@@ -38,7 +38,7 @@ The plugin keeps the workflow deliberately simple:
 
 1. Pick the current map extent or selected polygon feature in QGIS.
 2. Choose a boundary shape — inscribed circle, rounded rectangle, rectangle, or the exact polygon — and the plugin caps the request size.
-3. It downloads OSM buildings, roads, cycleways, waterways, water areas (lakes, ponds, riverbanks), greens, car parks, trees, bus stops, benches, lamps, and bins.
+3. It downloads OSM buildings, roads, cycleways, waterways, water areas (lakes, ponds, riverbanks), greens, car parks, pedestrian squares, trees, bus stops, benches, lamps, and bins.
 4. It exports native-tag GeoJSON layers plus a manifest.
 5. It opens a local browser viewer powered by the PlanX 3D City engine.
 
@@ -151,6 +151,7 @@ The viewer renders:
 - Water areas (lakes, ponds, reservoirs, riverbanks, bays) as flat blue water surfaces.
 - Parks, woods and forests planted with scattered procedural trees (capped for performance) so green areas read as wooded.
 - Car parks (`amenity=parking`) as flat paved asphalt-grey areas.
+- Pedestrian squares and plazas (`highway=pedestrian`/`footway` areas, `place=square`, marketplaces) as paved stone ground.
 - Realistic trees, pedestrians, vehicles, bus stops, benches, lamps, and bins.
 - Golden-hour sun, weather, fog, bloom, SSAO, bookmarks, screenshots, measuring, minimap, walk mode, and a live dashboard.
 
