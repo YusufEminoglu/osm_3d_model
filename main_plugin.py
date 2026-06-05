@@ -117,12 +117,20 @@ class Osm3dModelPlugin:
         counts = summary.get("counts", {})
         furniture = (counts.get("busstops", 0) + counts.get("benches", 0)
                      + counts.get("lights", 0) + counts.get("trashbins", 0))
+        waterways = counts.get("waterlines", 0) + counts.get("waterareas", 0)
+        # Shape-aware size: circle reports a radius, rectangle/polygon a footprint.
+        if summary.get("radius_m"):
+            dim = f"r={summary['radius_m']} m"
+        elif summary.get("width_m"):
+            dim = f"{summary['width_m']}×{summary['depth_m']} m"
+        else:
+            dim = summary.get("shape_label", "study area")
         msg = (
             f"Done. {counts.get('buildings', 0)} buildings, {counts.get('roads', 0)} roads, "
             f"{counts.get('bikelanes', 0)} bike lanes, {counts.get('greens', 0)} greens, "
-            f"{counts.get('trees', 0)} trees, {counts.get('waterlines', 0)} waterways, "
+            f"{counts.get('trees', 0)} trees, {waterways} waterways, "
             f"{furniture} furniture | "
-            f"r={summary.get('radius_m')} m ({summary.get('area_ha')} ha). Viewer: {url}"
+            f"{dim} ({summary.get('area_ha')} ha). Viewer: {url}"
         )
         if self.dialog:
             self.dialog.set_status(msg, busy=False)

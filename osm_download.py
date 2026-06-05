@@ -41,7 +41,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.12.3 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.13.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 # Disk cache for Overpass responses. The public API is frequently rate-limited
@@ -130,13 +130,13 @@ def _overpass_query(min_lat: float, min_lon: float, max_lat: float, max_lon: flo
   way["building"]({bbox});
   relation["building"]({bbox});
   way["highway"]({bbox});
-  way["waterway"~"river|stream|canal|drain|ditch"]({bbox});
+  way["waterway"~"river|stream|canal|drain|ditch|riverbank"]({bbox});
   way["leisure"~"park|garden|playground|pitch"]({bbox});
   relation["leisure"~"park|garden|playground|pitch"]({bbox});
-  way["landuse"~"forest|grass|meadow|recreation_ground|cemetery"]({bbox});
-  relation["landuse"~"forest|grass|meadow|recreation_ground|cemetery"]({bbox});
-  way["natural"~"wood|scrub"]({bbox});
-  relation["natural"~"wood|scrub"]({bbox});
+  way["landuse"~"forest|grass|meadow|recreation_ground|cemetery|reservoir|basin"]({bbox});
+  relation["landuse"~"forest|grass|meadow|recreation_ground|cemetery|reservoir|basin"]({bbox});
+  way["natural"~"wood|scrub|water"]({bbox});
+  relation["natural"~"wood|scrub|water"]({bbox});
   node["natural"="tree"]({bbox});
   node["highway"="bus_stop"]({bbox});
   node["amenity"="bench"]({bbox});
@@ -286,6 +286,23 @@ def _waterway_width(tags: dict) -> float:
         if n is not None and n > 0:
             return max(0.5, n)
     return _WATERWAY_WIDTH.get(_waterway_class(tags), 3.0)
+
+
+def _is_water_area(tags: dict) -> bool:
+    """True for an OSM polygon that should render as open water (a filled surface).
+
+    Covers lakes, ponds, basins and bays (``natural=water``), the older
+    ``waterway=riverbank`` river polygons, and ``landuse=reservoir|basin``. These
+    are filled blue water surfaces, unlike the linear ``waterway`` rivers/streams
+    drawn as ribbons by the waterlines layer.
+    """
+    if tags.get("natural") == "water":
+        return True
+    if tags.get("waterway") == "riverbank":
+        return True
+    if tags.get("landuse") in ("reservoir", "basin"):
+        return True
+    return bool((tags.get("water") or "").strip())
 
 
 def _tag(tags: dict, key: str) -> str:
@@ -462,7 +479,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
 
     counts = {
         "buildings": 0, "roads": 0, "bikelanes": 0, "greens": 0, "trees": 0,
-        "waterlines": 0, "busstops": 0, "benches": 0, "lights": 0,
+        "waterlines": 0, "waterareas": 0, "busstops": 0, "benches": 0, "lights": 0,
         "trashbins": 0, "skipped": 0,
     }
 
@@ -557,6 +574,26 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             ])
             b_pr.addFeatures([feat])
             counts["buildings"] += 1
+            continue
+
+        # Water areas (lakes, ponds, riverbanks, reservoirs, bays). Stored in the
+        # greens/blocks layer normalised to natural='water'; the viewer's block
+        # styling already maps a 'water' category to a blue water surface, so no
+        # extra viewer layer is needed. Must run before the linear-waterway and
+        # greens branches so a riverbank polygon is filled, not drawn as a ribbon.
+        if etype in ("way", "relation") and _is_water_area(tags):
+            base = _element_polygon(element)
+            if not base:
+                continue
+            clipped = clip_to_area(base)
+            if clipped is None:
+                counts["skipped"] += 1
+                continue
+            feat = QgsFeature()
+            feat.setGeometry(clipped)
+            feat.setAttributes([str(element.get("id", "")), "", "", "water", tags.get("name", "")])
+            g_pr.addFeatures([feat])
+            counts["waterareas"] += 1
             continue
 
         if etype == "way" and tags.get("highway"):

@@ -425,13 +425,14 @@ class Osm3dModelDialog(QDialog):
         counts = summary.get("counts", {}) or {}
         furniture = (counts.get("busstops", 0) + counts.get("benches", 0)
                      + counts.get("lights", 0) + counts.get("trashbins", 0))
+        waterways = counts.get("waterlines", 0) + counts.get("waterareas", 0)
         self.summary_counts.setText(
             f"<b>{counts.get('buildings', 0)}</b> buildings · "
             f"<b>{counts.get('roads', 0)}</b> roads · "
             f"<b>{counts.get('bikelanes', 0)}</b> bike lanes · "
             f"<b>{counts.get('greens', 0)}</b> greens · "
             f"<b>{counts.get('trees', 0)}</b> trees · "
-            f"<b>{counts.get('waterlines', 0)}</b> waterways · "
+            f"<b>{waterways}</b> waterways · "
             f"<b>{furniture}</b> furniture"
         )
         label = summary.get("shape_label", "Study area")
