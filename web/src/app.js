@@ -7322,6 +7322,25 @@ function getFunctionIcon(fn) {
   return '🏢';
 }
 
+// Subtle, deterministic per-building lightness variation. Without it, every
+// building of a given function is the exact same shade, which reads as artificial
+// uniform massing. Seeded by the building's footprint so it is stable across
+// re-runs / cache hits, preserves hue & saturation (varies only HSL lightness, so
+// the active colour theme still reads), and is free — wall materials are already
+// created per building.
+function jitterBuildingColor(hex, seedKey) {
+  const s = String(seedKey);
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const r = ((h >>> 0) % 10000) / 10000; // stable 0..1
+  const col = new THREE.Color(hex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  col.getHSL(hsl);
+  hsl.l = Math.max(0.04, Math.min(0.96, hsl.l + (r - 0.5) * 0.14)); // ±7% lightness
+  col.setHSL(hsl.h, hsl.s, hsl.l);
+  return '#' + col.getHexString();
+}
+
 // House-like OSM building types read better with a pitched (gable) roof; every
 // other building (apartments, commercial, industrial, civic and large blocks)
 // defaults to a flat roof, which looks far more urban than a pyramid on every
@@ -7454,9 +7473,12 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
       const isNight = (_solarCache.elevationDeg ?? 30) < -3;
       const matRoof = new THREE.MeshStandardMaterial({ map: featureRoofTex, color: new THREE.Color(featureRoofColor), roughness: 0.85, side: THREE.DoubleSide });
       const matHiddenCap = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+      // Vary each building's wall shade a touch (deterministic, seeded by its
+      // footprint centroid) so same-function blocks aren't all identical.
+      const wallColor = jitterBuildingColor(featureColor, `${Math.round(sx)}_${Math.round(sy)}`);
       const matWall = new THREE.MeshStandardMaterial({
         map: facadeTex,
-        color: new THREE.Color(featureColor),
+        color: new THREE.Color(wallColor),
         roughness: 0.72,
         side: THREE.DoubleSide,
         emissive: isNight ? new THREE.Color(0x333322) : new THREE.Color(0x000000),

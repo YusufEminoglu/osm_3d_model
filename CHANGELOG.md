@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.17.0] - 2026-06-06
+
+- **Per-building colour variation:** every building of a given function used to be drawn in the *exact* same shade, which reads as one flat artificial mass. Each building now gets a small (±7% HSL-lightness) variation, `jitterBuildingColor`, seeded by its own footprint centroid — so it is **deterministic** (the same area always looks identical, cache-safe), preserves hue & saturation (the active **web theme** still reads), and is **free** (wall materials are already created per building, so no extra draw calls or frame-rate cost). A block of housing or offices now reads as many individual buildings.
+
 ## [0.16.0] - 2026-06-06
 
 - **Pedestrian squares & plazas:** pedestrian/footway *areas* (`highway=pedestrian`/`footway` with `area=yes`), town squares (`place=square`) and marketplaces are now drawn as flat paved **stone** ground (a new `pedestrian` block style, lighter than the asphalt of car parks). Previously a pedestrian area fell through to the road branch and was drawn as a thin **ring tracing its outline** instead of a filled square — a real correctness fix, not just new coverage. An ordinary `highway=pedestrian` way *without* `area=yes` is a pedestrian street and still renders as a road. Verified by the node `defaultBlockCategoryStyle` harness (pedestrian/plaza/square/marketplace → stone, never green or a road) and the qgis-stubbed routing test (a pedestrian *area* → blocks, a pedestrian *street* → roads).

@@ -144,7 +144,7 @@ The export does not translate data into a local-only schema. The viewer maps OSM
 
 The viewer renders:
 
-- Buildings with function-aware default floors, roof massing, facade textures, and per-function style controls.
+- Buildings with function-aware default floors, roof massing, facade textures, a subtle per-building shade variation, and per-function style controls.
 - Roads as procedural ribbons with lane markings and sidewalks on both sides.
 - Dedicated OSM cycleways as green bike-lane strips with optional cyclists.
 - Waterways as flowing ribbons whose width follows OSM class or width tags.
