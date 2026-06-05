@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.15.0] - 2026-06-05
+
+- **Car parks:** OSM `amenity=parking` areas are now downloaded and drawn as flat paved asphalt-grey ground (a new `parking` block style), a common part of real cities that was previously absent. They join the blocks layer as `landuse=parking`; the viewer checks `PARKING` **before** the green `PARK` rule (since `"PARKING".includes("PARK")`) so a car park never renders as a green park.
+- **More complete green cover:** added orchards, vineyards, farmland, allotments, village greens, greenfield, grassland, heath, nature reserves, golf courses and commons to the download and to the viewer's green block styling, so mixed and edge-of-town areas read correctly instead of being skipped or coloured arbitrarily. Orchards, nature reserves and village greens are also tree-bearing, so they get scattered trees (v0.14.0). Verified with a node harness that evaluates the real `defaultBlockCategoryStyle` (parking → grey, all new types → green) plus the qgis-stubbed routing/scatter test.
+
 ## [0.14.0] - 2026-06-05
 
 - **Planted parks, woods and forests:** wooded green areas (`leisure=park`/`garden`, `landuse=forest`/`grass`/`meadow`/`recreation_ground`/`cemetery`, `natural=wood`/`scrub`) are now planted with procedural trees scattered inside each polygon, at a density that suits the type (dense in forests, sparse on grass). OpenStreetMap usually maps these as plain areas with no individual tree points, so they used to render as flat green patches; they now read as genuinely wooded. The scatter is **globally capped** (≤500 trees) and **deterministic** (seeded by each polygon's footprint with a stable, process-independent integer — not Python's per-process string `hash`), so a re-run or a cache hit produces an identical city. Trees render through the existing instanced tree layer, so there is no viewer change and no measurable frame-rate cost.

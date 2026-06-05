@@ -42,7 +42,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.14.0 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.15.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 # Disk cache for Overpass responses. The public API is frequently rate-limited
@@ -132,12 +132,14 @@ def _overpass_query(min_lat: float, min_lon: float, max_lat: float, max_lon: flo
   relation["building"]({bbox});
   way["highway"]({bbox});
   way["waterway"~"river|stream|canal|drain|ditch|riverbank"]({bbox});
-  way["leisure"~"park|garden|playground|pitch"]({bbox});
-  relation["leisure"~"park|garden|playground|pitch"]({bbox});
-  way["landuse"~"forest|grass|meadow|recreation_ground|cemetery|reservoir|basin"]({bbox});
-  relation["landuse"~"forest|grass|meadow|recreation_ground|cemetery|reservoir|basin"]({bbox});
-  way["natural"~"wood|scrub|water"]({bbox});
-  relation["natural"~"wood|scrub|water"]({bbox});
+  way["leisure"~"park|garden|playground|pitch|nature_reserve|common|dog_park|golf_course"]({bbox});
+  relation["leisure"~"park|garden|playground|pitch|nature_reserve|common|dog_park|golf_course"]({bbox});
+  way["landuse"~"forest|grass|meadow|recreation_ground|cemetery|reservoir|basin|village_green|orchard|vineyard|farmland|allotments|greenfield"]({bbox});
+  relation["landuse"~"forest|grass|meadow|recreation_ground|cemetery|reservoir|basin|village_green|orchard|vineyard|farmland|allotments|greenfield"]({bbox});
+  way["natural"~"wood|scrub|water|grassland|heath"]({bbox});
+  relation["natural"~"wood|scrub|water|grassland|heath"]({bbox});
+  way["amenity"="parking"]({bbox});
+  relation["amenity"="parking"]({bbox});
   node["natural"="tree"]({bbox});
   node["highway"="bus_stop"]({bbox});
   node["amenity"="bench"]({bbox});
@@ -315,9 +317,11 @@ def _is_water_area(tags: dict) -> bool:
 # kind -> (avg m² of polygon per scattered tree, min height m, max height m)
 _TREE_SCATTER = {
     "forest": (75.0, 7.0, 13.0), "wood": (75.0, 7.0, 13.0),
-    "park": (170.0, 5.0, 9.0), "garden": (210.0, 4.0, 7.0),
-    "recreation_ground": (230.0, 4.0, 8.0), "cemetery": (260.0, 5.0, 9.0),
-    "scrub": (280.0, 2.5, 4.5), "grass": (400.0, 3.0, 6.0), "meadow": (440.0, 3.0, 6.0),
+    "orchard": (110.0, 4.0, 7.0),  # regular rows of fruit trees
+    "park": (170.0, 5.0, 9.0), "garden": (210.0, 4.0, 7.0), "nature_reserve": (180.0, 5.0, 10.0),
+    "village_green": (220.0, 4.0, 8.0), "recreation_ground": (230.0, 4.0, 8.0),
+    "cemetery": (260.0, 5.0, 9.0), "scrub": (280.0, 2.5, 4.5), "allotments": (320.0, 3.0, 5.0),
+    "grass": (400.0, 3.0, 6.0), "meadow": (440.0, 3.0, 6.0),
 }
 MAX_SCATTER_TREES = 500       # global cap across all polygons (perf budget)
 MAX_SCATTER_PER_POLY = 130    # so one huge forest can't eat the whole budget
@@ -551,8 +555,8 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
 
     counts = {
         "buildings": 0, "roads": 0, "bikelanes": 0, "greens": 0, "trees": 0,
-        "trees_scattered": 0, "waterlines": 0, "waterareas": 0, "busstops": 0,
-        "benches": 0, "lights": 0, "trashbins": 0, "skipped": 0,
+        "trees_scattered": 0, "parking": 0, "waterlines": 0, "waterareas": 0,
+        "busstops": 0, "benches": 0, "lights": 0, "trashbins": 0, "skipped": 0,
     }
 
     def clip_to_area(geom_wgs: QgsGeometry):
@@ -667,6 +671,24 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             feat.setAttributes([str(element.get("id", "")), "", "", "water", tags.get("name", "")])
             g_pr.addFeatures([feat])
             counts["waterareas"] += 1
+            continue
+
+        # Parking lots: stored in the blocks layer as landuse='parking' so the
+        # viewer draws them as paved asphalt-grey ground (it has a 'parking' block
+        # style). A common, visible part of real cities that was previously absent.
+        if etype in ("way", "relation") and tags.get("amenity") == "parking":
+            base = _element_polygon(element)
+            if not base:
+                continue
+            clipped = clip_to_area(base)
+            if clipped is None:
+                counts["skipped"] += 1
+                continue
+            feat = QgsFeature()
+            feat.setGeometry(clipped)
+            feat.setAttributes([str(element.get("id", "")), "", "parking", "", tags.get("name", "")])
+            g_pr.addFeatures([feat])
+            counts["parking"] += 1
             continue
 
         if etype == "way" and tags.get("highway"):

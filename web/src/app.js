@@ -4925,7 +4925,12 @@ function defaultBlockCategoryStyle(cat, index = 0) {
   const c = cat.toUpperCase();
   let color = ['#f5e4c2', '#bfdbfe', '#fee2e2', '#dcfce7', '#fef3c7', '#ede9fe'][index % 6];
   let texture = 'None';
-  if (c.includes('GRASS') || c.includes('MEADOW') || c.includes('FOREST') || c.includes('WOOD') || c.includes('RECREATION') || c.includes('CEMETERY') || c.includes('SCRUB') || c.includes('GARDEN')) {
+  // Parking first: 'PARKING' contains 'PARK', so it must be caught before the green
+  // PARK rule below, otherwise a car park would render as a green park.
+  if (c.includes('PARKING')) {
+    return { color: '#73787e', texture: 'CivicGravel' };
+  }
+  if (c.includes('GRASS') || c.includes('MEADOW') || c.includes('FOREST') || c.includes('WOOD') || c.includes('RECREATION') || c.includes('CEMETERY') || c.includes('SCRUB') || c.includes('GARDEN') || c.includes('ORCHARD') || c.includes('VINEYARD') || c.includes('FARMLAND') || c.includes('ALLOTMENT') || c.includes('HEATH') || c.includes('NATURE') || c.includes('GOLF') || c.includes('COMMON')) {
     return { color: '#5e9e3e', texture: 'ParkGreen' };
   }
   if (c.includes('PITCH')) {
