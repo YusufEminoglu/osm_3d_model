@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import tempfile
 import time
 import urllib.error
@@ -41,7 +42,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.13.0 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.14.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 # Disk cache for Overpass responses. The public API is frequently rate-limited
@@ -305,6 +306,77 @@ def _is_water_area(tags: dict) -> bool:
     return bool((tags.get("water") or "").strip())
 
 
+# Tree scatter: forests, woods and parks are flat green polygons in the viewer, and
+# the OSM *tree nodes* are sparse, so wooded areas look bald. We scatter procedural
+# tree points inside tree-bearing green polygons so parks and forests read as
+# planted. Trees render as instanced meshes in the viewer, so a few hundred extra
+# is cheap; the scatter is globally capped and deterministic per polygon (seeded by
+# its footprint) so cached re-runs produce an identical city.
+# kind -> (avg m² of polygon per scattered tree, min height m, max height m)
+_TREE_SCATTER = {
+    "forest": (75.0, 7.0, 13.0), "wood": (75.0, 7.0, 13.0),
+    "park": (170.0, 5.0, 9.0), "garden": (210.0, 4.0, 7.0),
+    "recreation_ground": (230.0, 4.0, 8.0), "cemetery": (260.0, 5.0, 9.0),
+    "scrub": (280.0, 2.5, 4.5), "grass": (400.0, 3.0, 6.0), "meadow": (440.0, 3.0, 6.0),
+}
+MAX_SCATTER_TREES = 500       # global cap across all polygons (perf budget)
+MAX_SCATTER_PER_POLY = 130    # so one huge forest can't eat the whole budget
+
+
+def _green_scatter_kind(tags: dict) -> str:
+    """Return the tree-bearing green type for ``tags``, or '' if none should scatter."""
+    for value in (_tag(tags, "landuse"), _tag(tags, "leisure"), _tag(tags, "natural")):
+        if value in _TREE_SCATTER:
+            return value
+    return ""
+
+
+def _scatter_trees(geom_utm: QgsGeometry, kind: str, provider, remaining: int) -> int:
+    """Scatter up to ``remaining`` trees inside ``geom_utm`` (a green polygon, UTM m).
+
+    Rejection-samples points within the polygon's bounding box and keeps those that
+    fall inside it. Deterministic (RNG seeded by the polygon footprint). Returns the
+    number of tree features added to ``provider``.
+    """
+    cfg = _TREE_SCATTER.get(kind)
+    if not cfg or remaining <= 0:
+        return 0
+    spacing_area, h_min, h_max = cfg
+    area = geom_utm.area()
+    if area < spacing_area * 2.0:  # too small to read as wooded
+        return 0
+    target = int(min(MAX_SCATTER_PER_POLY, remaining, area / spacing_area))
+    if target <= 0:
+        return 0
+    bbox = geom_utm.boundingBox()
+    # Stable integer seed (NOT hash() of the kind string — Python randomises string
+    # hashing per process, which would make every QGIS session scatter differently
+    # and break the cached-re-run-is-identical guarantee).
+    kind_code = sum((i + 1) * ord(c) for i, c in enumerate(kind))
+    seed = ((int(round(bbox.xMinimum())) * 73856093)
+            ^ (int(round(bbox.yMinimum())) * 19349663)
+            ^ (int(round(area)) * 83492791)
+            ^ (kind_code * 2654435761)) & 0xFFFFFFFF
+    rng = random.Random(seed)
+    feats = []
+    attempts = 0
+    max_attempts = target * 8
+    while len(feats) < target and attempts < max_attempts:
+        attempts += 1
+        px = rng.uniform(bbox.xMinimum(), bbox.xMaximum())
+        py = rng.uniform(bbox.yMinimum(), bbox.yMaximum())
+        pt = QgsGeometry.fromPointXY(QgsPointXY(px, py))
+        if not geom_utm.contains(pt):
+            continue
+        feat = QgsFeature()
+        feat.setGeometry(pt)
+        feat.setAttributes([f"scatter_{int(px)}_{int(py)}", "tree", round(rng.uniform(h_min, h_max), 1)])
+        feats.append(feat)
+    if feats:
+        provider.addFeatures(feats)
+    return len(feats)
+
+
 def _tag(tags: dict, key: str) -> str:
     """Lower-cased OSM tag value, or '' when absent — emitted verbatim as a column."""
     return (tags.get(key) or "").strip().lower()
@@ -479,8 +551,8 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
 
     counts = {
         "buildings": 0, "roads": 0, "bikelanes": 0, "greens": 0, "trees": 0,
-        "waterlines": 0, "waterareas": 0, "busstops": 0, "benches": 0, "lights": 0,
-        "trashbins": 0, "skipped": 0,
+        "trees_scattered": 0, "waterlines": 0, "waterareas": 0, "busstops": 0,
+        "benches": 0, "lights": 0, "trashbins": 0, "skipped": 0,
     }
 
     def clip_to_area(geom_wgs: QgsGeometry):
@@ -495,6 +567,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             return g if g.within(area_utm) else None
         return clipped
 
+    scattered_trees = 0  # running total of procedurally-scattered park/forest trees
     for element in elements:
         etype = element.get("type")
         tags = element.get("tags") or {}
@@ -659,6 +732,15 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             ])
             g_pr.addFeatures([feat])
             counts["greens"] += 1
+            # Plant trees inside wooded greens (forest/wood/park/...) so they don't
+            # read as bald flat patches. Globally capped; rendered via the normal
+            # (instanced) tree layer, so no viewer change is needed.
+            kind = _green_scatter_kind(tags)
+            if kind:
+                placed = _scatter_trees(clipped, kind, t_pr, MAX_SCATTER_TREES - scattered_trees)
+                scattered_trees += placed
+                counts["trees"] += placed
+                counts["trees_scattered"] += placed
             continue
 
         counts["skipped"] += 1

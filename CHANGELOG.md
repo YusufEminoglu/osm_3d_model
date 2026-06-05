@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.14.0] - 2026-06-05
+
+- **Planted parks, woods and forests:** wooded green areas (`leisure=park`/`garden`, `landuse=forest`/`grass`/`meadow`/`recreation_ground`/`cemetery`, `natural=wood`/`scrub`) are now planted with procedural trees scattered inside each polygon, at a density that suits the type (dense in forests, sparse on grass). OpenStreetMap usually maps these as plain areas with no individual tree points, so they used to render as flat green patches; they now read as genuinely wooded. The scatter is **globally capped** (≤500 trees) and **deterministic** (seeded by each polygon's footprint with a stable, process-independent integer — not Python's per-process string `hash`), so a re-run or a cache hit produces an identical city. Trees render through the existing instanced tree layer, so there is no viewer change and no measurable frame-rate cost.
+
 ## [0.13.0] - 2026-06-05
 
 - **Water areas (new):** lakes, ponds, reservoirs, river polygons (riverbanks) and bays — OSM `natural=water`, `waterway=riverbank`, `landuse=reservoir`/`basin` — are now downloaded and drawn as flat blue water surfaces, clipped to the study boundary. They join the greens/blocks layer normalized to `natural=water`, which the viewer already styles as water, so no viewer change was needed. Previously only **linear** waterways (streams, narrow rivers) were shown, so any river, lake or coastline mapped as an *area* — the common case — was silently dropped.
