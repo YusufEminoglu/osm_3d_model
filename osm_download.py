@@ -29,9 +29,9 @@ from qgis.core import (
     QgsGeometry,
     QgsPointXY,
     QgsProject,
-    QgsRectangle,
     QgsVectorFileWriter,
     QgsVectorLayer,
+    QgsWkbTypes,
 )
 
 # Public Overpass mirrors, tried in order. The main instance is frequently rate
@@ -42,7 +42,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/0.18.0 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = "3D-OSM-Model-QGIS-Plugin/1.0.0 (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 
 # Disk cache for Overpass responses. The public API is frequently rate-limited
@@ -351,6 +351,17 @@ def _green_scatter_kind(tags: dict) -> str:
     return ""
 
 
+def _prepared_engine(geom: QgsGeometry):
+    """A prepared GEOS engine for fast repeated predicates against ``geom``.
+
+    The caller must keep ``geom`` alive for as long as the engine is used (the
+    engine references the underlying geometry, it does not copy it).
+    """
+    engine = QgsGeometry.createGeometryEngine(geom.constGet())
+    engine.prepareGeometry()
+    return engine
+
+
 def _scatter_trees(geom_utm: QgsGeometry, kind: str, provider, remaining: int) -> int:
     """Scatter up to ``remaining`` trees inside ``geom_utm`` (a green polygon, UTM m).
 
@@ -368,6 +379,7 @@ def _scatter_trees(geom_utm: QgsGeometry, kind: str, provider, remaining: int) -
     target = int(min(MAX_SCATTER_PER_POLY, remaining, area / spacing_area))
     if target <= 0:
         return 0
+    poly_engine = _prepared_engine(geom_utm)
     bbox = geom_utm.boundingBox()
     # Stable integer seed (NOT hash() of the kind string — Python randomises string
     # hashing per process, which would make every QGIS session scatter differently
@@ -386,7 +398,7 @@ def _scatter_trees(geom_utm: QgsGeometry, kind: str, provider, remaining: int) -
         px = rng.uniform(bbox.xMinimum(), bbox.xMaximum())
         py = rng.uniform(bbox.yMinimum(), bbox.yMaximum())
         pt = QgsGeometry.fromPointXY(QgsPointXY(px, py))
-        if not geom_utm.contains(pt):
+        if not poly_engine.contains(pt.constGet()):
             continue
         feat = QgsFeature()
         feat.setGeometry(pt)
@@ -517,7 +529,12 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
     payload = fetch_overpass(min_lat, min_lon, max_lat, max_lon, feedback=feedback, use_cache=use_cache)
     elements = payload.get("elements") or []
     if not elements:
-        raise OsmDownloadError("Overpass returned 0 elements for this area. Try a different or larger area.")
+        # Overpass reports server-side problems (query timeout, memory limit) in a
+        # "remark" field while still answering 200 with 0 elements — surface it.
+        remark = str(payload.get("remark") or "").strip()
+        hint = f" Overpass said: {remark}" if remark else ""
+        raise OsmDownloadError(
+            f"Overpass returned 0 elements for this area. Try a different or larger area.{hint}")
 
     # Columns mirror raw OSM tags (no PlanX schema): the viewer maps building_levels
     # -> floors, building -> colour, highway -> hierarchy, etc. via the manifest.
@@ -576,16 +593,30 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
         "trashbins": 0, "skipped": 0,
     }
 
-    def clip_to_area(geom_wgs: QgsGeometry):
+    # Prepared GEOS engine: the boundary is tested against every OSM element, and
+    # preparing it once makes those thousands of intersects/contains calls cheap.
+    area_engine = _prepared_engine(area_utm)
+
+    def clip_to_area(geom_wgs: QgsGeometry, want_type):
+        """Reproject to UTM and clip to the study boundary.
+
+        ``want_type`` (QgsWkbTypes.PolygonGeometry / LineGeometry) guards against
+        GEOS returning a GeometryCollection with point/line slivers when a feature
+        only touches the boundary — only the wanted component is kept, so no
+        invisible degenerate features reach the memory layers or the viewer.
+        """
         g = QgsGeometry(geom_wgs)
         if g.transform(to_utm):
             return None
-        if not g.intersects(area_utm):
+        if not area_engine.intersects(g.constGet()):
             return None
-        clipped = g.intersection(area_utm)
+        clipped = QgsGeometry(area_engine.intersection(g.constGet()))
         if clipped.isEmpty() or not clipped.isGeosValid():
             # Fall back to the original geometry if the intersection is degenerate.
-            return g if g.within(area_utm) else None
+            return g if area_engine.contains(g.constGet()) else None
+        if QgsWkbTypes.geometryType(clipped.wkbType()) != want_type:
+            if not clipped.convertGeometryCollectionToSubclass(want_type) or clipped.isEmpty():
+                return None
         return clipped
 
     scattered_trees = 0  # running total of procedurally-scattered park/forest trees
@@ -598,7 +629,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             if not geom:
                 continue
             g = QgsGeometry(geom)
-            if g.transform(to_utm) or not area_utm.contains(g):
+            if g.transform(to_utm) or not area_engine.contains(g.constGet()):
                 counts["skipped"] += 1
                 continue
             height_val = _parse_osm_number(tags.get("height")) or 6.0
@@ -616,7 +647,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
                 counts["skipped"] += 1
                 continue
             g = QgsGeometry(geom)
-            if g.transform(to_utm) or not area_utm.contains(g):
+            if g.transform(to_utm) or not area_engine.contains(g.constGet()):
                 counts["skipped"] += 1
                 continue
             osm_id = str(element.get("id", ""))
@@ -652,7 +683,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base)
+            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -679,7 +710,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base)
+            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -697,7 +728,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base)
+            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -716,7 +747,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base)
+            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -731,7 +762,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _way_polyline(element)
             if not base:
                 continue
-            clipped = clip_to_area(base)
+            clipped = clip_to_area(base, QgsWkbTypes.LineGeometry)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -757,7 +788,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _way_polyline(element)
             if not base:
                 continue
-            clipped = clip_to_area(base)
+            clipped = clip_to_area(base, QgsWkbTypes.LineGeometry)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -777,7 +808,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base)
+            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
