@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.1] - 2026-06-18
+
+- docs: add CITATION.cff for Zenodo DOI integration
+
 ## [1.0.0] - 2026-06-12
 
 - **Verified 1.0:** the complete pipeline — Overpass fetch with mirror fallback and disk cache, OSM parsing (buildings including multipolygon relations with holes, every road class, cycleways, pedestrian streets vs plaza areas, car parks, water areas and waterway ribbons, greens with deterministic tree scatter, street furniture nodes), all four boundary shapes with the area clamp, GeoJSON export, the viewer manifest, optional DEM warp, optional basemap render and the local viewer server — now runs end-to-end in a **real headless QGIS** on both QGIS 3.44 LTR and QGIS 4.0 as part of the release process (106 checks per version), alongside a GUI check of the dialog (17 checks per version) and headless-Chrome renders of the exported city (fresh profile, returning user with saved settings, and a themed export).
