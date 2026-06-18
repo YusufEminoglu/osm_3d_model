@@ -1,13 +1,13 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 authors:
-  - family-names: "Eminoğlu"
+  - family-names: "Eminoglu"
     given-names: "Yusuf"
     email: "yusuf.eminoglu@deu.edu.tr"
     orcid: "https://orcid.org/0009-0005-6000-2934"
 title: "3D OSM Model"
 version: "1.0.0"
-# doi: "" # Zenodo DOI numarası alındıktan sonra buraya eklenebilir
+# doi: "" # Zenodo DOI numarasi alindiktan sonra buraya eklenebilir
 date-released: "2026-06-18"
 url: "https://github.com/YusufEminoglu/osm_3d_model"
 abstract: "Pick an area, download OpenStreetMap data, and instantly view it as a procedural 3D city in the browser."
