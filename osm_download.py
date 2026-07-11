@@ -14,6 +14,7 @@ import json
 import math
 import os
 import random
+import re
 import tempfile
 import time
 import urllib.error
@@ -34,6 +35,8 @@ from qgis.core import (
     QgsWkbTypes,
 )
 
+from . import PLUGIN_VERSION
+
 # Public Overpass mirrors, tried in order. The main instance is frequently rate
 # limited (HTTP 429) or slow; falling back to mirrors makes the one-button flow
 # far more reliable. The first endpoint that answers with valid JSON wins.
@@ -42,8 +45,9 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-USER_AGENT = "3D-OSM-Model-QGIS-Plugin/1.0.0 (https://github.com/YusufEminoglu/osm_3d_model)"
+USER_AGENT = f"3D-OSM-Model-QGIS-Plugin/{PLUGIN_VERSION} (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
+MAX_RESPONSE_BYTES = 128 * 1024 * 1024
 
 # Disk cache for Overpass responses. The public API is frequently rate-limited
 # (HTTP 429); caching the exact-query JSON means re-running on the same area (or
@@ -80,18 +84,50 @@ def _read_cache(query: str):
         if not os.path.isfile(path):
             return None
         if time.time() - os.path.getmtime(path) > CACHE_TTL_S:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
             return None
         with open(path, "r", encoding="utf-8") as handle:
             return json.load(handle)
     except (OSError, ValueError):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
         return None
 
 
 def _write_cache(query: str, payload: dict) -> None:
+    """Atomically cache a validated Overpass payload."""
+    tmp_path = None
     try:
-        with open(_cache_path(query), "w", encoding="utf-8") as handle:
+        cache_path = _cache_path(query)
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=os.path.dirname(cache_path),
+            prefix=".osm3d-", suffix=".tmp", delete=False,
+        ) as handle:
+            tmp_path = handle.name
             json.dump(payload, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, cache_path)
+        tmp_path = None
     except (OSError, TypeError, ValueError):
+        pass
+    finally:
+        if tmp_path:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+def _discard_cache(query: str) -> None:
+    try:
+        os.remove(_cache_path(query))
+    except OSError:
         pass
 
 
@@ -101,9 +137,10 @@ def clear_cache():
     try:
         for path in glob.glob(os.path.join(_cache_dir(), "*.json")):
             try:
-                freed += os.path.getsize(path)
+                size = os.path.getsize(path)
                 os.remove(path)
                 removed += 1
+                freed += size
             except OSError:
                 pass
     except OSError:
@@ -123,10 +160,12 @@ def utm_epsg_for(lon: float, lat: float) -> int:
 # --------------------------------------------------------------------------
 # Overpass query + fetch
 # --------------------------------------------------------------------------
-def _overpass_query(min_lat: float, min_lon: float, max_lat: float, max_lon: float) -> str:
+def _overpass_query(min_lat: float, min_lon: float, max_lat: float, max_lon: float,
+                    timeout_s: int = DEFAULT_TIMEOUT_S) -> str:
     bbox = f"{min_lat},{min_lon},{max_lat},{max_lon}"
+    query_timeout = max(1, int(timeout_s))
     return f"""
-[out:json][timeout:{DEFAULT_TIMEOUT_S}];
+[out:json][timeout:{query_timeout}];
 (
   way["building"]({bbox});
   relation["building"]({bbox});
@@ -144,6 +183,7 @@ def _overpass_query(min_lat: float, min_lon: float, max_lat: float, max_lon: flo
   relation["place"="square"]({bbox});
   node["natural"="tree"]({bbox});
   node["highway"="bus_stop"]({bbox});
+  node["public_transport"="platform"]({bbox});
   node["amenity"="bench"]({bbox});
   node["highway"="street_lamp"]({bbox});
   node["amenity"="waste_basket"]({bbox});
@@ -164,7 +204,12 @@ def _fetch_one(endpoint: str, query: str, timeout_s: int) -> dict:
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout_s + 10) as resp:  # nosec B310 - scheme validated above.
-            payload = resp.read().decode("utf-8", errors="replace")
+            payload_bytes = resp.read(MAX_RESPONSE_BYTES + 1)
+            if len(payload_bytes) > MAX_RESPONSE_BYTES:
+                raise OsmDownloadError(
+                    f"response exceeded the {MAX_RESPONSE_BYTES // (1024 * 1024)} MB safety limit"
+                )
+            payload = payload_bytes.decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         if exc.code == 429:
             raise OsmDownloadError("rate-limited (HTTP 429)") from exc
@@ -178,9 +223,24 @@ def _fetch_one(endpoint: str, query: str, timeout_s: int) -> dict:
         raise OsmDownloadError(f"non-JSON response ({len(payload)} bytes)") from exc
 
 
+def _validate_overpass_payload(payload) -> dict:
+    """Reject malformed or explicitly incomplete Overpass responses."""
+    if not isinstance(payload, dict):
+        raise OsmDownloadError("invalid JSON schema (expected an object)")
+    remark = str(payload.get("remark") or "").strip()
+    if remark:
+        raise OsmDownloadError(f"Overpass reported an incomplete response: {remark}")
+    elements = payload.get("elements")
+    if not isinstance(elements, list):
+        raise OsmDownloadError("invalid JSON schema (missing elements list)")
+    if any(not isinstance(element, dict) for element in elements):
+        raise OsmDownloadError("invalid JSON schema (non-object element)")
+    return payload
+
+
 def fetch_overpass(min_lat: float, min_lon: float, max_lat: float, max_lon: float,
                    timeout_s: int = DEFAULT_TIMEOUT_S, feedback=None,
-                   use_cache: bool = True) -> dict:
+                   use_cache: bool = True, cancel_check=None) -> dict:
     """Query Overpass, falling back across mirrors until one answers with JSON.
 
     When ``use_cache`` is set, a fresh on-disk response for the exact same query
@@ -188,21 +248,42 @@ def fetch_overpass(min_lat: float, min_lon: float, max_lat: float, max_lon: floa
     the cache. This dodges the public API's frequent HTTP-429 rate limiting on
     repeated runs of the same area.
     """
-    query = _overpass_query(min_lat, min_lon, max_lat, max_lon)
+    try:
+        min_lat, min_lon, max_lat, max_lon = (
+            float(min_lat), float(min_lon), float(max_lat), float(max_lon)
+        )
+    except (TypeError, ValueError) as exc:
+        raise OsmDownloadError("Invalid Overpass bounding-box coordinates.") from exc
+    bbox_values = (min_lat, min_lon, max_lat, max_lon)
+    if not all(math.isfinite(value) for value in bbox_values):
+        raise OsmDownloadError("Invalid Overpass bounding-box coordinates.")
+    if not (-90 <= min_lat < max_lat <= 90 and -180 <= min_lon < max_lon <= 180):
+        raise OsmDownloadError("Invalid or reversed Overpass bounding box.")
+    timeout_s = max(1, int(timeout_s))
+    if cancel_check and cancel_check():
+        raise OsmDownloadError("OSM download cancelled.")
+    query = _overpass_query(min_lat, min_lon, max_lat, max_lon, timeout_s)
     if use_cache:
         cached = _read_cache(query)
         if cached is not None:
-            if feedback:
-                feedback("Using cached OSM (no download) ...")
-            return cached
+            try:
+                cached = _validate_overpass_payload(cached)
+            except OsmDownloadError:
+                _discard_cache(query)
+            else:
+                if feedback:
+                    feedback("Using cached OSM (no download) ...")
+                return cached
     last_error = None
     for index, endpoint in enumerate(OVERPASS_ENDPOINTS):
+        if cancel_check and cancel_check():
+            raise OsmDownloadError("OSM download cancelled.")
         host = urllib.parse.urlparse(endpoint).netloc or endpoint
         if feedback:
             prefix = "Querying" if index == 0 else f"Mirror {index} —"
             feedback(f"{prefix} {host} ...")
         try:
-            payload = _fetch_one(endpoint, query, timeout_s)
+            payload = _validate_overpass_payload(_fetch_one(endpoint, query, timeout_s))
             if use_cache:
                 _write_cache(query, payload)
             return payload
@@ -239,10 +320,36 @@ def _parse_osm_number(value):
     """Parse an OSM numeric tag ('12', '12.5', '12 m', '3;4') -> float or None."""
     if value is None:
         return None
-    try:
-        return float(str(value).split(";")[0].strip().rstrip(" m").strip())
-    except (ValueError, TypeError):
+    text = str(value).split(";", 1)[0].strip().lstrip("~").strip()
+    feet_match = re.fullmatch(
+        r"([-+]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*(?:ft|feet|foot|['′])"
+        r'(?:\s*([-+]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*(?:in|inches?|["″]))?',
+        text,
+        re.IGNORECASE,
+    )
+    if feet_match:
+        feet = float(feet_match.group(1).replace(",", "."))
+        inches = float((feet_match.group(2) or "0").replace(",", "."))
+        return feet * 0.3048 + inches * 0.0254
+    match = re.fullmatch(
+        r"([-+]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*"
+        r"(m|met(?:er|re)s?|cm|km|ft|feet|foot|in|inches?)?",
+        text,
+        re.IGNORECASE,
+    )
+    if not match:
         return None
+    number = float(match.group(1).replace(",", "."))
+    unit = (match.group(2) or "").lower()
+    if unit == "cm":
+        return number / 100.0
+    if unit == "km":
+        return number * 1000.0
+    if unit in {"ft", "feet", "foot"}:
+        return number * 0.3048
+    if unit.startswith("in"):
+        return number * 0.0254
+    return number
 
 
 def _building_levels(tags: dict) -> int:
@@ -262,7 +369,7 @@ def _building_levels(tags: dict) -> int:
         if h is not None and h > 0:
             base = max(1, int(round(h / 3.0)))
     if base is None:
-        return _DEFAULT_FLOORS_BY_OSM.get((tags.get("building") or "").lower(), 3)
+        base = _DEFAULT_FLOORS_BY_OSM.get((tags.get("building") or "").lower(), 3)
     roof = _parse_osm_number(tags.get("roof:levels"))
     if roof:
         base += max(0, int(round(roof)))
@@ -324,6 +431,38 @@ def _is_paved_area(tags: dict) -> bool:
     return tags.get("amenity") == "marketplace"
 
 
+_CYCLEWAY_PRESENT_VALUES = {
+    "lane", "track", "shared_lane", "share_busway", "opposite",
+    "opposite_lane", "opposite_track",
+}
+
+
+def _cycleway_sides(tags: dict) -> list:
+    """Return road-relative bike-lane sides mapped on a non-cycleway highway."""
+    sides = []
+    left = _tag(tags, "cycleway:left")
+    right = _tag(tags, "cycleway:right")
+    both = _tag(tags, "cycleway:both")
+    if left in _CYCLEWAY_PRESENT_VALUES:
+        sides.append("left")
+    if right in _CYCLEWAY_PRESENT_VALUES:
+        sides.append("right")
+    if both in _CYCLEWAY_PRESENT_VALUES:
+        sides.extend(("left", "right"))
+    generic = _tag(tags, "cycleway")
+    if not sides and generic in _CYCLEWAY_PRESENT_VALUES:
+        sides.extend(("right",) if _tag(tags, "oneway") in {"yes", "1", "true"} else ("left", "right"))
+    return list(dict.fromkeys(sides))
+
+
+def _cycleway_width(tags: dict, side: str) -> float:
+    for key in (f"cycleway:{side}:width", "cycleway:width"):
+        width = _parse_osm_number(tags.get(key))
+        if width is not None and width > 0:
+            return max(0.8, min(5.0, width))
+    return 1.8
+
+
 # Tree scatter: forests, woods and parks are flat green polygons in the viewer, and
 # the OSM *tree nodes* are sparse, so wooded areas look bald. We scatter procedural
 # tree points inside tree-bearing green polygons so parks and forests read as
@@ -362,7 +501,7 @@ def _prepared_engine(geom: QgsGeometry):
     return engine
 
 
-def _scatter_trees(geom_utm: QgsGeometry, kind: str, provider, remaining: int) -> int:
+def _scatter_trees(geom_utm: QgsGeometry, kind: str, feature_sink: list, remaining: int) -> int:
     """Scatter up to ``remaining`` trees inside ``geom_utm`` (a green polygon, UTM m).
 
     Rejection-samples points within the polygon's bounding box and keeps those that
@@ -385,10 +524,16 @@ def _scatter_trees(geom_utm: QgsGeometry, kind: str, provider, remaining: int) -
     # hashing per process, which would make every QGIS session scatter differently
     # and break the cached-re-run-is-identical guarantee).
     kind_code = sum((i + 1) * ord(c) for i, c in enumerate(kind))
-    seed = ((int(round(bbox.xMinimum())) * 73856093)
-            ^ (int(round(bbox.yMinimum())) * 19349663)
-            ^ (int(round(area)) * 83492791)
-            ^ (kind_code * 2654435761)) & 0xFFFFFFFF
+    seed_parts = (
+        int(round(bbox.xMinimum())) * 73856093,
+        int(round(bbox.yMinimum())) * 19349663,
+        int(round(area)) * 83492791,
+        kind_code * 2654435761,
+    )
+    seed = seed_parts[0]
+    for part in seed_parts[1:]:
+        seed ^= part
+    seed &= 0xFFFFFFFF
     rng = random.Random(seed)
     feats = []
     attempts = 0
@@ -405,7 +550,7 @@ def _scatter_trees(geom_utm: QgsGeometry, kind: str, provider, remaining: int) -
         feat.setAttributes([f"scatter_{int(px)}_{int(py)}", "tree", round(rng.uniform(h_min, h_max), 1)])
         feats.append(feat)
     if feats:
-        provider.addFeatures(feats)
+        feature_sink.extend(feats)
     return len(feats)
 
 
@@ -415,25 +560,86 @@ def _tag(tags: dict, key: str) -> str:
 
 
 def _way_polygon(element) -> QgsGeometry | None:
-    geometry = element.get("geometry") or []
-    if len(geometry) < 3:
+    points = _member_points(element.get("geometry"))
+    if len(points) < 3:
         return None
-    points = [QgsPointXY(pt["lon"], pt["lat"]) for pt in geometry]
-    if points[0] != points[-1]:
+    if _point_key(points[0]) != _point_key(points[-1]):
         points.append(points[0])
-    return QgsGeometry.fromPolygonXY([points])
+    return _polygon_from_ring(points)
 
 
-def _ring_from_geometry(geometry) -> QgsGeometry | None:
-    """Build a closed-ring polygon from an Overpass member/way ``geometry`` list."""
-    pts = [QgsPointXY(pt["lon"], pt["lat"])
-           for pt in (geometry or []) if "lon" in pt and "lat" in pt]
-    if len(pts) < 3:
+def _member_points(geometry) -> list:
+    """Return finite coordinates for an Overpass relation-member geometry."""
+    points = []
+    for item in geometry or []:
+        if not isinstance(item, dict) or "lon" not in item or "lat" not in item:
+            continue
+        try:
+            lon, lat = float(item["lon"]), float(item["lat"])
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(lon) or not math.isfinite(lat):
+            continue
+        point = QgsPointXY(lon, lat)
+        if not points or _point_key(points[-1]) != _point_key(point):
+            points.append(point)
+    return points
+
+
+def _point_key(point: QgsPointXY) -> tuple:
+    # Overpass repeats shared node coordinates, but JSON float round-tripping can
+    # introduce insignificant noise. Sub-millimetre precision is ample here.
+    return round(point.x(), 11), round(point.y(), 11)
+
+
+def _stitch_member_rings(paths: list) -> list:
+    """Join split/reversed relation member ways into closed coordinate rings."""
+    pending = [list(path) for path in paths if len(path) >= 2]
+    rings = []
+    while pending:
+        chain = pending.pop(0)
+        while _point_key(chain[0]) != _point_key(chain[-1]):
+            start, end = _point_key(chain[0]), _point_key(chain[-1])
+            match_index = None
+            joined = None
+            for index, path in enumerate(pending):
+                path_start, path_end = _point_key(path[0]), _point_key(path[-1])
+                if end == path_start:
+                    joined = chain + path[1:]
+                elif end == path_end:
+                    joined = chain + list(reversed(path[:-1]))
+                elif start == path_end:
+                    joined = path[:-1] + chain
+                elif start == path_start:
+                    joined = list(reversed(path[1:])) + chain
+                else:
+                    continue
+                match_index = index
+                break
+            if match_index is None:
+                break
+            chain = joined
+            pending.pop(match_index)
+        if _point_key(chain[0]) == _point_key(chain[-1]):
+            if len({_point_key(point) for point in chain[:-1]}) >= 3:
+                rings.append(chain)
+    return rings
+
+
+def _polygon_from_ring(points: list) -> QgsGeometry | None:
+    polygon = QgsGeometry.fromPolygonXY([points])
+    if polygon is None or polygon.isEmpty() or polygon.area() <= 0:
         return None
-    if pts[0] != pts[-1]:
-        pts.append(pts[0])
-    ring = QgsGeometry.fromPolygonXY([pts])
-    return ring if ring and not ring.isEmpty() else None
+    if not polygon.isGeosValid():
+        polygon = polygon.makeValid()
+    if polygon is None or polygon.isEmpty():
+        return None
+    if QgsWkbTypes.geometryType(polygon.wkbType()) != QgsWkbTypes.PolygonGeometry:
+        converted = QgsGeometry(polygon)
+        if not converted.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry):
+            return None
+        polygon = converted
+    return polygon if not polygon.isEmpty() and polygon.area() > 0 else None
 
 
 def _relation_multipolygon(element) -> QgsGeometry | None:
@@ -443,27 +649,40 @@ def _relation_multipolygon(element) -> QgsGeometry | None:
     union the outer rings and subtract the inner rings (holes). Returns None when
     no usable outer ring exists, so callers fall back to skipping the feature.
     """
-    outers, inners = [], []
+    outer_paths, inner_paths = [], []
     for member in (element.get("members") or []):
         if member.get("type") != "way":
             continue
-        ring = _ring_from_geometry(member.get("geometry"))
-        if ring is None:
+        role = (member.get("role") or "").lower()
+        if role not in ("", "outer", "inner"):
             continue
-        (inners if (member.get("role") or "").lower() == "inner" else outers).append(ring)
+        points = _member_points(member.get("geometry"))
+        if len(points) < 2:
+            continue
+        (inner_paths if role == "inner" else outer_paths).append(points)
+
+    outers = [polygon for polygon in
+              (_polygon_from_ring(ring) for ring in _stitch_member_rings(outer_paths))
+              if polygon is not None]
     if not outers:
         return None
-    poly = outers[0]
-    for extra in outers[1:]:
-        merged = poly.combine(extra)
-        if merged and not merged.isEmpty():
-            poly = merged
-    for hole in inners:
-        cut = poly.difference(hole)
-        if cut and not cut.isEmpty():
-            poly = cut
+    poly = QgsGeometry.unaryUnion(outers)
+    inners = [polygon for polygon in
+              (_polygon_from_ring(ring) for ring in _stitch_member_rings(inner_paths))
+              if polygon is not None]
+    if inners:
+        holes = QgsGeometry.unaryUnion(inners)
+        if holes is not None and not holes.isEmpty():
+            poly = poly.difference(holes)
+    if poly is None or poly.isEmpty() or poly.area() <= 0:
+        return None
+    if not poly.isGeosValid():
+        poly = poly.makeValid()
     if poly is None or poly.isEmpty():
         return None
+    if QgsWkbTypes.geometryType(poly.wkbType()) != QgsWkbTypes.PolygonGeometry:
+        if not poly.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry):
+            return None
     return poly
 
 
@@ -475,17 +694,22 @@ def _element_polygon(element) -> QgsGeometry | None:
 
 
 def _way_polyline(element) -> QgsGeometry | None:
-    geometry = element.get("geometry") or []
-    if len(geometry) < 2:
+    points = _member_points(element.get("geometry"))
+    if len(points) < 2:
         return None
-    points = [QgsPointXY(pt["lon"], pt["lat"]) for pt in geometry]
     return QgsGeometry.fromPolylineXY(points)
 
 
 def _node_point(element) -> QgsGeometry | None:
     if "lon" not in element or "lat" not in element:
         return None
-    return QgsGeometry.fromPointXY(QgsPointXY(element["lon"], element["lat"]))
+    try:
+        lon, lat = float(element["lon"]), float(element["lat"])
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(lon) or not math.isfinite(lat):
+        return None
+    return QgsGeometry.fromPointXY(QgsPointXY(lon, lat))
 
 
 def _make_layer(name: str, wkb_type: str, epsg_dest: int, fields_def):
@@ -496,20 +720,51 @@ def _make_layer(name: str, wkb_type: str, epsg_dest: int, fields_def):
     return layer, provider
 
 
+def _add_features_batched(provider, features: list, label: str, chunk_size: int = 5000) -> None:
+    """Add features with bounded Python/C++ crossings and verify provider success."""
+    for offset in range(0, len(features), chunk_size):
+        chunk = features[offset:offset + chunk_size]
+        result = provider.addFeatures(chunk)
+        if isinstance(result, tuple):
+            success = bool(result[0])
+            added = result[1] if len(result) > 1 else None
+        else:
+            success, added = bool(result), None
+        if not success or (added is not None and len(added) != len(chunk)):
+            raise OsmDownloadError(f"QGIS could not create all {label} features.")
+
+
 def save_layer_to_geojson(layer: QgsVectorLayer, path) -> None:
+    path = os.fspath(path)
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, exist_ok=True)
     options = QgsVectorFileWriter.SaveVectorOptions()
     options.driverName = "GeoJSON"
     options.fileEncoding = "UTF-8"
-    QgsVectorFileWriter.writeAsVectorFormatV3(
-        layer, str(path), QgsProject.instance().transformContext(), options
+    result = QgsVectorFileWriter.writeAsVectorFormatV3(
+        layer, path, QgsProject.instance().transformContext(), options
     )
+    if isinstance(result, tuple):
+        error = result[0]
+        message = str(result[1]) if len(result) > 1 else ""
+    else:
+        error, message = result, ""
+    if error != QgsVectorFileWriter.NoError:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        detail = f": {message}" if message else ""
+        raise OsmDownloadError(f"QGIS could not write {os.path.basename(path)}{detail}")
+    if not os.path.isfile(path) or os.path.getsize(path) <= 0:
+        raise OsmDownloadError(f"QGIS did not create {os.path.basename(path)}.")
 
 
 # --------------------------------------------------------------------------
 # Main download + clip
 # --------------------------------------------------------------------------
 def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
-                          use_cache: bool = True) -> dict:
+                          use_cache: bool = True, payload: dict | None = None) -> dict:
     """Fetch OSM for the boundary's bbox, reproject to UTM, clip to the boundary.
 
     ``area_utm`` is the study-boundary polygon (circle, rounded rectangle,
@@ -519,14 +774,19 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
     project = QgsProject.instance()
     dst_crs = QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest)
     wgs_crs = QgsCoordinateReferenceSystem.fromEpsgId(4326)
-    to_wgs = QgsCoordinateTransform(dst_crs, wgs_crs, project)
     to_utm = QgsCoordinateTransform(wgs_crs, dst_crs, project)
 
-    wgs_rect = to_wgs.transformBoundingBox(area_utm.boundingBox())
-    min_lon, min_lat = wgs_rect.xMinimum(), wgs_rect.yMinimum()
-    max_lon, max_lat = wgs_rect.xMaximum(), wgs_rect.yMaximum()
-
-    payload = fetch_overpass(min_lat, min_lon, max_lat, max_lon, feedback=feedback, use_cache=use_cache)
+    if payload is None:
+        to_wgs = QgsCoordinateTransform(dst_crs, wgs_crs, project)
+        wgs_rect = to_wgs.transformBoundingBox(area_utm.boundingBox())
+        min_lon, min_lat = wgs_rect.xMinimum(), wgs_rect.yMinimum()
+        max_lon, max_lat = wgs_rect.xMaximum(), wgs_rect.yMaximum()
+        payload = fetch_overpass(
+            min_lat, min_lon, max_lat, max_lon,
+            feedback=feedback, use_cache=use_cache,
+        )
+    else:
+        payload = _validate_overpass_payload(payload)
     elements = payload.get("elements") or []
     if not elements:
         # Overpass reports server-side problems (query timeout, memory limit) in a
@@ -541,7 +801,9 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
     buildings_layer, b_pr = _make_layer(
         "OSM Buildings", "Polygon", epsg_dest,
         [("osm_id", QVariant.String), ("building", QVariant.String),
-         ("building_levels", QVariant.Int), ("height", QVariant.Double), ("name", QVariant.String)],
+         ("building_levels", QVariant.Int), ("height", QVariant.Double),
+         ("roof_shape", QVariant.String), ("roof_height", QVariant.Double),
+         ("name", QVariant.String)],
     )
     roads_layer, r_pr = _make_layer(
         "OSM Roads", "LineString", epsg_dest,
@@ -552,7 +814,8 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
     bikelanes_layer, bl_pr = _make_layer(
         "OSM Bike lanes", "LineString", epsg_dest,
         [("osm_id", QVariant.String), ("highway", QVariant.String),
-         ("width", QVariant.Double), ("name", QVariant.String)],
+         ("width", QVariant.Double), ("name", QVariant.String),
+         ("road_width", QVariant.Double), ("side", QVariant.String)],
     )
     greens_layer, g_pr = _make_layer(
         "OSM Greens", "Polygon", epsg_dest,
@@ -591,6 +854,10 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
         "trees_scattered": 0, "parking": 0, "plazas": 0, "waterlines": 0,
         "waterareas": 0, "busstops": 0, "benches": 0, "lights": 0,
         "trashbins": 0, "skipped": 0,
+    }
+    feature_batches = {
+        "buildings": [], "roads": [], "bikelanes": [], "greens": [], "trees": [],
+        "waterlines": [], "busstops": [], "benches": [], "lights": [], "trashbins": [],
     }
 
     # Prepared GEOS engine: the boundary is tested against every OSM element, and
@@ -636,7 +903,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             feat = QgsFeature()
             feat.setGeometry(g)
             feat.setAttributes([str(element.get("id", "")), "tree", round(height_val, 1)])
-            t_pr.addFeatures([feat])
+            feature_batches["trees"].append(feat)
             counts["trees"] += 1
             continue
 
@@ -655,25 +922,25 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
                 feat = QgsFeature()
                 feat.setGeometry(g)
                 feat.setAttributes([osm_id, _tag(tags, "highway") or "bus_stop", tags.get("name", "")])
-                bs_pr.addFeatures([feat])
+                feature_batches["busstops"].append(feat)
                 counts["busstops"] += 1
             elif tags.get("amenity") == "bench":
                 feat = QgsFeature()
                 feat.setGeometry(g)
                 feat.setAttributes([osm_id, "bench"])
-                be_pr.addFeatures([feat])
+                feature_batches["benches"].append(feat)
                 counts["benches"] += 1
             elif tags.get("highway") == "street_lamp":
                 feat = QgsFeature()
                 feat.setGeometry(g)
                 feat.setAttributes([osm_id, "street_lamp"])
-                li_pr.addFeatures([feat])
+                feature_batches["lights"].append(feat)
                 counts["lights"] += 1
             elif tags.get("amenity") == "waste_basket":
                 feat = QgsFeature()
                 feat.setGeometry(g)
                 feat.setAttributes([osm_id, "waste_basket"])
-                tb_pr.addFeatures([feat])
+                feature_batches["trashbins"].append(feat)
                 counts["trashbins"] += 1
             else:
                 counts["skipped"] += 1
@@ -688,6 +955,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
                 counts["skipped"] += 1
                 continue
             height_val = _parse_osm_number(tags.get("height"))
+            roof_height = _parse_osm_number(tags.get("roof:height"))
             feat = QgsFeature()
             feat.setGeometry(clipped)
             feat.setAttributes([
@@ -695,9 +963,11 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
                 _tag(tags, "building"),
                 _building_levels(tags),
                 round(height_val, 1) if height_val else None,
+                _tag(tags, "roof:shape"),
+                round(roof_height, 1) if roof_height else None,
                 tags.get("name", ""),
             ])
-            b_pr.addFeatures([feat])
+            feature_batches["buildings"].append(feat)
             counts["buildings"] += 1
             continue
 
@@ -717,7 +987,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             feat = QgsFeature()
             feat.setGeometry(clipped)
             feat.setAttributes([str(element.get("id", "")), "", "", "water", tags.get("name", "")])
-            g_pr.addFeatures([feat])
+            feature_batches["greens"].append(feat)
             counts["waterareas"] += 1
             continue
 
@@ -735,7 +1005,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             feat = QgsFeature()
             feat.setGeometry(clipped)
             feat.setAttributes([str(element.get("id", "")), "", "parking", "", tags.get("name", "")])
-            g_pr.addFeatures([feat])
+            feature_batches["greens"].append(feat)
             counts["parking"] += 1
             continue
 
@@ -754,7 +1024,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             feat = QgsFeature()
             feat.setGeometry(clipped)
             feat.setAttributes([str(element.get("id", "")), "", "pedestrian", "", tags.get("name", "")])
-            g_pr.addFeatures([feat])
+            feature_batches["greens"].append(feat)
             counts["plazas"] += 1
             continue
 
@@ -768,20 +1038,37 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
                 continue
             highway = _tag(tags, "highway")
             width = _parse_osm_number(tags.get("width"))
-            feat = QgsFeature()
-            feat.setGeometry(clipped)
-            feat.setAttributes([
-                str(element.get("id", "")), highway,
-                round(width, 1) if width else None, tags.get("name", ""),
-            ])
-            # Dedicated cycle tracks go to the bike-lane layer; everything else
-            # (incl. footways/paths, which the viewer keeps cars off) stays a road.
+            osm_id = str(element.get("id", ""))
+            name = tags.get("name", "")
+            # Dedicated tracks stay out of the motor-road layer. Bike lanes tagged
+            # on an ordinary highway are duplicated into the bike layer with a
+            # road-relative side so the viewer can offset them to the carriageway.
             if highway == "cycleway":
-                bl_pr.addFeatures([feat])
+                feat = QgsFeature()
+                feat.setGeometry(clipped)
+                feat.setAttributes([
+                    osm_id, highway, round(width, 1) if width else None, name,
+                    None, "center",
+                ])
+                feature_batches["bikelanes"].append(feat)
                 counts["bikelanes"] += 1
             else:
-                r_pr.addFeatures([feat])
+                feat = QgsFeature()
+                feat.setGeometry(clipped)
+                feat.setAttributes([
+                    osm_id, highway, round(width, 1) if width else None, name,
+                ])
+                feature_batches["roads"].append(feat)
                 counts["roads"] += 1
+                for side in _cycleway_sides(tags):
+                    bike_feat = QgsFeature()
+                    bike_feat.setGeometry(QgsGeometry(clipped))
+                    bike_feat.setAttributes([
+                        osm_id, highway, round(_cycleway_width(tags, side), 1), name,
+                        round(width, 1) if width else None, side,
+                    ])
+                    feature_batches["bikelanes"].append(bike_feat)
+                    counts["bikelanes"] += 1
             continue
 
         if etype == "way" and tags.get("waterway"):
@@ -800,7 +1087,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
                 round(_waterway_width(tags), 1),
                 tags.get("name", ""),
             ])
-            w_pr.addFeatures([feat])
+            feature_batches["waterlines"].append(feat)
             counts["waterlines"] += 1
             continue
 
@@ -819,20 +1106,32 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
                 _tag(tags, "leisure"), _tag(tags, "landuse"), _tag(tags, "natural"),
                 tags.get("name", ""),
             ])
-            g_pr.addFeatures([feat])
+            feature_batches["greens"].append(feat)
             counts["greens"] += 1
             # Plant trees inside wooded greens (forest/wood/park/...) so they don't
             # read as bald flat patches. Globally capped; rendered via the normal
             # (instanced) tree layer, so no viewer change is needed.
             kind = _green_scatter_kind(tags)
             if kind:
-                placed = _scatter_trees(clipped, kind, t_pr, MAX_SCATTER_TREES - scattered_trees)
+                placed = _scatter_trees(
+                    clipped, kind, feature_batches["trees"],
+                    MAX_SCATTER_TREES - scattered_trees,
+                )
                 scattered_trees += placed
                 counts["trees"] += placed
                 counts["trees_scattered"] += placed
             continue
 
         counts["skipped"] += 1
+
+    for provider, key, label in (
+        (b_pr, "buildings", "building"), (r_pr, "roads", "road"),
+        (bl_pr, "bikelanes", "bike-lane"), (g_pr, "greens", "ground-area"),
+        (t_pr, "trees", "tree"), (w_pr, "waterlines", "waterway"),
+        (bs_pr, "busstops", "bus-stop"), (be_pr, "benches", "bench"),
+        (li_pr, "lights", "street-light"), (tb_pr, "trashbins", "trash-bin"),
+    ):
+        _add_features_batched(provider, feature_batches[key], label)
 
     for layer in (buildings_layer, roads_layer, bikelanes_layer, greens_layer, trees_layer,
                   waterlines_layer, busstops_layer, benches_layer, lights_layer, trashbins_layer):

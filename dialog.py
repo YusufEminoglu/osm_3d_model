@@ -65,10 +65,11 @@ _SHAPE_SHORT = {
     "polygon": "exact polygon",
 }
 
-# Easy colour themes for the 3D web output (value, label). Values match
+# Easy colour themes for the native QGIS layers and 3D web output. Values match
 # builder._THEMES and app.js COLOR_THEMES. These recolour the city content
 # (buildings, roads, base, greens, roofs) — not the viewer's toolbar/panels.
 THEME_OPTIONS = (
+    ("Editorial Paper", "Editorial paper — warm & elegant"),
     ("Plugin Tones", "Plugin tones — salmon & grey"),
     ("Tinted Gray Teal", "Tinted gray + teal"),
     ("Teal & Salmon", "Teal + salmon"),
@@ -80,10 +81,11 @@ THEME_OPTIONS = (
     ("Futuristic City", "Futuristic — neon & glass"),
     ("Classic Era", "Classic era — vintage sepia"),
 )
+_DEFAULT_THEME = THEME_OPTIONS[0][0]
 _THEME_TOOLTIP = (
-    "Colour palette for the exported 3D city — buildings, roads, the base/island, "
-    "greens and roofs. It does not change the viewer's toolbar or panels.\n"
-    "Pick the look in QGIS; the browser viewer opens in that theme."
+    "Coordinated palette for both the native QGIS layers and exported 3D city — "
+    "buildings, roads, the base/island, greens, water and roofs.\n"
+    "Editorial Paper is the warm, legible default shared with OSM Quick 3D."
 )
 _SHAPE_TOOLTIP = (
     "How the study boundary is derived from your area:\n"
@@ -104,6 +106,8 @@ class Osm3dModelDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._busy = False
+        self._allow_close = False
         # Set by the plugin so the dialog can show a live area estimate without
         # duplicating the geometry-resolution logic. Signature: probe(source) -> str.
         self.area_probe = None
@@ -234,7 +238,7 @@ class Osm3dModelDialog(QDialog):
         lay.addLayout(ha_row)
 
         theme_row = QHBoxLayout()
-        theme_label = QLabel("Web theme")
+        theme_label = QLabel("Map & web theme")
         self.theme_combo = QComboBox()
         for value, label in THEME_OPTIONS:
             self.theme_combo.addItem(label, value)
@@ -324,16 +328,16 @@ class Osm3dModelDialog(QDialog):
         lay.addWidget(self.summary_circle)
 
         btn_row = QHBoxLayout()
-        open_viewer = QPushButton("Open viewer")
-        open_viewer.setObjectName("ghostButton")
-        open_viewer.setCursor(Qt.CursorShape.PointingHandCursor)
-        open_viewer.clicked.connect(self.reopenRequested.emit)
-        open_folder = QPushButton("Open data folder")
-        open_folder.setObjectName("ghostButton")
-        open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
-        open_folder.clicked.connect(self.openFolderRequested.emit)
-        btn_row.addWidget(open_viewer)
-        btn_row.addWidget(open_folder)
+        self.open_viewer_button = QPushButton("Open viewer")
+        self.open_viewer_button.setObjectName("ghostButton")
+        self.open_viewer_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_viewer_button.clicked.connect(self.reopenRequested.emit)
+        self.open_folder_button = QPushButton("Open data folder")
+        self.open_folder_button.setObjectName("ghostButton")
+        self.open_folder_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_folder_button.clicked.connect(self.openFolderRequested.emit)
+        btn_row.addWidget(self.open_viewer_button)
+        btn_row.addWidget(self.open_folder_button)
         lay.addLayout(btn_row)
         return card
 
@@ -355,16 +359,19 @@ class Osm3dModelDialog(QDialog):
         self.adv_toggle.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
 
     def _emit_run(self):
+        if self._busy:
+            return
         params = {
             "source": "selection" if self.radio_selection.isChecked() else "canvas",
             "shape": self.shape_combo.currentData() or "circle",
-            "theme": self.theme_combo.currentData() or "Plugin Tones",
+            "theme": self.theme_combo.currentData() or _DEFAULT_THEME,
             "max_ha": float(self.ha_spin.value()),
             "dem_layer": self.dem_combo.currentLayer(),
             "basemap_layer": self.basemap_combo.currentLayer(),
             "auto_open": self.auto_open_check.isChecked(),
         }
         self._save_settings()
+        self.set_status("Starting export...", busy=True)
         self.runRequested.emit(params)
 
     # -- Persistence (QgsSettings) -----------------------------------------
@@ -382,7 +389,7 @@ class Osm3dModelDialog(QDialog):
         shape_index = self.shape_combo.findData(saved_shape)
         if shape_index >= 0:
             self.shape_combo.setCurrentIndex(shape_index)
-        saved_theme = str(s.value(f"{_SETTINGS_PREFIX}/theme", "Plugin Tones"))
+        saved_theme = str(s.value(f"{_SETTINGS_PREFIX}/theme", _DEFAULT_THEME))
         theme_index = self.theme_combo.findData(saved_theme)
         if theme_index >= 0:
             self.theme_combo.setCurrentIndex(theme_index)
@@ -395,15 +402,33 @@ class Osm3dModelDialog(QDialog):
         s.setValue(f"{_SETTINGS_PREFIX}/source",
                    "selection" if self.radio_selection.isChecked() else "canvas")
         s.setValue(f"{_SETTINGS_PREFIX}/shape", self.shape_combo.currentData() or "circle")
-        s.setValue(f"{_SETTINGS_PREFIX}/theme", self.theme_combo.currentData() or "Plugin Tones")
+        s.setValue(f"{_SETTINGS_PREFIX}/theme", self.theme_combo.currentData() or _DEFAULT_THEME)
         s.setValue(f"{_SETTINGS_PREFIX}/auto_open", self.auto_open_check.isChecked())
 
     def showEvent(self, event):  # noqa: N802 (Qt override)
         super().showEvent(event)
-        self._refresh_area_summary()
+        if not self._busy:
+            self._refresh_area_summary()
+
+    def closeEvent(self, event):  # noqa: N802 (Qt override)
+        if self._busy and not self._allow_close:
+            event.ignore()
+            return
+        self._save_settings()
+        super().closeEvent(event)
+
+    def reject(self):
+        if self._busy and not self._allow_close:
+            return
+        super().reject()
+
+    def prepare_for_unload(self):
+        """Allow QGIS to tear down the dialog even during a running export."""
+        self._allow_close = True
+        self._set_busy(False)
 
     def _refresh_area_summary(self, *_):
-        if not callable(self.area_probe):
+        if self._busy or not callable(self.area_probe):
             return
         source = "selection" if self.radio_selection.isChecked() else "canvas"
         try:
@@ -423,13 +448,36 @@ class Osm3dModelDialog(QDialog):
         color = ERR if error else OK
         self.status.setStyleSheet(f"color: {color}; font-size: 12px;")
         self.status.setText(text)
-        self.run_button.setEnabled(not busy)
-        self.run_button.setText("Working…" if busy else _RUN_LABEL)
+        self._set_busy(busy)
+
+    def _set_busy(self, busy: bool):
+        self._busy = bool(busy)
+        enabled = not self._busy
+        for widget in (
+            self.radio_canvas,
+            self.radio_selection,
+            self.shape_combo,
+            self.ha_spin,
+            self.theme_combo,
+            self.auto_open_check,
+            self.adv_toggle,
+            self.dem_combo,
+            self.basemap_combo,
+            self.clear_cache_button,
+            self.reopen_button,
+            self.open_viewer_button,
+            self.open_folder_button,
+        ):
+            widget.setEnabled(enabled)
+        self.run_button.setEnabled(enabled)
+        self.run_button.setText("Working…" if self._busy else _RUN_LABEL)
 
     def show_summary(self, summary: dict, url: str = ""):
         counts = summary.get("counts", {}) or {}
-        furniture = (counts.get("busstops", 0) + counts.get("benches", 0)
-                     + counts.get("lights", 0) + counts.get("trashbins", 0))
+        furniture = sum(
+            counts.get(key, 0)
+            for key in ("busstops", "benches", "lights", "trashbins")
+        )
         waterways = counts.get("waterlines", 0) + counts.get("waterareas", 0)
         self.summary_counts.setText(
             f"<b>{counts.get('buildings', 0)}</b> buildings · "

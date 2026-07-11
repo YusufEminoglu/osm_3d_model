@@ -6,7 +6,7 @@ authors:
     email: "yusuf.eminoglu@deu.edu.tr"
     orcid: "https://orcid.org/0009-0005-6000-2934"
 title: "3D OSM Model"
-version: "1.0.0"
+version: "1.1.0"
 doi: "10.5281/zenodo.20753121"
 date-released: "2026-06-18"
 url: "https://github.com/YusufEminoglu/osm_3d_model"

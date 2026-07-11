@@ -74,7 +74,7 @@ http://127.0.0.1:8120/src/
 ### Use it inside QGIS
 
 1. Zoom to a small area or select polygon feature(s).
-2. Choose the study area source, boundary shape, and web theme in the dialog.
+2. Choose the study area source, boundary shape, and coordinated map/web theme in the dialog. Editorial Paper is the warm, legible default.
 3. Optionally pick a DEM raster, or a basemap layer to drape under the city.
 4. Click **Create OSM layers & export 3D viewer**.
 5. Explore the generated city in the browser.
@@ -115,11 +115,12 @@ Whatever shape you choose, the model base extends 5 m beyond the boundary with s
 
 ### Easy colour themes
 
-Pick a **Web theme** in the dialog to set the colour palette of the exported 3D city. Themes recolour the **content only** — buildings, roads, the base/island and its skirt, greens, and roof texture — and never the viewer's toolbar or panels.
+Pick a **Map & web theme** in the dialog to style both the native QGIS layer group and exported 3D city. QGIS receives categorized buildings and ground uses, hierarchy-aware metric road widths, coordinated water/trees/furniture, and a presentation base beneath the data. The browser theme recolours the **content only** — never the viewer toolbar or panels.
 
 | Theme | Mood |
 | --- | --- |
-| **Plugin tones** | Salmon and warm grey — the signature look (default). |
+| **Editorial Paper** | Warm ivory paper, brown hierarchy roads, muted greens and elegant building pastels (default). |
+| **Plugin tones** | Salmon and warm grey — the original signature look. |
 | **Tinted gray + teal** | Cool neutral greys with teal accents. |
 | **Teal + salmon** | Deep teal streets against a warm salmon base. |
 | **Light purple + soft black** | Light lavender base with near-black roads. |
@@ -158,7 +159,7 @@ The viewer renders:
 - Car parks (`amenity=parking`) as flat paved asphalt-grey areas.
 - Pedestrian squares and plazas (`highway=pedestrian`/`footway` areas, `place=square`, marketplaces) as paved stone ground.
 - Realistic trees, pedestrians, vehicles, bus stops, benches, lamps, and bins.
-- Golden-hour sun, weather, fog, bloom, SSAO, bookmarks, screenshots, measuring, minimap, walk mode, and a live dashboard.
+- Golden-hour sun, weather, fog, bloom, SSAO, bookmarks, advanced still/document/video export, measuring, minimap, walk mode, and a live dashboard.
 
 ## Viewer Experience
 
@@ -172,7 +173,7 @@ The browser viewer is intentionally lean and English-only. The toolbar focuses o
 | Model Studio | Upload and tune GLB models for trees and street furniture categories. |
 | Basemap & Texture | Drape a QGIS basemap under the city and restyle it live: opacity, blend mode (Multiply, Screen, Add, Difference), brightness, contrast, saturation, tint, and shadow catching. |
 | Walk mode | Enter the model at pedestrian eye height with WASD controls. |
-| Screenshot | Save a clean PNG from the current view. |
+| Export Studio | Export clean PNG/JPEG/WebP renders, PDF pages, embedded SVG, self-contained HTML snapshots, clipboard PNGs, or record the live canvas as WebM/MP4 when supported. Includes viewport, Full HD, QHD, 4K, custom-size, quality, frame-rate, and bitrate controls. |
 | Measure | Pick two ground points and read distance. |
 | Help | See shortcuts without leaving the viewer. |
 
@@ -185,7 +186,7 @@ Use the showcase recipes when presenting the plugin or preparing GitHub screensh
 | Compact neighborhood | One-button export, dashboard counts, building floors, roads, sidewalks, cars, pedestrians. |
 | Waterfront corridor | Waterway ribbons, trees, greens, sun presets, measurement tool. |
 | Complete street | Bike lanes, cyclists, sidewalks, bus stops, lamps, benches, and traffic density. |
-| Campus or civic core | Selected polygon workflow, walk mode, Model Studio assets, screenshot export. |
+| Campus or civic core | Selected polygon workflow, walk mode, Model Studio assets, 4K stills, PDF handouts, or a recorded fly-through. |
 | Hillside context | Optional DEM, terrain base, time-of-day shadows, topography view. |
 
 See [docs/SHOWCASE.md](docs/SHOWCASE.md) for a full media and demo script.

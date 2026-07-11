@@ -1,5 +1,62 @@
 # Changelog
 
+## [1.1.0] - 2026-07-11
+
+- Advanced Export Studio with high-resolution image, PDF, SVG, HTML and live video export; Pyramid roof fixes; Editorial Paper native QGIS styling; performance and security hardening.
+
+### Release highlights
+
+- Replaced the one-click screenshot tool with an advanced Export Studio. The web
+  viewer now exports clean high-resolution PNG, JPEG, and WebP images; embedded
+  SVG and self-contained HTML snapshots; A4 PDF presentation pages; and clipboard
+  PNGs. Output presets cover the current viewport through 4K, with custom bounded
+  dimensions and lossy-format quality controls.
+- Added live canvas recording with runtime-detected WebM/MP4 codecs, selectable
+  30/60 fps and bitrate, an elapsed-time indicator, and safe finalization. The
+  exported media contains only the 3D scene, while camera movement, walk mode,
+  traffic, weather, and solar animation continue live during recording.
+- Split binary/document export assembly into a small tested module. CI now checks
+  PDF xref offsets, safe SVG/HTML escaping, file-name sanitization, viewer syntax,
+  and dead JavaScript declarations.
+- Fixed the Pyramid roof option so the global Style-dock selection is applied to
+  every building function instead of being silently replaced by automatic
+  Flat/Gable roofs. Closed footprint rings are cleaned before meshing, concave
+  buildings get a guaranteed interior apex, and OSM pyramidal/hipped/gabled/
+  skillion aliases plus roof height tags are preserved and understood.
+- Native QGIS output now arrives as a polished planning map based on the sibling
+  OSM Quick 3D renderer: buildings and ground areas are categorized by function,
+  roads are categorized by hierarchy with metric widths, water/trees/furniture
+  have coordinated symbols, and the study-area base is correctly drawn last.
+- Added Editorial Paper (warm/elegant) as the shared default map and web theme.
+- Moved Overpass HTTP/cache work to a cancellable QGIS background task, keeping the
+  dialog and QGIS interface responsive while public mirrors answer or time out.
+- Hardened OSM ingestion: invalid/partial Overpass responses are never cached,
+  cache writes are atomic, split or reversed relation members are stitched into
+  valid rings, public-transport platforms are included, and roof levels augment
+  both tagged and inferred building heights.
+- Bounded exact-polygon requests by their real Overpass bounding box and reject
+  circles that cannot fit inside the selected area instead of expanding them past
+  the user's selection.
+- Made GeoJSON, manifest, DEM, and basemap publication transactional; a failed run
+  preserves the last working viewer data, stale optional rasters are removed, and
+  DEM exports use a browser-sized compressed resolution.
+- Repeated runs now replace one plugin-owned QGIS layer group rather than
+  accumulating duplicate layers.
+- Fixed the five reported Flake8 W503 findings and added repository CI for Python
+  compilation, Flake8, Bandit medium/high findings, and viewer syntax.
+- Reduced viewer GPU/CPU load with shared road, pedestrian, and vehicle resources,
+  bounded traffic populations, debounced scene rebuilds, complete recursive GPU
+  disposal, correctly resized post-processing, and screenshot capture without
+  preserveDrawingBuffer.
+- Fixed stale/misreported DEM loading, manifest/UI HTML escaping, local-server
+  wildcard CORS exposure, and runtime version drift across metadata, manifests,
+  User-Agent, and citation data.
+- Replaced nine large PNG textures with visually equivalent full-resolution WebP
+  assets (about 8.4 MB down to 1.5 MB) and removed unused game, legacy recorder, tour,
+  tumulus/mosque renderers, legacy renderer, dummy GeoJSON, SVG, and vendor code.
+  Model Studio no longer requests nonexistent bundled GLB files; uploaded custom
+  tree and furniture models retain their procedural fallbacks.
+
 ## [1.0.1] - 2026-06-18
 
 - docs: add CITATION.cff for Zenodo DOI integration
@@ -138,4 +195,3 @@ All notable changes to this plugin are documented here. Format: [Keep a Changelo
 ## [0.4.0] - 2026-06-01
 
 - Connected road network (snap+dissolve), calmer default traffic (~1/5), MIT LICENSE, Qt6-safe enums, stable release
-

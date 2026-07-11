@@ -155,10 +155,6 @@ ul {
     padding-bottom: 2px;
 }
 
-.game-btn {
-    left: 540px;
-    font-size: 1.1rem;
-}
 .fences-btn {
     left: 590px;
     font-size: 1.1rem;
@@ -167,15 +163,6 @@ ul {
 .walk-btn.active {
     background: var(--planx-accent);
     color: white;
-}
-
-.game-btn.active {
-    background: #7c3aed;
-    box-shadow: 0 0 12px rgba(124, 58, 237, 0.6);
-}
-
-.advanced-game {
-    opacity: 0.72;
 }
 
 #main-panel {
@@ -490,50 +477,6 @@ ul {
     padding: 7px 8px;
 }
 
-.tour-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 210px;
-    overflow: auto;
-    margin-top: 10px;
-}
-
-.tour-item {
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 7px;
-    padding: 8px;
-    background: rgba(255,255,255,0.07);
-    cursor: pointer;
-    font-size: 0.72rem;
-}
-
-.tour-item.active {
-    border-color: var(--planx-accent);
-    background: var(--planx-accent-glow);
-}
-
-.tour-caption-overlay {
-    position: fixed;
-    left: 50%;
-    bottom: 32px;
-    transform: translateX(-50%);
-    max-width: min(680px, 82vw);
-    z-index: 35;
-    background: rgba(15,23,42,0.84);
-    color: white;
-    border: 1px solid rgba(255,255,255,0.16);
-    border-radius: 9px;
-    padding: 10px 14px;
-    font-size: 0.9rem;
-    font-weight: 700;
-    text-align: center;
-}
-
-.tour-caption-overlay.hidden {
-    display: none;
-}
-
 .walk-hud {
     position: fixed;
     left: 50%;
@@ -671,204 +614,6 @@ ul {
     to { transform: rotate(360deg); }
 }
 
-/* Recording Panel Container — walk butonunun sağında */
-#recording-container {
-    position: absolute;
-    top: 0;
-    left: 290px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    z-index: 100;
-}
-
-.rec-toggle-btn {
-    /* Inherits panel-btn styles — no override needed */
-}
-
-.recording-panel {
-    background: rgba(10, 15, 28, 0.88);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-radius: 18px;
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    pointer-events: auto;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.45);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-origin: top left;
-    min-width: 280px;
-}
-
-.recording-panel.hidden {
-    opacity: 0;
-    transform: scaleY(0.6) translateY(-8px);
-    pointer-events: none;
-}
-
-/* Camera panel rows */
-.cam-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.cam-slider-row {
-    gap: 6px;
-}
-
-.cam-label {
-    color: rgba(255,255,255,0.55);
-    font-size: 0.74rem;
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 600;
-    min-width: 38px;
-    letter-spacing: 0.3px;
-}
-
-.cam-range {
-    flex: 1;
-    height: 3px;
-    accent-color: var(--planx-accent);
-    cursor: pointer;
-    background: rgba(255,255,255,0.12);
-    border-radius: 2px;
-    outline: none;
-}
-
-.cam-val {
-    color: var(--planx-accent);
-    font-size: 0.78rem;
-    font-family: monospace;
-    font-weight: bold;
-    min-width: 34px;
-    text-align: right;
-}
-
-.cam-action-btn {
-    flex: 1;
-    background: rgba(255,255,255,0.08);
-    color: rgba(255,255,255,0.85);
-    border: 1px solid rgba(255,255,255,0.14);
-    padding: 5px 10px;
-    border-radius: 10px;
-    font-size: 0.78rem;
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.18s, border-color 0.18s;
-    white-space: nowrap;
-}
-
-.cam-action-btn:hover {
-    background: rgba(255,255,255,0.16);
-    border-color: rgba(255,255,255,0.28);
-}
-
-.cam-action-btn.active,
-.orbit-btn.active {
-    background: rgba(184, 151, 138, 0.22);
-    border-color: rgba(184, 151, 138, 0.55);
-    color: var(--planx-accent);
-}
-
-#btn-toggle-rec {
-    font-size: 0.64rem;
-    font-weight: 800;
-    letter-spacing: 0;
-}
-
-.cam-divider {
-    height: 1px;
-    background: rgba(255,255,255,0.08);
-    margin: 2px 0;
-}
-
-/* 🎥 button pulses red while recording */
-#btn-toggle-rec.recording {
-    background: #e11d48;
-    animation: rec-pulse 1.2s ease-in-out infinite;
-}
-@keyframes rec-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.6); }
-    50%       { box-shadow: 0 0 0 8px rgba(225, 29, 72, 0); }
-}
-
-.rec-select {
-    background: rgba(255,255,255,0.08);
-    color: rgba(255,255,255,0.8);
-    border: 1px solid rgba(255,255,255,0.14);
-    padding: 5px 8px;
-    border-radius: 8px;
-    font-size: 0.76rem;
-    font-family: 'Montserrat', sans-serif;
-    outline: none;
-    cursor: pointer;
-    flex: 1;
-}
-.rec-select option {
-    background: #1e293b;
-    color: white;
-}
-
-.record-btn, .stop-btn {
-    background: #e11d48;
-    color: white;
-    border: none;
-    padding: 5px 12px;
-    border-radius: 10px;
-    font-weight: 700;
-    cursor: pointer;
-    font-size: 0.78rem;
-    font-family: 'Montserrat', sans-serif;
-    transition: background 0.18s;
-    white-space: nowrap;
-}
-
-.record-btn:hover { background: #be123c; }
-.stop-btn { background: #475569; }
-.stop-btn:hover { background: #334155; }
-
-#recording-time {
-    color: #fca5a5;
-    font-family: monospace;
-    font-size: 0.95rem;
-    font-weight: bold;
-    min-width: 44px;
-    text-align: center;
-}
-
-/* Glassmorphism lil-gui override */
-.lil-gui {
-    --background-color: rgba(15, 23, 42, 0.65) !important;
-    --text-color: #f1f5f9 !important;
-    --title-background-color: rgba(255, 255, 255, 0.1) !important;
-    --widget-color: rgba(255, 255, 255, 0.15) !important;
-    --hover-color: rgba(255, 255, 255, 0.25) !important;
-    --focus-color: rgba(255, 255, 255, 0.35) !important;
-    --number-color: #d8a08f !important;
-    --string-color: #caa892 !important;
-    border-radius: 16px !important;
-    backdrop-filter: blur(16px) !important;
-    -webkit-backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
-    font-family: 'Montserrat', sans-serif !important;
-    overflow: hidden;
-}
-.lil-gui .title {
-    font-weight: 600 !important;
-    font-size: 0.9rem !important;
-}
-.lil-gui .folder > .title {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
-}
-
 /* Floating 3D Tooltips */
 .floating-tooltip {
     background: rgba(10, 16, 32, 0.92);
@@ -923,83 +668,6 @@ ul {
 }
 .tooltip-row span:first-child { color: #94a3b8; }
 .tooltip-row span:last-child { color: #f1f5f9; font-weight: 600; max-width: 130px; text-align: right; }
-
-/* ── Sapan Modu / Game HUD ───────────────────────────────────── */
-.game-hud {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    pointer-events: none;
-    z-index: 30;
-}
-.game-hud.hidden { display: none; }
-
-.game-crosshair {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 18px; height: 18px;
-    border: 2px solid rgba(255, 80, 80, 0.9);
-    border-radius: 50%;
-}
-.game-crosshair::before,
-.game-crosshair::after {
-    content: '';
-    position: absolute;
-    background: rgba(255, 80, 80, 0.9);
-}
-.game-crosshair::before {
-    left: 50%; top: -10px;
-    width: 2px; height: 38px;
-    transform: translateX(-50%);
-}
-.game-crosshair::after {
-    top: 50%; left: -10px;
-    height: 2px; width: 38px;
-    transform: translateY(-50%);
-}
-
-.game-score-display {
-    position: absolute;
-    top: 72px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(10, 5, 25, 0.72);
-    backdrop-filter: blur(8px);
-    color: #f8d7ff;
-    padding: 5px 22px;
-    border-radius: 24px;
-    font-size: 1.25rem;
-    font-weight: 800;
-    font-family: 'Montserrat', sans-serif;
-    border: 1px solid rgba(180, 100, 255, 0.35);
-    letter-spacing: 1px;
-}
-
-.game-feedback {
-    position: absolute;
-    top: 44%; left: 50%;
-    transform: translateX(-50%);
-    color: #fbbf24;
-    font-size: 1.6rem;
-    font-weight: 800;
-    font-family: 'Montserrat', sans-serif;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    pointer-events: none;
-}
-
-.game-hint {
-    position: absolute;
-    bottom: 36px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.45);
-    color: rgba(255,255,255,0.6);
-    padding: 4px 16px;
-    border-radius: 12px;
-    font-size: 0.78rem;
-    font-family: 'Montserrat', sans-serif;
-}
 
 /* Hover tooltip (cursor-following, lightweight) */
 .bldg-hover-tip {
@@ -1147,10 +815,6 @@ ul {
     }
     .function-style-grid {
         grid-template-columns: 1fr;
-    }
-    #recording-container {
-        top: 50px;
-        left: 0;
     }
     #minimap-wrap {
         display: none;
@@ -1548,80 +1212,16 @@ body {
 .uploaded-model-item .btn-delete-model:hover {
     background: #dc2626;
 }
-.mosque-custom-card {
-    background: rgba(15, 23, 42, 0.42);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-.mosque-custom-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    padding-bottom: 6px;
-    margin-bottom: 2px;
-}
-.mosque-custom-card-header strong {
-    font-size: 0.78rem;
-    color: #e2e8f0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.mosque-custom-card-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 6px;
-}
-.mosque-custom-field {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 0.74rem;
-    color: #cbd5e1;
-    gap: 10px;
-}
-.mosque-custom-field select {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    color: white;
-    border-radius: 6px;
-    padding: 3px 6px;
-    font-size: 0.74rem;
-    max-width: 160px;
-}
-.mosque-custom-field select option {
-    color: #0f172a;
-}
-.mosque-custom-field input[type="color"] {
-    border: 0;
-    background: transparent;
-    padding: 0;
-    width: 32px;
-    height: 24px;
-    cursor: pointer;
-}
-.mosque-custom-slider-row {
+.model-transform-slider-row {
     display: flex;
     align-items: center;
     gap: 6px;
     flex: 1;
     justify-content: flex-end;
 }
-.mosque-custom-slider-row input[type="range"] {
+.model-transform-slider-row input[type="range"] {
     width: 100px;
     accent-color: var(--planx-accent);
-}
-.mosque-custom-slider-row output {
-    font-size: 0.7rem;
-    font-family: monospace;
-    color: var(--planx-accent);
-    min-width: 28px;
-    text-align: right;
 }
 
 /* Reduce motion preference */
@@ -1636,11 +1236,105 @@ body {
 /* ====================================================================== */
 /* v0.3.0 additions: screenshot / measure / help toolbar + OSM credit     */
 /* ====================================================================== */
-.screenshot-btn { left: 384px; font-size: 1rem; }
+.export-btn     { left: 384px; font-size: 0.68rem; font-weight: 900; letter-spacing: -0.04em; }
 .measure-btn    { left: 432px; font-size: 1rem; }
 .help-btn       { left: 480px; font-size: 1.05rem; font-weight: 800; }
 .measure-btn.active { background: #2563eb; }
 .measure-btn.active:hover { background: #1d4ed8; }
+
+/* Export Studio */
+.export-dock {
+    width: min(390px, calc(100vw - 48px));
+}
+.export-intro,
+.export-note,
+.export-attribution {
+    color: var(--planx-text-faint);
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+.export-intro { margin: -2px 0 10px; }
+.export-note { margin: 7px 0 2px; }
+.export-attribution { margin: 12px 2px 2px; }
+.export-section { margin-top: 10px; padding-top: 10px; }
+.export-section > label {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+}
+.export-section > label > select,
+.export-section > label > input[type="text"] {
+    box-sizing: border-box;
+    width: 100%;
+}
+.export-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+.export-grid label {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+.export-grid input,
+.export-grid select { box-sizing: border-box; width: 100%; }
+.export-dock output {
+    float: right;
+    color: var(--planx-accent-hover);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+.export-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+}
+.export-actions button {
+    min-height: 36px;
+    border: 1px solid var(--planx-border-strong);
+    border-radius: var(--planx-radius-xs);
+    background: rgba(255,255,255,0.42);
+    color: var(--planx-text);
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 700;
+    transition: transform var(--planx-transition), background var(--planx-transition), opacity var(--planx-transition);
+}
+.export-actions button:hover:not(:disabled) { background: var(--planx-accent-glow); transform: translateY(-1px); }
+.export-actions button:disabled { cursor: not-allowed; opacity: 0.46; }
+.export-actions .export-primary,
+.export-actions .record-start {
+    border-color: transparent;
+    background: var(--planx-accent);
+    color: var(--planx-on-accent);
+}
+.export-actions .record-start { background: #b91c1c; }
+.export-status {
+    min-height: 1.2em;
+    margin-top: 8px;
+    color: var(--planx-text-muted);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+}
+.export-status.error { color: var(--planx-danger); }
+.export-status.success { color: var(--planx-ok); }
+.record-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 5px;
+    border-radius: 50%;
+    background: #b91c1c;
+}
+.recorder-section.recording .record-dot { animation: record-pulse 1.1s ease-in-out infinite; }
+.recorder-section.recording .export-status { color: #b91c1c; font-weight: 700; }
+@keyframes record-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(185,28,28,0.4); }
+    50% { opacity: 0.55; box-shadow: 0 0 0 5px rgba(185,28,28,0); }
+}
 
 /* Measurement HUD */
 .measure-hud {

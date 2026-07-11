@@ -11,13 +11,20 @@ import threading
 from pathlib import Path
 
 
-class QuietCorsHandler(http.server.SimpleHTTPRequestHandler):
+class QuietHandler(http.server.SimpleHTTPRequestHandler):
+    """Serve the viewer quietly without exposing local exports cross-origin."""
+
     def log_message(self, fmt, *args):
         pass
 
     def end_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Cache-Control", "no-cache")
+        # Every viewer asset is same-origin.  Wildcard CORS allowed arbitrary web
+        # pages to probe the local port and read exported basemaps/GeoJSON.
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
         super().end_headers()
 
 
@@ -38,11 +45,16 @@ class Osm3dServer:
 
         mimetypes.add_type("application/json", ".geojson")
         mimetypes.add_type("image/tiff", ".tif")
+        mimetypes.add_type("image/webp", ".webp")
         mimetypes.add_type("application/javascript", ".js")
 
     @property
     def is_running(self) -> bool:
-        return self._httpd is not None
+        return all((
+            self._httpd is not None,
+            self._thread is not None,
+            self._thread.is_alive() if self._thread is not None else False,
+        ))
 
     @property
     def url(self) -> str:
@@ -53,8 +65,10 @@ class Osm3dServer:
     def start(self) -> str:
         if self.is_running:
             return self.url
+        if self._httpd is not None:
+            self.stop()
 
-        handler = functools.partial(QuietCorsHandler, directory=str(self.web_root))
+        handler = functools.partial(QuietHandler, directory=str(self.web_root))
         last_error = None
         for port in range(self.start_port, self.end_port + 1):
             if port_is_open(self.host, port):
@@ -77,7 +91,8 @@ class Osm3dServer:
     def stop(self) -> None:
         if self._httpd is None:
             return
-        self._httpd.shutdown()
+        if self._thread and self._thread.is_alive():
+            self._httpd.shutdown()
         self._httpd.server_close()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)

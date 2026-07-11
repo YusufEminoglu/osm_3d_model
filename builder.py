@@ -13,6 +13,9 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
+import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -22,6 +25,7 @@ from qgis.core import (
     QgsFeature,
     QgsField,
     QgsGeometry,
+    QgsPointXY,
     QgsProject,
     QgsRectangle,
     QgsVectorLayer,
@@ -30,11 +34,17 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QTransform
 
+from . import PLUGIN_VERSION
 from .osm_download import download_osm_for_area, save_layer_to_geojson, utm_epsg_for
+from .qgis_styling import style_export_layers
 
 MODEL_NAME = "3D OSM Model"
 MAX_STUDY_HA_DEFAULT = 300.0
 MIN_RADIUS_M = 30.0
+# A max-area circle necessarily has a 4/pi larger request bbox. Exact polygons
+# get the same hard Overpass request budget, preventing thin/diagonal/multipart
+# selections from turning a small study area into an enormous bbox download.
+MAX_REQUEST_BBOX_FACTOR = 4.0 / math.pi
 # The model base/island extends this many metres beyond the OSM study boundary, so
 # the city sits on a small platform margin (OSM data stays clipped to the boundary).
 BASE_BUFFER_M = 5.0
@@ -44,10 +54,15 @@ BASE_BUFFER_M = 5.0
 # chrome. The scene colours here mirror app.js COLOR_THEMES so a fresh export and a
 # live theme switch in the viewer look identical. The per-function BUILDING palette
 # lives only in the viewer (getSemanticColor); here we carry the scene colours plus
-# the matching roof texture and asset theme. "Plugin Tones" is the historical
-# salmon-and-grey default.
-DEFAULT_THEME = "Plugin Tones"
+# the matching roof texture and asset theme. Editorial Paper is shared with the
+# native OSM Quick 3D plugin and is the default for both web and QGIS outputs.
+DEFAULT_THEME = "Editorial Paper"
 _THEMES = {
+    "Editorial Paper": {
+        "islandColor": "#e6dfd3", "terrainOutsideColor": "#fdfbf7", "terrainSideColor": "#b9aa96",
+        "roadColor": "#7c5c43", "parkColor": "#c2c5aa", "sportColor": "#aeb89a",
+        "waterColor": "#9ab8c2", "roofTexture": "RoofA", "assetTheme": "Civic Heritage",
+    },
     "Plugin Tones": {
         "islandColor": "#dcc7bd", "terrainOutsideColor": "#e7d7d0", "terrainSideColor": "#b8978a",
         "roadColor": "#9a8c84", "parkColor": "#9fae8a", "sportColor": "#8fa07c",
@@ -154,12 +169,16 @@ def largest_inscribed_circle(geom_utm: QgsGeometry, max_ha: float):
         radius = pos.distance(boundary)
 
     if not math.isfinite(radius) or radius <= 0:
-        # Degenerate selection: fall back to half the shorter bbox side.
-        radius = max(MIN_RADIUS_M, min(bbox.width(), bbox.height()) / 2.0)
+        raise BuildError("The selected area has no usable interior for an inscribed circle.")
 
     r_max = math.sqrt(max(1.0, max_ha) * 10000.0 / math.pi)
     clamped = min(radius, r_max)
-    return center, max(MIN_RADIUS_M, clamped)
+    if clamped < MIN_RADIUS_M:
+        raise BuildError(
+            f"The selected area is too small or narrow for the 3D model "
+            f"(largest inscribed radius {clamped:.1f} m; minimum {MIN_RADIUS_M:.0f} m)."
+        )
+    return center, clamped
 
 
 # --------------------------------------------------------------------------
@@ -204,6 +223,20 @@ def _clamp_polygon_area(geom: QgsGeometry, max_ha: float) -> QgsGeometry:
     if area <= max_m2 or area <= 0:
         return geom
     return _scale_about_centroid(geom, math.sqrt(max_m2 / area))
+
+
+def _validate_exact_request_bbox(geom: QgsGeometry, max_ha: float) -> None:
+    bbox = geom.boundingBox()
+    bbox_m2 = bbox.width() * bbox.height()
+    limit_m2 = _area_max_m2(max_ha) * MAX_REQUEST_BBOX_FACTOR
+    if not math.isfinite(bbox_m2) or bbox_m2 <= 0:
+        raise BuildError("The exact polygon has an empty or invalid bounding box.")
+    if bbox_m2 > limit_m2 * (1.0 + 1e-9):
+        raise BuildError(
+            f"The exact polygon's Overpass request box is {bbox_m2 / 10000.0:,.1f} ha, "
+            f"above the safe {limit_m2 / 10000.0:,.1f} ha limit. "
+            "Use a compact selection, Rectangle, Rounded rectangle, or Inscribed circle."
+        )
 
 
 def _clamp_bbox_area(bbox: QgsRectangle, max_ha: float) -> QgsRectangle:
@@ -273,6 +306,7 @@ def compute_study_area(geom_utm: QgsGeometry, max_ha: float, shape: str):
         fixed = clip.makeValid()
         if fixed is not None and not fixed.isEmpty():
             clip = fixed
+        _validate_exact_request_bbox(clip, max_ha)
     else:  # SHAPE_EXTENT or SHAPE_ROUNDED
         bbox = _clamp_bbox_area(geom_utm.boundingBox(), max_ha)
         clip = (_rounded_rect_geom(bbox, _corner_radius(bbox))
@@ -289,21 +323,110 @@ def compute_study_area(geom_utm: QgsGeometry, max_ha: float, shape: str):
     }
 
 
+def prepare_study_area(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenceSystem,
+                       max_ha: float = MAX_STUDY_HA_DEFAULT,
+                       shape: str = SHAPE_CIRCLE) -> dict:
+    """Prepare immutable run geometry and scalar network inputs on the QGIS thread."""
+    if source_geom is None or source_geom.isEmpty():
+        raise BuildError("No area selected. Draw/select a polygon or zoom to the area first.")
+    if source_crs is None or not source_crs.isValid():
+        raise BuildError("The selected area has no valid coordinate reference system.")
+
+    project = QgsProject.instance()
+    wgs_crs = QgsCoordinateReferenceSystem.fromEpsgId(4326)
+    to_wgs = QgsCoordinateTransform(source_crs, wgs_crs, project)
+    centroid_geom = source_geom.centroid()
+    if centroid_geom is None or centroid_geom.isEmpty():
+        raise BuildError("Could not determine the selected area's centroid.")
+    centroid_wgs = to_wgs.transform(centroid_geom.asPoint())
+    if not math.isfinite(centroid_wgs.x()) or not math.isfinite(centroid_wgs.y()):
+        raise BuildError("Could not transform the selected area to WGS84.")
+
+    epsg_dest = utm_epsg_for(centroid_wgs.x(), centroid_wgs.y())
+    dst_crs = QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest)
+    geom_utm = QgsGeometry(source_geom)
+    to_utm = QgsCoordinateTransform(source_crs, dst_crs, project)
+    if geom_utm.transform(to_utm):
+        raise BuildError("Could not reproject the selected area to a metric CRS.")
+    clip_utm, base_utm, area_info = compute_study_area(geom_utm, max_ha, shape)
+
+    utm_to_wgs = QgsCoordinateTransform(dst_crs, wgs_crs, project)
+    wgs_rect = utm_to_wgs.transformBoundingBox(clip_utm.boundingBox())
+    return {
+        "epsg": epsg_dest,
+        "centroid_wgs": QgsPointXY(centroid_wgs),
+        "wgs_bbox": (
+            wgs_rect.yMinimum(), wgs_rect.xMinimum(),
+            wgs_rect.yMaximum(), wgs_rect.xMaximum(),
+        ),
+        "clip_utm": QgsGeometry(clip_utm),
+        "base_utm": QgsGeometry(base_utm),
+        "area_info": dict(area_info),
+    }
+
+
 # --------------------------------------------------------------------------
 # GeoJSON writing
 # --------------------------------------------------------------------------
-INIT_LOADED_FILES = (
-    "myblocks", "mybuildings", "myroads", "mytrees", "mylights", "mybenches",
-    "mytrashbins", "mybusstops", "myfences", "mywaterlines", "mymosques",
-    "mysidewalks", "mybikelanes",
-)
+def _remove_file(path: Path) -> None:
+    """Remove an optional generated artifact without masking the real export."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
 
 
-def _write_empty_fc(path: Path, name: str) -> None:
-    path.write_text(
-        json.dumps({"type": "FeatureCollection", "name": name, "features": []}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+def _validate_geojson(path: Path) -> None:
+    """Fail the run before publishing a missing or malformed viewer layer."""
+    try:
+        with path.open("r", encoding="utf-8-sig") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError) as exc:
+        raise BuildError(f"Could not validate exported GeoJSON {path.name}: {exc}") from exc
+    if not isinstance(payload, dict) or payload.get("type") != "FeatureCollection":
+        raise BuildError(f"Exported GeoJSON {path.name} is not a FeatureCollection.")
+    if not isinstance(payload.get("features"), list):
+        raise BuildError(f"Exported GeoJSON {path.name} has no features array.")
+
+
+def _publish_directory(staging_dir: Path, target_dir: Path) -> None:
+    """Atomically replace a generated directory, restoring the old one on error."""
+    backup_dir = target_dir.parent / f".{target_dir.name}-backup-{uuid.uuid4().hex}"
+    moved_old = False
+    try:
+        if target_dir.exists():
+            target_dir.replace(backup_dir)
+            moved_old = True
+        staging_dir.replace(target_dir)
+    except Exception:
+        if moved_old and backup_dir.exists() and not target_dir.exists():
+            backup_dir.replace(target_dir)
+        raise
+    finally:
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    """Write JSON beside its destination and publish it with one filesystem swap."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=str(path.parent),
+            prefix=f".{path.name}-", suffix=".tmp", delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+        tmp_path.replace(path)
+        tmp_path = None
+    finally:
+        if tmp_path is not None:
+            _remove_file(tmp_path)
 
 
 def _roi_layer_from_polygon(base_utm: QgsGeometry, epsg_dest: int) -> QgsVectorLayer:
@@ -327,25 +450,43 @@ def _roi_layer_from_polygon(base_utm: QgsGeometry, epsg_dest: int) -> QgsVectorL
 # --------------------------------------------------------------------------
 def _export_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path, feedback=None) -> bool:
     """Best-effort DEM warp/clip to the model base bbox in the target UTM CRS."""
+    tmp_path = None
     try:
         import processing  # noqa: WPS433 (QGIS runtime import)
 
         bbox = base_utm.boundingBox()
         extent = f"{bbox.xMinimum()},{bbox.xMaximum()},{bbox.yMinimum()},{bbox.yMaximum()} [EPSG:{epsg_dest}]"
+        # A bounded raster is substantially faster to transfer and tessellate in
+        # the browser than an unmodified high-resolution source DEM.
+        target_resolution = max(1.0, max(bbox.width(), bbox.height()) / 512.0)
+        dem_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            dir=str(dem_path.parent), prefix=".mydem-", suffix=".tif", delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
         processing.run("gdal:warpreproject", {
             "INPUT": dem_layer,
             "SOURCE_CRS": dem_layer.crs(),
             "TARGET_CRS": QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest),
             "RESAMPLING": 1,
+            "TARGET_RESOLUTION": target_resolution,
             "TARGET_EXTENT": extent,
             "TARGET_EXTENT_CRS": QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest),
-            "OUTPUT": str(dem_path),
+            "CREATION_OPTIONS": "COMPRESS=DEFLATE|TILED=YES|PREDICTOR=2",
+            "OUTPUT": str(tmp_path),
         })
-        return dem_path.exists()
+        if not tmp_path.is_file() or tmp_path.stat().st_size <= 0:
+            raise BuildError("QGIS did not create the clipped DEM.")
+        tmp_path.replace(dem_path)
+        tmp_path = None
+        return True
     except Exception as exc:  # DEM is optional; never block the export.
         if feedback:
             feedback(f"DEM skipped ({exc}).")
         return False
+    finally:
+        if tmp_path is not None:
+            _remove_file(tmp_path)
 
 
 # --------------------------------------------------------------------------
@@ -359,6 +500,7 @@ def _export_basemap(basemap_layer, base_utm: QgsGeometry, epsg_dest: int,
     Returns the bbox dict {minx,miny,maxx,maxy} on success, else None. Any failure
     (network tiles, missing renderer) is swallowed so the export never breaks.
     """
+    tmp_path = None
     try:
         from qgis.core import QgsMapSettings, QgsMapRendererCustomPainterJob
         from qgis.PyQt.QtCore import QSize
@@ -395,7 +537,13 @@ def _export_basemap(basemap_layer, base_utm: QgsGeometry, epsg_dest: int,
             painter.end()
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        if image.save(str(out_path), "PNG"):
+        with tempfile.NamedTemporaryFile(
+            dir=str(out_path.parent), prefix=".basemap-", suffix=".png", delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+        if image.save(str(tmp_path), "PNG") and tmp_path.stat().st_size > 0:
+            tmp_path.replace(out_path)
+            tmp_path = None
             return {
                 "minx": bbox.xMinimum(), "miny": bbox.yMinimum(),
                 "maxx": bbox.xMaximum(), "maxy": bbox.yMaximum(),
@@ -403,6 +551,9 @@ def _export_basemap(basemap_layer, base_utm: QgsGeometry, epsg_dest: int,
     except Exception as exc:  # basemap is optional; never block the export.
         if feedback:
             feedback(f"Basemap skipped ({exc}).")
+    finally:
+        if tmp_path is not None:
+            _remove_file(tmp_path)
     return None
 
 
@@ -470,7 +621,6 @@ def _viewer_defaults(latitude: float, has_dem: bool, theme_name: str = DEFAULT_T
         "showParcels": False,
         "showHardscape": False,
         "showFences": False,
-        "showMosques": False,
         "demMeshQuality": 140,
         "latitude": float(latitude),
         "dayOfYear": 172,
@@ -487,7 +637,7 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
     manifest = {
         "schema": "planx-3d-city-manifest/v1",
         "plugin": "osm_3d_model",
-        "version": "1.0.0",
+        "version": PLUGIN_VERSION,
         "mode": "vector",
         "flexibleInputs": True,
         "exportedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -520,9 +670,51 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
         "summary": {"source": "OpenStreetMap", "epsg": epsg_dest, "hasDem": has_dem},
     }
     manifest_path = web_root / "data" / "planx_manifest.json"
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_json_atomic(manifest_path, manifest)
     return manifest_path
+
+
+PROJECT_OWNED_PROPERTY = "osm_3d_model/owned"
+
+
+def _replace_project_layers(project: QgsProject, roi_layer: QgsVectorLayer, osm: dict,
+                            theme_name: str, theme_palette: dict) -> None:
+    """Replace the previous run with a styled, correctly ordered layer group."""
+    root = project.layerTreeRoot()
+    for layer in list(project.mapLayers().values()):
+        if layer.customProperty(PROJECT_OWNED_PROPERTY, False):
+            project.removeMapLayer(layer.id())
+    for node in list(root.children()):
+        if node.customProperty(PROJECT_OWNED_PROPERTY, False):
+            root.removeChildNode(node)
+
+    group = root.insertGroup(0, MODEL_NAME)
+    group.setCustomProperty(PROJECT_OWNED_PROPERTY, True)
+    group.setCustomProperty("osm_3d_model/theme", theme_name)
+    style_export_layers(roi_layer, osm, theme_name, theme_palette)
+
+    # QGIS draws the legend from top to bottom. Keep point furniture and roads
+    # above polygons, and the study-area paper/base fill at the very bottom.
+    layers = [
+        (osm.get("lights"), "OSM Street Lights"),
+        (osm.get("busstops"), "OSM Bus Stops"),
+        (osm.get("benches"), "OSM Benches"),
+        (osm.get("trashbins"), "OSM Trash Bins"),
+        (osm.get("trees"), "OSM Trees"),
+        (osm.get("bikelanes"), "OSM Bike Lanes"),
+        (osm.get("roads"), "OSM Roads"),
+        (osm.get("buildings"), "OSM Buildings"),
+        (osm.get("waterlines"), "OSM Waterways"),
+        (osm.get("greens"), "OSM Greens & Water"),
+        (roi_layer, "OSM Study Area"),
+    ]
+    for layer, label in layers:
+        if layer is None or (layer is not roi_layer and layer.featureCount() <= 0):
+            continue
+        layer.setName(label)
+        layer.setCustomProperty(PROJECT_OWNED_PROPERTY, True)
+        project.addMapLayer(layer, False)
+        group.addLayer(layer)
 
 
 # --------------------------------------------------------------------------
@@ -533,31 +725,21 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
                      max_ha: float = MAX_STUDY_HA_DEFAULT,
                      add_to_project: bool = True, shape: str = SHAPE_CIRCLE,
                      theme: str = DEFAULT_THEME, use_cache: bool = True,
-                     feedback=None) -> dict:
-    if source_geom is None or source_geom.isEmpty():
-        raise BuildError("No area selected. Draw/select a polygon or zoom to the area first.")
-
+                     feedback=None, prepared: dict | None = None,
+                     osm_payload: dict | None = None) -> dict:
     project = QgsProject.instance()
-    wgs_crs = QgsCoordinateReferenceSystem.fromEpsgId(4326)
-
-    # Centroid in WGS84 -> pick UTM zone.
-    to_wgs = QgsCoordinateTransform(source_crs, wgs_crs, project)
-    centroid_pt = source_geom.centroid().asPoint()
-    cen_wgs = to_wgs.transform(centroid_pt)
-    epsg_dest = utm_epsg_for(cen_wgs.x(), cen_wgs.y())
-    dst_crs = QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest)
-
-    # Source geometry -> UTM, then resolve the chosen boundary shape.
-    geom_utm = QgsGeometry(source_geom)
-    to_utm = QgsCoordinateTransform(source_crs, dst_crs, project)
-    if geom_utm.transform(to_utm):
-        raise BuildError("Could not reproject the selected area to a metric CRS.")
-    # Resolve the chosen boundary shape: ``clip_utm`` is what OSM is clipped to,
-    # ``base_utm`` is the visible model base (clip buffered +BASE_BUFFER_M with
-    # softly rounded corners). OSM stays clipped to the inner boundary; only the
-    # platform (roi + DEM) uses the wider ring.
-    clip_utm, base_utm, area_info = compute_study_area(geom_utm, max_ha, shape)
+    if prepared is None:
+        prepared = prepare_study_area(source_geom, source_crs, max_ha, shape)
+    required = {"epsg", "centroid_wgs", "clip_utm", "base_utm", "area_info"}
+    if not isinstance(prepared, dict) or not required.issubset(prepared):
+        raise BuildError("The prepared study area is incomplete.")
+    epsg_dest = int(prepared["epsg"])
+    cen_wgs = QgsPointXY(prepared["centroid_wgs"])
+    clip_utm = QgsGeometry(prepared["clip_utm"])
+    base_utm = QgsGeometry(prepared["base_utm"])
+    area_info = dict(prepared["area_info"])
     area_ha = area_info["area_ha"]
+    theme_name, theme_palette = resolve_theme(theme)
     if feedback:
         if area_info.get("radius_m"):
             shape_desc = f"{area_info['shape_label']} r = {area_info['radius_m']:.0f} m"
@@ -567,7 +749,10 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         feedback(f"Study area: {shape_desc} ({area_ha} ha) +{BASE_BUFFER_M:.0f} m base, EPSG:{epsg_dest}.")
 
     # OSM download + clip (to the inner boundary, not the buffered base).
-    osm = download_osm_for_area(clip_utm, epsg_dest, feedback=feedback, use_cache=use_cache)
+    osm = download_osm_for_area(
+        clip_utm, epsg_dest, feedback=feedback, use_cache=use_cache,
+        payload=osm_payload,
+    )
     # Roads are used as raw OSM ways (single-part LineStrings). The earlier
     # snap+dissolve "connect_roads" step was removed: it produced MultiLineString
     # geometries and did not actually improve the network, so the native OSM
@@ -576,33 +761,36 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
     # Write GeoJSON the viewer expects.
     web_path = Path(web_root)
     vector_dir = web_path / "data" / "yerlesim"
-    vector_dir.mkdir(parents=True, exist_ok=True)
+    vector_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(tempfile.mkdtemp(prefix=".yerlesim-", dir=str(vector_dir.parent)))
 
     roi_layer = _roi_layer_from_polygon(base_utm, epsg_dest)
-    save_layer_to_geojson(roi_layer, vector_dir / "roi.geojson")
-    save_layer_to_geojson(osm["buildings"], vector_dir / "mybuildings.geojson")
-    save_layer_to_geojson(osm["roads"], vector_dir / "myroads.geojson")
-    save_layer_to_geojson(osm["trees"], vector_dir / "mytrees.geojson")
-    save_layer_to_geojson(osm["greens"], vector_dir / "myblocks.geojson")
-    save_layer_to_geojson(osm["waterlines"], vector_dir / "mywaterlines.geojson")
-    save_layer_to_geojson(osm["bikelanes"], vector_dir / "mybikelanes.geojson")
-    save_layer_to_geojson(osm["busstops"], vector_dir / "mybusstops.geojson")
-    save_layer_to_geojson(osm["benches"], vector_dir / "mybenches.geojson")
-    save_layer_to_geojson(osm["lights"], vector_dir / "mylights.geojson")
-    save_layer_to_geojson(osm["trashbins"], vector_dir / "mytrashbins.geojson")
-
-    written_named = {"mybuildings", "myroads", "mytrees", "myblocks",
-                     "mywaterlines", "mybikelanes", "mybusstops", "mybenches", "mylights", "mytrashbins"}
-    for name in INIT_LOADED_FILES:
-        if name not in written_named:
-            _write_empty_fc(vector_dir / f"{name}.geojson", name)
+    layer_files = {
+        "roi": roi_layer,
+        "mybuildings": osm["buildings"], "myroads": osm["roads"],
+        "mytrees": osm["trees"], "myblocks": osm["greens"],
+        "mywaterlines": osm["waterlines"], "mybikelanes": osm["bikelanes"],
+        "mybusstops": osm["busstops"], "mybenches": osm["benches"],
+        "mylights": osm["lights"], "mytrashbins": osm["trashbins"],
+    }
+    try:
+        for name, layer in layer_files.items():
+            out_path = staging_dir / f"{name}.geojson"
+            save_layer_to_geojson(layer, out_path)
+            _validate_geojson(out_path)
+        _publish_directory(staging_dir, vector_dir)
+        staging_dir = None
+    finally:
+        if staging_dir is not None and staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
     # Optional DEM.
     has_dem = False
+    dem_path = web_path / "data" / "dem" / "mydem.tif"
     if dem_layer is not None:
-        dem_dir = web_path / "data" / "dem"
-        dem_dir.mkdir(parents=True, exist_ok=True)
-        has_dem = _export_dem(dem_layer, base_utm, epsg_dest, dem_dir / "mydem.tif", feedback=feedback)
+        has_dem = _export_dem(dem_layer, base_utm, epsg_dest, dem_path, feedback=feedback)
+    if not has_dem:
+        _remove_file(dem_path)
 
     # Optional basemap underlay rendered to a PNG over the base bbox.
     basemap_bbox = None
@@ -613,28 +801,19 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
             basemap_layer, base_utm, epsg_dest,
             web_path / "data" / "basemap" / "basemap.png", feedback=feedback,
         )
+    if basemap_bbox is None:
+        _remove_file(web_path / "data" / "basemap" / "basemap.png")
 
-    _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem, theme, basemap_bbox)
+    _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem, theme_name, basemap_bbox)
 
     if add_to_project:
-        roi_layer.setName("OSM Study Area")
-        project.addMapLayer(roi_layer)
-        for key, label in (("greens", "OSM Greens"), ("buildings", "OSM Buildings"),
-                           ("roads", "OSM Roads"), ("bikelanes", "OSM Bike Lanes"),
-                           ("waterlines", "OSM Waterways"),
-                           ("trees", "OSM Trees"), ("busstops", "OSM Bus Stops"),
-                           ("benches", "OSM Benches"), ("lights", "OSM Street Lights"),
-                           ("trashbins", "OSM Trash Bins")):
-            layer = osm.get(key)
-            if layer is not None and layer.featureCount() > 0:
-                layer.setName(label)
-                project.addMapLayer(layer)
+        _replace_project_layers(project, roi_layer, osm, theme_name, theme_palette)
 
     return {
         "epsg": epsg_dest,
         "shape": area_info["shape"],
         "shape_label": area_info["shape_label"],
-        "theme": resolve_theme(theme)[0],
+        "theme": theme_name,
         "radius_m": area_info.get("radius_m"),
         "width_m": area_info.get("width_m"),
         "depth_m": area_info.get("depth_m"),

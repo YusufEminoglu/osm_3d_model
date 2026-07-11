@@ -7,7 +7,7 @@
     <meta name="description" content="3D OSM Model: pick an area, download OpenStreetMap, and explore it as an interactive 3D city.">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23b8978a'/%3E%3Crect x='3' y='7' width='3' height='6' fill='%23fffaf7'/%3E%3Crect x='7' y='4' width='3' height='9' fill='%23fffaf7'/%3E%3Crect x='11' y='6' width='2' height='7' fill='%23fffaf7'/%3E%3C/svg%3E">
 
-    <link rel="stylesheet" href="style.css?v=osm1.0.0">
+    <link rel="stylesheet" href="style.css">
 
     <script type="importmap">
         {
@@ -76,7 +76,7 @@
             <span class="tb-sep" aria-hidden="true"></span>
             <button id="walk-toggle" class="panel-btn walk-btn" title="Walk mode" data-i18n-title="dockTitleWalk">W</button>
             <span class="tb-sep" aria-hidden="true"></span>
-            <button id="btn-screenshot" class="panel-btn screenshot-btn" title="Save screenshot (PNG)" data-i18n-title="screenshotTitle">📷</button>
+            <button id="export-toggle" class="panel-btn export-btn" data-dock-target="export-dock" title="Export studio" data-i18n-title="exportTitle">EX</button>
             <button id="measure-toggle" class="panel-btn measure-btn" title="Measure distance" data-i18n-title="measureTitle">📏</button>
             <button id="help-toggle" class="panel-btn help-btn" title="Help &amp; shortcuts" data-i18n-title="helpTitle">❔</button>
         </div>
@@ -227,7 +227,6 @@
             <h4 data-i18n="modelUploadTitle" style="margin: 4px 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Upload Custom Model (.glb)</h4>
             <label><span data-i18n="lblModelCategory">Category</span>
                 <select id="upload-model-category">
-                    <option value="mosque" data-i18n="catMosque">Mosque</option>
                     <option value="tree" data-i18n="catTree">Tree</option>
                     <option value="light" data-i18n="catLight">Street Light</option>
                     <option value="bench" data-i18n="catBench">Bench</option>
@@ -254,7 +253,6 @@
             <h4 data-i18n="modelTransformTitle" style="margin: 0 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Model Transform (Elevation &amp; Scale)</h4>
             <label><span data-i18n="lblTransformCategory">Category</span>
                 <select id="transform-category">
-                    <option value="mosque" data-i18n="catMosque">Mosque</option>
                     <option value="tree" data-i18n="catTree">Tree</option>
                     <option value="light" data-i18n="catLight">Street Light</option>
                     <option value="bench" data-i18n="catBench">Bench</option>
@@ -265,21 +263,69 @@
             <div id="model-transform-controls" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;"></div>
         </div>
 
-        <div class="dock-section" style="border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; margin-top: 10px;">
-            <h4 data-i18n="mosqueCustomTitle" style="margin: 0 0 8px; color: var(--planx-accent-hover); font-size: 0.85rem;">Mosque Placements & Overrides</h4>
-            <div id="mosque-custom-list" class="mosque-custom-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 4px;"></div>
-        </div>
     </aside>
 
-    <div id="tour-caption-overlay" class="tour-caption-overlay hidden"></div>
-    <div id="walk-hud" class="walk-hud hidden" data-i18n="walkHud">WASD move · Shift sprint · C crouch · Esc exit</div>
+    <aside class="dock-panel export-dock hidden" id="export-dock">
+        <div class="dock-head"><span>Export Studio</span><button class="dock-close" data-close="export-dock" aria-label="Close export studio">x</button></div>
+        <div class="export-intro">Create a clean render of the current camera. Viewer panels and map controls are excluded.</div>
 
-    <div id="game-hud" class="game-hud hidden">
-        <div class="game-crosshair"></div>
-        <div class="game-score-display">◎ <span id="game-score">0</span></div>
-        <div id="game-feedback" class="game-feedback"></div>
-        <div class="game-hint" data-i18n="gameHint">Left click: throw stone</div>
-    </div>
+        <div class="dock-section export-section">
+            <p class="dock-section-title">Still image &amp; document</p>
+            <label><span>Format</span>
+                <select id="export-format">
+                    <option value="png">PNG - lossless image</option>
+                    <option value="jpeg">JPEG - compact image</option>
+                    <option value="webp">WebP - modern image</option>
+                    <option value="pdf">PDF - presentation page</option>
+                    <option value="svg">SVG - embedded scene snapshot</option>
+                    <option value="html">HTML - self-contained snapshot</option>
+                </select>
+            </label>
+            <label><span>Output size</span>
+                <select id="export-size-preset">
+                    <option value="current">Current viewport</option>
+                    <option value="1920x1080">Full HD - 1920 x 1080</option>
+                    <option value="2560x1440">QHD - 2560 x 1440</option>
+                    <option value="3840x2160">4K - 3840 x 2160</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </label>
+            <div class="export-grid" id="export-custom-size">
+                <label><span>Width</span><input id="export-width" type="number" min="320" max="7680" step="1" inputmode="numeric"></label>
+                <label><span>Height</span><input id="export-height" type="number" min="240" max="7680" step="1" inputmode="numeric"></label>
+            </div>
+            <label id="export-quality-row"><span>Image quality <output id="export-quality-value">92%</output></span><input id="export-quality" type="range" min="0.5" max="1" step="0.01" value="0.92"></label>
+            <label><span>File name</span><input id="export-filename" type="text" value="osm_3d_model" maxlength="80" autocomplete="off"></label>
+            <p class="export-note" id="export-format-note">PNG preserves full image quality and transparency where available.</p>
+            <div class="export-actions">
+                <button id="export-scene" class="export-primary" type="button">Export current view</button>
+                <button id="export-clipboard" type="button">Copy PNG</button>
+            </div>
+            <div class="export-status" id="export-status" role="status" aria-live="polite">Ready</div>
+        </div>
+
+        <div class="dock-section export-section recorder-section">
+            <p class="dock-section-title"><span class="record-dot" aria-hidden="true"></span> Screen recorder</p>
+            <label><span>Video format</span><select id="record-format"><option value="auto">Best supported format</option></select></label>
+            <div class="export-grid">
+                <label><span>Frame rate</span>
+                    <select id="record-fps"><option value="30">30 fps</option><option value="60">60 fps</option></select>
+                </label>
+                <label><span>Quality</span>
+                    <select id="record-bitrate"><option value="8000000">Standard</option><option value="16000000" selected>High</option><option value="32000000">Ultra</option></select>
+                </label>
+            </div>
+            <p class="export-note">Records the live 3D canvas at its current viewport size. Orbit, walk, traffic, weather, and solar animation remain live.</p>
+            <div class="export-actions">
+                <button id="record-start" class="record-start" type="button">Start recording</button>
+                <button id="record-stop" type="button" disabled>Stop &amp; save</button>
+            </div>
+            <div class="export-status" id="record-status" role="status" aria-live="polite">Ready to record</div>
+        </div>
+        <p class="export-attribution">Map data &copy; OpenStreetMap contributors. Keep attribution with published exports.</p>
+    </aside>
+
+    <div id="walk-hud" class="walk-hud hidden" data-i18n="walkHud">WASD move · Shift sprint · C crouch · Esc exit</div>
 
     <div id="fps-chip" class="hud-chip hud-chip-fps" title="Render frames per second">-- fps</div>
 
@@ -319,6 +365,6 @@
 
     <div id="osm-credit" class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> <span data-i18n="osmContributors">contributors</span></div>
 
-    <script type="module" src="app.js?v=osm1.0.0"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

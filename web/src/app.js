@@ -1,3 +1,5 @@
+/* global GeoTIFF */
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
@@ -8,6 +10,14 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import {
+  blobToDataUrl,
+  buildHtmlSnapshot,
+  buildPdfFromJpeg,
+  buildSvgSnapshot,
+  sanitizeExportBaseName,
+  timestampedFilename
+} from './export_utils.js';
 
 let currentLang = 'EN';
 const urlParams = new URLSearchParams(window.location.search);
@@ -78,6 +88,15 @@ const i18n = {
 };
 function t(key) { return i18n[currentLang]?.[key] ?? i18n.EN?.[key] ?? key; }
 
+// GeoJSON attributes, manifest metadata and uploaded file names are external
+// inputs. Keep the few template-based UI renderers safe by escaping every value
+// before it is interpolated into innerHTML (textContent is preferred elsewhere).
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  })[char]);
+}
+
 Object.assign(i18n.TR, {
   dockLayers: 'Katmanlar', dockScene: 'Sahne & Güneş', dockStyle: 'Stil', dockMobility: 'Hareketlilik',
   dockFurniture: 'Kent Mobilyalari', dockAnalysis: 'Analiz',
@@ -89,12 +108,6 @@ Object.assign(i18n.TR, {
   fenceWall: 'Beton Duvar', fenceSteel: 'Metal Çit', fencePipeline: 'Sanayi Borusu', fenceWood: 'Ahşap Çit / Koruma Alanı',
   lblBlockStyles: 'Ada Kategorileri', dockTitleFences: 'Çit paneli',
   lblTrees: 'Agaclar', lblFurniture: 'Kent mobilyalari', lblCars: 'Araclar', lblPedestrians: 'Yayalar',
-  lblMosques: 'Camiler',
-  lblMosqueSettings: 'Cami Ayarları',
-  lblMosqueScaleX: 'Ölçek X',
-  lblMosqueScaleY: 'Ölçek Y',
-  lblMosqueScaleZ: 'Ölçek Z',
-  lblMosqueRotation: 'Açı (Derece)',
   lblPlanTexture: 'Plan texture', lblOutsideRoiTerrain: 'ROI disi zemin', lblTextureOpacity: 'Texture opakligi',
   lblTextureBrightness: 'Texture parlakligi', lblTextureContrast: 'Texture kontrasti',
   lblModelBase: 'ROI model altligi', lblSideDrop: 'Altlik dususu', lblSideColor: 'Altlik rengi',
@@ -139,14 +152,11 @@ Object.assign(i18n.TR, {
   dockTitleModelStudio: 'Model Laboratuvarı',
   modelUploadTitle: 'Özel Model Yükle (.glb)',
   lblModelCategory: 'Kategori',
-  catMosque: 'Cami',
   catTree: 'Ağaç',
   catLight: 'Sokak Lambası',
   catBench: 'Bank',
   catBin: 'Çöp Kutusu',
   catBusStop: 'Otobüs Durağı',
-  catTumulus: 'Tümülüs',
-  lblTumulus: 'Tümülüsler',
   modelTransformTitle: 'Model Dönüşümü (Yükseklik & Ölçek)',
   lblTransformCategory: 'Kategori',
   treePoolTitle: 'Ağaç Model Havuzu (rastgele)',
@@ -155,22 +165,14 @@ Object.assign(i18n.TR, {
   btnAddPool: '+ Havuza ekle',
   lblElevation: 'Yükseklik',
   uploadedModelsTitle: 'Model Kütüphanesi',
-  mosqueCustomTitle: 'Cami Konumlandırma & Özelleştirme',
-  tumulusCustomTitle: 'Tümülüs Konumlandırma & Özelleştirme',
-  noTumulusInProject: 'Bu projede tümülüs objesi bulunamadı.',
-  lblModel: 'Model',
-  lblColor: 'Renk',
   lblScaleX: 'Ölçek X',
   lblScaleY: 'Ölçek Y',
   lblScaleZ: 'Ölçek Z',
   lblRotation: 'Döndürme',
-  catGlobal: 'Genel Varsayılan',
-  catProcedural: 'Yorumsal (Procedural)',
   noModelsUploaded: 'Henüz model yüklenmedi.',
   btnUse: 'Kullan',
   btnReset: 'Sıfırla',
   confirmDeleteModel: 'Bu modeli silmek istediğinize emin misiniz?',
-  noMosquesInProject: 'Bu projede cami objesi bulunamadı.',
   statusParsing: 'GLB model ayrıştırılıyor...',
   statusSuccess: 'Başarıyla yüklendi!',
   statusError: 'Hata: '
@@ -187,12 +189,6 @@ Object.assign(i18n.EN, {
   fenceWall: 'Concrete Wall', fenceSteel: 'Steel Fence', fencePipeline: 'Industrial Pipeline', fenceWood: 'Wood Fence / Conservative',
   lblBlockStyles: 'Block Categories', dockTitleFences: 'Fences dock',
   lblTrees: 'Trees', lblFurniture: 'Street furniture', lblCars: 'Cars', lblPedestrians: 'Pedestrians',
-  lblMosques: 'Mosques',
-  lblMosqueSettings: 'Mosque Settings',
-  lblMosqueScaleX: 'Scale X',
-  lblMosqueScaleY: 'Scale Y',
-  lblMosqueScaleZ: 'Scale Z',
-  lblMosqueRotation: 'Rotation Angle',
   lblPlanTexture: 'Plan texture', lblOutsideRoiTerrain: 'Outside ROI terrain', lblTextureOpacity: 'Texture opacity',
   lblTextureBrightness: 'Texture brightness', lblTextureContrast: 'Texture contrast',
   lblModelBase: 'ROI model base', lblSideDrop: 'Base drop', lblSideColor: 'Base color',
@@ -237,14 +233,11 @@ Object.assign(i18n.EN, {
   dockTitleModelStudio: 'Model Studio',
   modelUploadTitle: 'Upload Custom Model (.glb)',
   lblModelCategory: 'Category',
-  catMosque: 'Mosque',
   catTree: 'Tree',
   catLight: 'Street Light',
   catBench: 'Bench',
   catBin: 'Trash Bin',
   catBusStop: 'Bus Stop',
-  catTumulus: 'Tumulus',
-  lblTumulus: 'Tumuli',
   modelTransformTitle: 'Model Transform (Elevation & Scale)',
   lblTransformCategory: 'Category',
   treePoolTitle: 'Tree Model Pool (random)',
@@ -253,22 +246,14 @@ Object.assign(i18n.EN, {
   btnAddPool: '+ Add to pool',
   lblElevation: 'Elevation',
   uploadedModelsTitle: 'Library Models',
-  mosqueCustomTitle: 'Mosque Placement & Overrides',
-  tumulusCustomTitle: 'Tumulus Placement & Overrides',
-  noTumulusInProject: 'No tumuli in the current project.',
-  lblModel: 'Model',
-  lblColor: 'Color',
   lblScaleX: 'Scale X',
   lblScaleY: 'Scale Y',
   lblScaleZ: 'Scale Z',
   lblRotation: 'Rotation',
-  catGlobal: 'Global Default',
-  catProcedural: 'Procedural',
   noModelsUploaded: 'No models uploaded yet.',
   btnUse: 'Use',
   btnReset: 'Reset',
   confirmDeleteModel: 'Are you sure you want to delete this model?',
-  noMosquesInProject: 'No mosques in the current project.',
   statusParsing: 'Parsing GLB model...',
   statusSuccess: 'Successfully loaded!',
   statusError: 'Error: '
@@ -420,7 +405,7 @@ scene.fog = new THREE.FogExp2(0xcee4ef, 0.0003);
 const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 20000);
 camera.position.set(0, 420, 580);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -443,6 +428,8 @@ ssaoPass.maxDistance = 0.1;
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.85);
 
 const composer = new EffectComposer(renderer);
+composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+composer.setSize(window.innerWidth, window.innerHeight);
 composer.addPass(renderPass);
 composer.addPass(ssaoPass);
 composer.addPass(bloomPass);
@@ -454,9 +441,6 @@ controls.addEventListener('change', () => { _lastCameraMove = performance.now();
 
 const walkControls = new PointerLockControls(camera, document.body);
 let isWalkMode = false;
-let isGameMode = false;
-let gameScore = 0;
-const stoneProjectiles = []; // { mesh, velocity, life }
 let moveForward = false;
 let moveBackward = false;
 let moveLeft = false;
@@ -494,8 +478,6 @@ let hardscapeGroup = new THREE.Group();
 let buildingGroup = new THREE.Group();
 let roadGroup = new THREE.Group();
 let treeGroup = new THREE.Group();
-let mosqueGroup = new THREE.Group();
-let tumulusGroup = new THREE.Group();
 let shadowHeatmapMesh = null;
 let carGroup = new THREE.Group();
 let bikeLaneGroup = new THREE.Group();
@@ -509,7 +491,6 @@ let pedestrianPathGroup = new THREE.Group();
 let crosswalkGroup = new THREE.Group();
 let terrainSideGroup = new THREE.Group();
 let windPlumeGroup = new THREE.Group();
-let roiBoundaryGroup = new THREE.Group();
 let fenceGroup = new THREE.Group();
 let waterlineGroup = new THREE.Group();
 let zoningGroup = new THREE.Group();
@@ -526,14 +507,11 @@ world.add(terrainSideGroup);
 world.add(windPlumeGroup);
 world.add(roadGroup);
 world.add(treeGroup);
-world.add(mosqueGroup);
-world.add(tumulusGroup);
 world.add(carGroup);
 world.add(bikeLaneGroup);
 world.add(bikeGroup);
 world.add(furnitureGroup);
 world.add(pedestrianGroup);
-world.add(roiBoundaryGroup);
 world.add(fenceGroup);
 world.add(waterlineGroup);
 world.add(zoningGroup);
@@ -576,7 +554,6 @@ let vehicleRoadCurves = [];
 let pedestrianPathCurves = [];
 let cars = [];
 let pedestrians = [];
-let buildingFunctionMaterials = new Map();
 let manifestDefaultsApplied = false;
 let terrainHeightStats = { min: 0, max: 0, avg: 0, p02: 0, p98: 0 };
 let terrainSurfaceCache = null;
@@ -587,8 +564,104 @@ const islandPlateauCache = [];
 const rc = new THREE.Raycaster();
 rc.firstHitOnly = true;
 let _lastCameraMove = 0;
-let _lastSSAORender = 0;
-let isRecording = false;
+
+// Three.js does not release GPU resources when an Object3D is removed. Cached
+// GLTF/template resources and a handful of shared textures must survive layer
+// rebuilds; everything else is owned by the current scene generation.
+const persistentGeometries = new WeakSet();
+const persistentMaterials = new WeakSet();
+const persistentTextures = new WeakSet();
+const pedestrianTemplateCache = new Map();
+const vehicleTemplateCache = new Map();
+
+function markPersistentTexture(texture) {
+  if (texture?.isTexture) persistentTextures.add(texture);
+  return texture;
+}
+
+function markObjectResourcesPersistent(root) {
+  root?.traverse?.((object) => {
+    if (object.geometry) persistentGeometries.add(object.geometry);
+    const materials = object.material ? (Array.isArray(object.material) ? object.material : [object.material]) : [];
+    materials.forEach((material) => {
+      if (!material) return;
+      persistentMaterials.add(material);
+      Object.values(material).forEach((value) => {
+        if (value?.isTexture) persistentTextures.add(value);
+      });
+    });
+  });
+  return root;
+}
+
+function disposeTexture(texture) {
+  if (!texture?.isTexture || persistentTextures.has(texture)) return;
+  texture.dispose();
+}
+
+function releasePersistentTexture(texture) {
+  if (!texture?.isTexture) return;
+  persistentTextures.delete(texture);
+  texture.dispose();
+}
+
+function collectObjectResources(root, resources) {
+  root?.traverse?.((object) => {
+    if (object.geometry && !persistentGeometries.has(object.geometry)) resources.geometries.add(object.geometry);
+    const materials = object.material ? (Array.isArray(object.material) ? object.material : [object.material]) : [];
+    materials.forEach((material) => {
+      if (!material || persistentMaterials.has(material)) return;
+      resources.materials.add(material);
+      Object.values(material).forEach((value) => {
+        if (value?.isTexture && !persistentTextures.has(value)) resources.textures.add(value);
+      });
+    });
+  });
+}
+
+function disposeObjectResources(root) {
+  const resources = { geometries: new Set(), materials: new Set(), textures: new Set() };
+  collectObjectResources(root, resources);
+  resources.textures.forEach(disposeTexture);
+  resources.materials.forEach((material) => material.dispose());
+  resources.geometries.forEach((geometry) => geometry.dispose());
+}
+
+function releasePersistentObjectResources(root) {
+  const resources = { geometries: new Set(), materials: new Set(), textures: new Set() };
+  root?.traverse?.((object) => {
+    if (object.geometry) resources.geometries.add(object.geometry);
+    const materials = object.material ? (Array.isArray(object.material) ? object.material : [object.material]) : [];
+    materials.forEach((material) => {
+      if (!material) return;
+      resources.materials.add(material);
+      Object.values(material).forEach((value) => {
+        if (value?.isTexture) resources.textures.add(value);
+      });
+    });
+  });
+  resources.textures.forEach((texture) => {
+    persistentTextures.delete(texture);
+    texture.dispose();
+  });
+  resources.materials.forEach((material) => {
+    persistentMaterials.delete(material);
+    material.dispose();
+  });
+  resources.geometries.forEach((geometry) => {
+    persistentGeometries.delete(geometry);
+    geometry.dispose();
+  });
+}
+
+function clearProceduralTemplateCaches() {
+  treeLeafTextureCache.forEach(releasePersistentTexture);
+  treeLeafTextureCache.clear();
+  pedestrianTemplateCache.forEach((entry) => releasePersistentObjectResources(entry.mesh));
+  vehicleTemplateCache.forEach((entry) => releasePersistentObjectResources(entry.group));
+  pedestrianTemplateCache.clear();
+  vehicleTemplateCache.clear();
+}
 
 // --- Hover / highlight ---
 let _hoveredBldg = null;
@@ -895,7 +968,7 @@ const ROOF_SHAPE_OPTIONS = ['Flat', 'Pyramid', 'Hip', 'Gable', 'Shed'];
 const textureSets = {
   pavement: {
     Asphalt: null,
-    StoneA: 'assets/pavement.png',
+    StoneA: 'assets/pavement.webp',
     StoneB: 'StoneB',
     Concrete: 'Concrete',
     Cobble: 'Cobble',
@@ -907,7 +980,7 @@ const textureSets = {
   road: {
     Plain: null,
     Asphalt: 'Asphalt',
-    Cobblestone: 'assets/pavement.png',
+    Cobblestone: 'assets/pavement.webp',
     SharedStreet: 'SharedStreet'
   },
   island: {
@@ -921,7 +994,7 @@ const textureSets = {
     Water: 'Water'
   },
   hardscape: {
-    Cobble: 'assets/pavement.png',
+    Cobble: 'assets/pavement.webp',
     Concrete: 'Concrete',
     Tile: 'Tile',
     WarmStone: 'WarmStone',
@@ -930,13 +1003,13 @@ const textureSets = {
     PlazaGranite: 'PlazaGranite'
   },
   facade: {
-    ResidentialA: 'assets/facade_resid_a.png',
-    ResidentialB: 'assets/facade_resid_b.png',
-    ResidentialC: 'assets/facade_resid_c.png',
-    ResidentialD: 'assets/facade_resid_d.png',
-    ResidentialE: 'assets/facade_resid_e.png',
-    ResidentialF: 'assets/facade_resid_f.png',
-    UrbanA: 'assets/facade.png',
+    ResidentialA: 'assets/facade_resid_a.webp',
+    ResidentialB: 'assets/facade_resid_b.webp',
+    ResidentialC: 'assets/facade_resid_c.webp',
+    ResidentialD: 'assets/facade_resid_d.webp',
+    ResidentialE: 'assets/facade_resid_e.webp',
+    ResidentialF: 'assets/facade_resid_f.webp',
+    UrbanA: 'assets/facade.webp',
     UrbanB: 'assets/facade2.png',
     UrbanC: 'assets/facade3.png',
     UrbanD: 'assets/facade4.png',
@@ -949,7 +1022,7 @@ const textureSets = {
     MediterraneanStucco: 'MediterraneanStucco'
   },
   roof: {
-    RoofA: 'assets/roof.png',
+    RoofA: 'assets/roof.webp',
     RoofB: 'RoofB',
     RoofC: 'RoofC',
     RoofD: 'RoofD',
@@ -993,8 +1066,15 @@ function roofTextureLabel(key) {
 // (buildings, roads, base/island, greens, roofs) — never the toolbar/panel chrome.
 // `buildings` is a function-distinct palette consumed by getSemanticColor(); the
 // scene colours mirror builder._THEMES so a fresh export and a live switch match.
-// 'Plugin Tones' reproduces the historical salmon-and-grey look (the default).
+// Editorial Paper is the default shared with the native OSM Quick 3D plugin.
+const DEFAULT_COLOR_THEME = 'Editorial Paper';
 const COLOR_THEMES = {
+  'Editorial Paper': {
+    label: 'Editorial paper — warm & elegant',
+    buildings: { resid: '#ebd4c0', educ: '#cfdcd5', worship: '#e8dfeb', commerc: '#c4d1db', health: '#cfdcd5', sport: '#d6d1b7', green: '#c2c5aa', civic: '#cfdcd5', industr: '#dbcfb8', default: '#dcd8d3' },
+    facades: ['MediterraneanStucco', 'CivicStone', 'CoastalWhite', 'UrbanE'],
+    roadColor: '#7c5c43', islandColor: '#e6dfd3', terrainSideColor: '#b9aa96', terrainOutsideColor: '#fdfbf7', parkColor: '#c2c5aa', sportColor: '#aeb89a', roofTexture: 'RoofA', assetTheme: 'Civic Heritage'
+  },
   'Plugin Tones': {
     label: 'Plugin tones — salmon & grey',
     buildings: { resid: '#c3c7cc', educ: '#a9b6c4', worship: '#bcc7bf', commerc: '#aab0b7', health: '#c7bfc6', sport: '#aeb6c2', green: '#bbf7d0', civic: '#b3afbd', industr: '#9aa0a6', default: '#b6bbc1' },
@@ -1223,7 +1303,7 @@ function applyThemeDefaultsToSettings(resetFunctionFacades = true) {
 }
 
 function activeColorTheme() {
-  return COLOR_THEMES[settings.colorTheme] || COLOR_THEMES['Plugin Tones'];
+  return COLOR_THEMES[settings.colorTheme] || COLOR_THEMES[DEFAULT_COLOR_THEME];
 }
 
 // Apply an easy colour theme to the scene settings (content colours only — never
@@ -1231,8 +1311,8 @@ function activeColorTheme() {
 // (builder._THEMES, authoritative on export) and fall back to COLOR_THEMES so a
 // live switch works too. Per-function building colours/roofs are reseeded.
 function applyColorTheme(name) {
-  const theme = COLOR_THEMES[name] || COLOR_THEMES['Plugin Tones'];
-  settings.colorTheme = COLOR_THEMES[name] ? name : 'Plugin Tones';
+  const theme = COLOR_THEMES[name] || COLOR_THEMES[DEFAULT_COLOR_THEME];
+  settings.colorTheme = COLOR_THEMES[name] ? name : DEFAULT_COLOR_THEME;
   const vd = (typeof projectManifest !== 'undefined' && projectManifest) ? (projectManifest.viewerDefaults || {}) : {};
   const pick = (key) => (vd[key] != null ? vd[key] : theme[key]);
   settings.roadColor = pick('roadColor') || settings.roadColor;
@@ -1307,7 +1387,7 @@ function normalizeFacadeKey(key) {
   return 'UrbanA';
 }
 
-function resolveFacadeForLevels(key, _levels) {
+function resolveFacadeForLevels(key) {
   const normalized = normalizeFacadeKey(key);
   const match = turkishFacadeMatch(normalized);
   if (!match) return normalized;
@@ -1633,8 +1713,15 @@ function presetValue(value, presetMap, fallback) {
 function roofShapeValue(value, fallback) {
   if (value === null || value === undefined) return fallback;
   const raw = String(value).trim();
-  const legacy = { Cone: 'Pyramid', Prism: 'Hip' };
-  const candidate = legacy[raw] || raw;
+  const normalized = raw.toLowerCase().replace(/[\s-]+/g, '_');
+  const aliases = {
+    cone: 'Pyramid', pyramid: 'Pyramid', pyramidal: 'Pyramid',
+    prism: 'Hip', hip: 'Hip', hipped: 'Hip',
+    gable: 'Gable', gabled: 'Gable',
+    shed: 'Shed', skillion: 'Shed', lean_to: 'Shed',
+    flat: 'Flat'
+  };
+  const candidate = aliases[normalized] || raw;
   return ROOF_SHAPE_OPTIONS.find((key) => key.toLowerCase() === candidate.toLowerCase()) || fallback;
 }
 
@@ -1728,7 +1815,7 @@ const settings = {
   buildingMode: 'Extruded + roof',
   terrainAnalysisMode: 'Texture',
   assetTheme: 'Modern Urban',
-  colorTheme: 'Plugin Tones',
+  colorTheme: DEFAULT_COLOR_THEME,
   showXyzTiles: false,
   xyzTileUrl: '',
   roofTexture: 'USShingle',
@@ -1754,11 +1841,6 @@ const settings = {
   treeRandomize: true,
   treeVariantCount: 8,
   treeHeightRandomExpr: '',
-  showMosques: true,
-  mosqueScaleX: 1.0,
-  mosqueScaleY: 1.0,
-  mosqueScaleZ: 1.0,
-  mosqueRotation: 0.0,
   showFurniture: false,
   showCars: false,
   showRoads: true,
@@ -1824,9 +1906,7 @@ const settings = {
   activeBenchModel: 'default',
   activeBinModel: 'default',
   activeBusStopModel: 'default',
-  activeMosqueModel: 'default',
   treeModelPool: [],
-  mosqueElevation: 0,
   treeElevation: 0,
   lightElevation: 0,
   benchElevation: 0,
@@ -1864,9 +1944,8 @@ const PERSISTED_SETTING_KEYS = [
   'assetTheme', 'colorTheme',
   'floorHeight', 'roofTexture', 'roofShape', 'roofHeight', 'roadStyle', 'roadColor', 'roadColorMode', 'roadWidth',
   'showLights', 'lightStyle', 'showBenches', 'benchStyle', 'showBins', 'binStyle', 'showBusStops', 'stopStyle',
-  'showIslands', 'showParcels', 'showHardscape', 'showBuildings', 'showTrees', 'showFurniture', 'showMosques',
-  'mosqueScaleX', 'mosqueScaleY', 'mosqueScaleZ', 'mosqueRotation',
-  'mosqueElevation', 'treeElevation', 'lightElevation', 'benchElevation', 'binElevation', 'busstopElevation',
+  'showIslands', 'showParcels', 'showHardscape', 'showBuildings', 'showTrees', 'showFurniture',
+  'treeElevation', 'lightElevation', 'benchElevation', 'binElevation', 'busstopElevation',
   'treeScaleX', 'treeScaleY', 'treeScaleZ', 'lightScaleX', 'lightScaleY', 'lightScaleZ',
   'benchScaleX', 'benchScaleY', 'benchScaleZ', 'binScaleX', 'binScaleY', 'binScaleZ',
   'busstopScaleX', 'busstopScaleY', 'busstopScaleZ',
@@ -1884,7 +1963,7 @@ const PERSISTED_SETTING_KEYS = [
   'showBikeLanes', 'showBikes', 'bikeLaneWidth', 'bikeLaneColor', 'bikeDensity', 'bikeSpeed',
   'showRoadMarkings', 'showLedges', 'showStorefronts', 'buildingSetback', 'ledgeProjection',
   'showZoningEnvelopes', 'highlightViolations', 'zoningSetback', 'zoningMaxHeight',
-  'activeTreeModel', 'activeLightModel', 'activeBenchModel', 'activeBinModel', 'activeBusStopModel', 'activeMosqueModel',
+  'activeTreeModel', 'activeLightModel', 'activeBenchModel', 'activeBinModel', 'activeBusStopModel',
   'treeModelPool'
 ];
 
@@ -1985,12 +2064,6 @@ function ensureFunctionBuildingStyle(fn, index = 0) {
   return functionBuildingStyleState[fn];
 }
 
-function syncLegacyFunctionStyle(fn) {
-  if (!functionBuildingStyleState[fn]) return;
-  functionBuildingStyleState[fn].color = functionColorState[fn] || functionBuildingStyleState[fn].color;
-  functionBuildingStyleState[fn].facade = normalizeFacadeKey(functionFacadeState[fn] || functionBuildingStyleState[fn].facade);
-}
-
 function loadFunctionBuildingStyles() {
   if (isPortableMode) return;
   try {
@@ -2034,8 +2107,6 @@ loadBlockCategoryStyles();
 const dbName = 'PlanX_ModelStudio_DB';
 const storeName = 'models';
 const uploadedModels = []; // holds { id, name, category, scene }
-let mosqueCustomizations = [];
-let tumulusCustomizations = [];
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -2111,39 +2182,6 @@ async function loadModelsFromDB() {
   }
 }
 
-function loadMosqueCustomizations() {
-  if (isPortableMode) return;
-  try {
-    const raw = localStorage.getItem('planx_3d_city_mosque_customizations');
-    mosqueCustomizations = raw ? JSON.parse(raw) : [];
-  } catch (_) {}
-}
-
-function saveMosqueCustomizations() {
-  if (isPortableMode) return;
-  try {
-    localStorage.setItem('planx_3d_city_mosque_customizations', JSON.stringify(mosqueCustomizations));
-  } catch (_) {}
-}
-
-function loadTumulusCustomizations() {
-  if (isPortableMode) return;
-  try {
-    const raw = localStorage.getItem('planx_3d_city_tumulus_customizations');
-    tumulusCustomizations = raw ? JSON.parse(raw) : [];
-  } catch (_) {}
-}
-
-function saveTumulusCustomizations() {
-  if (isPortableMode) return;
-  try {
-    localStorage.setItem('planx_3d_city_tumulus_customizations', JSON.stringify(tumulusCustomizations));
-  } catch (_) {}
-}
-
-loadMosqueCustomizations();
-loadTumulusCustomizations();
-
 // --- Model Studio Integration Logic & UI rendering ---
 let uploadedModelsLoaded = false;
 
@@ -2156,7 +2194,7 @@ function parseGltfBuffer(buffer) {
           child.receiveShadow = true;
         }
       });
-      resolve(gltf.scene);
+      resolve(markObjectResourcesPersistent(gltf.scene));
     }, (err) => {
       reject(err);
     });
@@ -2188,22 +2226,9 @@ async function ensureUploadedModelsLoaded() {
   }
 }
 
-let cachedDefaultMosqueModel = null;
-let cachedDefaultTreeModel = null;
-
-function rebuildMosqueLayerPartially() {
-  if (!layerDataCache || !layerDataCache.mosques) return;
-  buildMosqueLayer(layerDataCache.mosques, cachedDefaultMosqueModel);
-}
-
 function rebuildTreeLayerPartially() {
   if (!layerDataCache || !layerDataCache.agaclar) return;
-  buildTreeLayer(layerDataCache.agaclar, cachedDefaultTreeModel);
-}
-
-function rebuildTumulusLayerPartially() {
-  if (!layerDataCache || !layerDataCache.tumulus) return;
-  buildTumulusLayer(layerDataCache.tumulus, null);
+  buildTreeLayer(layerDataCache.agaclar);
 }
 
 function rebuildFurnitureLayerPartially() {
@@ -2214,10 +2239,6 @@ function rebuildFurnitureLayerPartially() {
 function rebuildCategoryLayer(cat) {
   if (cat === 'tree') {
     rebuildTreeLayerPartially();
-  } else if (cat === 'mosque') {
-    rebuildMosqueLayerPartially();
-  } else if (cat === 'tumulus') {
-    rebuildTumulusLayerPartially();
   } else {
     rebuildFurnitureLayerPartially();
   }
@@ -2229,8 +2250,6 @@ function getActiveModelForCategory(cat) {
   if (cat === 'bench') return settings.activeBenchModel;
   if (cat === 'bin') return settings.activeBinModel;
   if (cat === 'busstop') return settings.activeBusStopModel;
-  if (cat === 'mosque') return settings.activeMosqueModel;
-  if (cat === 'tumulus') return settings.activeTumulusModel;
   return 'default';
 }
 
@@ -2265,26 +2284,11 @@ function setActiveModelForCategory(cat, modelId) {
       settings.showFurniture = true;
       settings.showBusStops = true;
     }
-  } else if (cat === 'mosque') {
-    settings.activeMosqueModel = modelId;
-    if (modelId !== 'default') {
-      settings.showMosques = true;
-    }
-  } else if (cat === 'tumulus') {
-    settings.activeTumulusModel = modelId;
-    if (modelId !== 'default') {
-      settings.showTumulus = true;
-    }
   }
 
   if (typeof updateDockControls === 'function') {
     updateDockControls();
   }
-}
-
-function getMosqueName(feature, index) {
-  const props = feature.properties || {};
-  return props.name || props.adi || props.label || `${t('catMosque') || 'Mosque'} #${index + 1}`;
 }
 
 function renderUploadedModelsList() {
@@ -2306,23 +2310,27 @@ function renderUploadedModelsList() {
     item.className = 'uploaded-model-item';
     
     const catLabel = t('cat' + m.category.charAt(0).toUpperCase() + m.category.slice(1)) || m.category;
+    const safeName = escapeHtml(m.name);
+    const safeId = escapeHtml(m.id);
+    const safeCategory = escapeHtml(m.category);
+    const safeCatLabel = escapeHtml(catLabel);
     
     item.innerHTML = `
       <div class="model-meta">
-        <span class="model-name" title="${m.name}">${m.name}</span>
-        <span class="model-tag">${catLabel} ${isCategoryActive ? ` <span style="color:#22c55e;">● ${t('active') || 'Active'}</span>` : ''}</span>
+        <span class="model-name" title="${safeName}">${safeName}</span>
+        <span class="model-tag">${safeCatLabel} ${isCategoryActive ? ` <span style="color:#22c55e;">● ${escapeHtml(t('active') || 'Active')}</span>` : ''}</span>
       </div>
       <div style="display: flex; gap: 4px; align-items: center;">
         ${!isCategoryActive ? `
-          <button class="btn-use-model" data-id="${m.id}" data-category="${m.category}" style="background: var(--planx-accent, #5eead4); color: #0f172a; border: 0; border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; cursor: pointer;">
+          <button class="btn-use-model" data-id="${safeId}" data-category="${safeCategory}" style="background: var(--planx-accent, #5eead4); color: #0f172a; border: 0; border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; cursor: pointer;">
             ${t('btnUse') || 'Use'}
           </button>
         ` : `
-          <button class="btn-reset-model" data-category="${m.category}" style="background: rgba(255,255,255,0.15); color: white; border: 0; border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; cursor: pointer;">
+          <button class="btn-reset-model" data-category="${safeCategory}" style="background: rgba(255,255,255,0.15); color: white; border: 0; border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; cursor: pointer;">
             ${t('btnReset') || 'Reset'}
           </button>
         `}
-        <button class="btn-delete-model" data-id="${m.id}">x</button>
+        <button class="btn-delete-model" data-id="${safeId}">x</button>
       </div>
     `;
     
@@ -2352,21 +2360,9 @@ function renderUploadedModelsList() {
         if (Array.isArray(settings.treeModelPool)) {
           settings.treeModelPool = settings.treeModelPool.filter(id => id !== m.id);
         }
-
-        mosqueCustomizations.forEach(cust => {
-          if (cust.modelId === m.id) cust.modelId = 'default';
-        });
-        saveMosqueCustomizations();
-        tumulusCustomizations.forEach(cust => {
-          if (cust.modelId === m.id) cust.modelId = 'default';
-        });
-        saveTumulusCustomizations();
-
         savePersistedSettings();
         renderUploadedModelsList();
         renderTreePoolList();
-        renderMosqueCustomizationsList();
-        renderTumulusCustomizationsList();
         rebuildCategoryLayer(m.category);
       }
     });
@@ -2392,16 +2388,18 @@ function renderTreePoolList() {
     const inPool = settings.treeModelPool.includes(m.id);
     const item = document.createElement('div');
     item.className = 'uploaded-model-item';
+    const safeName = escapeHtml(m.name);
+    const safeId = escapeHtml(m.id);
     item.innerHTML = `
       <div class="model-meta">
-        <span class="model-name" title="${m.name}">${m.name}</span>
+        <span class="model-name" title="${safeName}">${safeName}</span>
         <span class="model-tag">${t('catTree') || 'Tree'} ${inPool ? ` <span style="color:#22c55e;">● ${t('active') || 'Active'}</span>` : ''}</span>
       </div>
       <div style="display: flex; gap: 4px; align-items: center;">
         <button class="btn-pool-toggle" style="background: ${inPool ? 'rgba(255,255,255,0.15)' : 'var(--planx-accent, #5eead4)'}; color: ${inPool ? 'white' : '#0f172a'}; border: 0; border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; cursor: pointer;">
           ${inPool ? (t('btnInPool') || '✓ In pool') : (t('btnAddPool') || '+ Add to pool')}
         </button>
-        <button class="btn-delete-model" data-id="${m.id}">x</button>
+        <button class="btn-delete-model" data-id="${safeId}">x</button>
       </div>
     `;
 
@@ -2446,8 +2444,6 @@ function renderTreePoolList() {
 }
 
 const CATEGORY_ELEVATION_KEY = {
-  mosque: 'mosqueElevation',
-  tumulus: 'tumulusElevation',
   tree: 'treeElevation',
   light: 'lightElevation',
   bench: 'benchElevation',
@@ -2456,8 +2452,6 @@ const CATEGORY_ELEVATION_KEY = {
 };
 
 const CATEGORY_SCALE_KEYS = {
-  mosque: ['mosqueScaleX', 'mosqueScaleY', 'mosqueScaleZ'],
-  tumulus: ['tumulusScaleX', 'tumulusScaleY', 'tumulusScaleZ'],
   tree: ['treeScaleX', 'treeScaleY', 'treeScaleZ'],
   light: ['lightScaleX', 'lightScaleY', 'lightScaleZ'],
   bench: ['benchScaleX', 'benchScaleY', 'benchScaleZ'],
@@ -2468,8 +2462,6 @@ const CATEGORY_SCALE_KEYS = {
 // Categories whose global rotation is meaningful from the Transform panel.
 // Furniture rotation is applied as an offset on top of the road-aligned/attribute angle.
 const CATEGORY_ROTATION_KEY = {
-  mosque: 'mosqueRotation',
-  tumulus: 'tumulusRotation',
   light: 'lightRotation',
   bench: 'benchRotation',
   bin: 'binRotation',
@@ -2478,7 +2470,7 @@ const CATEGORY_ROTATION_KEY = {
 
 function activeTransformCategory() {
   const sel = document.getElementById('transform-category');
-  return (sel && sel.value) || 'mosque';
+  return (sel && sel.value) || 'tree';
 }
 
 // Per-category Elevation + Scale (X/Y/Z) panel, driven by the category selector.
@@ -2496,7 +2488,7 @@ function renderModelTransformControls() {
     const current = Number(settings[key]);
     const value = Number.isFinite(current) ? current : (key.includes('Scale') ? 1 : 0);
     const row = document.createElement('div');
-    row.className = 'mosque-custom-slider-row';
+    row.className = 'model-transform-slider-row';
     row.style.cssText = 'display:flex; align-items:center; gap:6px;';
     row.innerHTML = `
       <span style="flex: 0 0 78px; font-size: 0.72rem; color: rgba(255,255,255,0.85);">${labelText}</span>
@@ -2531,291 +2523,6 @@ function renderModelTransformControls() {
   if (rotKey) {
     makeSliderRow(t('lblRotation') || 'Rotation', rotKey, 0, 360, 1, (v) => Math.round(v) + '°');
   }
-}
-
-function renderMosqueCustomizationsList() {
-  const container = document.getElementById('mosque-custom-list');
-  if (!container) return;
-  container.innerHTML = '';
-  
-  if (!layerDataCache?.mosques?.features?.length) {
-    container.innerHTML = `<div style="text-align:center; font-size:0.7rem; color:rgba(255,255,255,0.4); padding:10px;">${t('noMosquesInProject') || 'No mosques in the current project.'}</div>`;
-    return;
-  }
-  
-  layerDataCache.mosques.features.forEach((f, idx) => {
-    const name = getMosqueName(f, idx);
-    
-    if (!mosqueCustomizations[idx]) {
-      mosqueCustomizations[idx] = {
-        modelId: 'default',
-        color: '#ffffff',
-        scaleX: 1.0,
-        scaleY: 1.0,
-        scaleZ: 1.0,
-        rotation: 0,
-        elevation: 0
-      };
-    }
-    const cust = mosqueCustomizations[idx];
-    if (cust.elevation === undefined) cust.elevation = 0;
-    
-    const card = document.createElement('div');
-    card.className = 'mosque-custom-card';
-    
-    let modelOptionsHtml = `
-      <option value="default" ${cust.modelId === 'default' ? 'selected' : ''}>${t('catGlobal') || 'Global Default'}</option>
-      <option value="procedural" ${cust.modelId === 'procedural' ? 'selected' : ''}>${t('catProcedural') || 'Procedural'}</option>
-    `;
-    
-    uploadedModels.filter(m => m.category === 'mosque').forEach(m => {
-      modelOptionsHtml += `<option value="${m.id}" ${cust.modelId === m.id ? 'selected' : ''}>${m.name}</option>`;
-    });
-    
-    card.innerHTML = `
-      <div class="mosque-custom-card-header">
-        <strong>${name}</strong>
-      </div>
-      <div class="mosque-custom-card-grid">
-        <div class="mosque-custom-field">
-          <span>${t('lblModel') || 'Model'}</span>
-          <select class="mosque-model-select">${modelOptionsHtml}</select>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblColor') || 'Color'}</span>
-          <input type="color" class="mosque-color-input" value="${cust.color || '#ffffff'}">
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblScaleX') || 'Scale X'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="mosque-scale-x" min="0.1" max="5.0" step="0.1" value="${cust.scaleX}">
-            <span class="scale-x-val" style="min-width:24px; text-align:right;">${cust.scaleX}</span>
-          </div>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblScaleY') || 'Scale Y'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="mosque-scale-y" min="0.1" max="5.0" step="0.1" value="${cust.scaleY}">
-            <span class="scale-y-val" style="min-width:24px; text-align:right;">${cust.scaleY}</span>
-          </div>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblScaleZ') || 'Scale Z'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="mosque-scale-z" min="0.1" max="5.0" step="0.1" value="${cust.scaleZ}">
-            <span class="scale-z-val" style="min-width:24px; text-align:right;">${cust.scaleZ}</span>
-          </div>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblRotation') || 'Rotation'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="mosque-rotation" min="0" max="360" step="5" value="${cust.rotation}">
-            <span class="rotation-val" style="min-width:24px; text-align:right;">${cust.rotation}</span>
-          </div>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblElevation') || 'Elevation'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="mosque-elevation" min="-15" max="30" step="0.5" value="${cust.elevation}">
-            <span class="elevation-val" style="min-width:32px; text-align:right;">${Number(cust.elevation).toFixed(1)}m</span>
-          </div>
-        </div>
-      </div>
-    `;
-    
-    let debounceTimer;
-    const triggerRebuild = () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        saveMosqueCustomizations();
-        rebuildMosqueLayerPartially();
-      }, 50);
-    };
-    
-    card.querySelector('.mosque-model-select').addEventListener('change', (e) => {
-      cust.modelId = e.target.value;
-      triggerRebuild();
-    });
-    
-    card.querySelector('.mosque-color-input').addEventListener('input', (e) => {
-      cust.color = e.target.value;
-      triggerRebuild();
-    });
-    
-    const scaleXInput = card.querySelector('.mosque-scale-x');
-    const scaleXVal = card.querySelector('.scale-x-val');
-    scaleXInput.addEventListener('input', (e) => {
-      cust.scaleX = parseFloat(e.target.value);
-      scaleXVal.innerText = cust.scaleX;
-      triggerRebuild();
-    });
-    
-    const scaleYInput = card.querySelector('.mosque-scale-y');
-    const scaleYVal = card.querySelector('.scale-y-val');
-    scaleYInput.addEventListener('input', (e) => {
-      cust.scaleY = parseFloat(e.target.value);
-      scaleYVal.innerText = cust.scaleY;
-      triggerRebuild();
-    });
-    
-    const scaleZInput = card.querySelector('.mosque-scale-z');
-    const scaleZVal = card.querySelector('.scale-z-val');
-    scaleZInput.addEventListener('input', (e) => {
-      cust.scaleZ = parseFloat(e.target.value);
-      scaleZVal.innerText = cust.scaleZ;
-      triggerRebuild();
-    });
-    
-    const rotationInput = card.querySelector('.mosque-rotation');
-    const rotationVal = card.querySelector('.rotation-val');
-    rotationInput.addEventListener('input', (e) => {
-      cust.rotation = parseInt(e.target.value);
-      rotationVal.innerText = cust.rotation;
-      triggerRebuild();
-    });
-
-    const elevationInput = card.querySelector('.mosque-elevation');
-    const elevationVal = card.querySelector('.elevation-val');
-    elevationInput.addEventListener('input', (e) => {
-      cust.elevation = parseFloat(e.target.value);
-      elevationVal.innerText = cust.elevation.toFixed(1) + 'm';
-      triggerRebuild();
-    });
-
-    container.appendChild(card);
-  });
-}
-
-function getTumulusName(feature, index) {
-  const props = feature.properties || {};
-  return props.name || props.adi || props.label || `${t('catTumulus') || 'Tumulus'} #${index + 1}`;
-}
-
-function renderTumulusCustomizationsList() {
-  const container = document.getElementById('tumulus-custom-list');
-  if (!container) return;
-  container.innerHTML = '';
-
-  if (!layerDataCache?.tumulus?.features?.length) {
-    container.innerHTML = `<div style="text-align:center; font-size:0.7rem; color:rgba(255,255,255,0.4); padding:10px;">${t('noTumulusInProject') || 'No tumuli in the current project.'}</div>`;
-    return;
-  }
-
-  layerDataCache.tumulus.features.forEach((f, idx) => {
-    if (!f.geometry || f.geometry.type !== 'Point') return;
-    const name = getTumulusName(f, idx);
-
-    if (!tumulusCustomizations[idx]) {
-      tumulusCustomizations[idx] = {
-        modelId: 'default',
-        color: '#ffffff',
-        scaleX: 1.0,
-        scaleY: 1.0,
-        scaleZ: 1.0,
-        rotation: 0,
-        elevation: 0
-      };
-    }
-    const cust = tumulusCustomizations[idx];
-    if (cust.elevation === undefined) cust.elevation = 0;
-
-    const card = document.createElement('div');
-    card.className = 'mosque-custom-card';
-
-    let modelOptionsHtml = `
-      <option value="default" ${cust.modelId === 'default' ? 'selected' : ''}>${t('catGlobal') || 'Global Default'}</option>
-      <option value="procedural" ${cust.modelId === 'procedural' ? 'selected' : ''}>${t('catProcedural') || 'Procedural'}</option>
-    `;
-    uploadedModels.filter(m => m.category === 'tumulus').forEach(m => {
-      modelOptionsHtml += `<option value="${m.id}" ${cust.modelId === m.id ? 'selected' : ''}>${m.name}</option>`;
-    });
-
-    card.innerHTML = `
-      <div class="mosque-custom-card-header">
-        <strong>${name}</strong>
-      </div>
-      <div class="mosque-custom-card-grid">
-        <div class="mosque-custom-field">
-          <span>${t('lblModel') || 'Model'}</span>
-          <select class="tumulus-model-select">${modelOptionsHtml}</select>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblColor') || 'Color'}</span>
-          <input type="color" class="tumulus-color-input" value="${cust.color || '#ffffff'}">
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblScaleX') || 'Scale X'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="tumulus-scale-x" min="0.1" max="5.0" step="0.1" value="${cust.scaleX}">
-            <span class="scale-x-val" style="min-width:24px; text-align:right;">${cust.scaleX}</span>
-          </div>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblScaleY') || 'Scale Y'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="tumulus-scale-y" min="0.1" max="5.0" step="0.1" value="${cust.scaleY}">
-            <span class="scale-y-val" style="min-width:24px; text-align:right;">${cust.scaleY}</span>
-          </div>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblScaleZ') || 'Scale Z'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="tumulus-scale-z" min="0.1" max="5.0" step="0.1" value="${cust.scaleZ}">
-            <span class="scale-z-val" style="min-width:24px; text-align:right;">${cust.scaleZ}</span>
-          </div>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblRotation') || 'Rotation'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="tumulus-rotation" min="0" max="360" step="5" value="${cust.rotation}">
-            <span class="rotation-val" style="min-width:24px; text-align:right;">${cust.rotation}</span>
-          </div>
-        </div>
-        <div class="mosque-custom-field">
-          <span>${t('lblElevation') || 'Elevation'}</span>
-          <div class="mosque-custom-slider-row">
-            <input type="range" class="tumulus-elevation" min="-15" max="30" step="0.5" value="${cust.elevation}">
-            <span class="elevation-val" style="min-width:32px; text-align:right;">${Number(cust.elevation).toFixed(1)}m</span>
-          </div>
-        </div>
-      </div>
-    `;
-
-    let debounceTimer;
-    const triggerRebuild = () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        saveTumulusCustomizations();
-        rebuildTumulusLayerPartially();
-      }, 50);
-    };
-
-    card.querySelector('.tumulus-model-select').addEventListener('change', (e) => {
-      cust.modelId = e.target.value;
-      triggerRebuild();
-    });
-    card.querySelector('.tumulus-color-input').addEventListener('input', (e) => {
-      cust.color = e.target.value;
-      triggerRebuild();
-    });
-    const sx = card.querySelector('.tumulus-scale-x');
-    const sxv = card.querySelector('.scale-x-val');
-    sx.addEventListener('input', (e) => { cust.scaleX = parseFloat(e.target.value); sxv.innerText = cust.scaleX; triggerRebuild(); });
-    const sy = card.querySelector('.tumulus-scale-y');
-    const syv = card.querySelector('.scale-y-val');
-    sy.addEventListener('input', (e) => { cust.scaleY = parseFloat(e.target.value); syv.innerText = cust.scaleY; triggerRebuild(); });
-    const sz = card.querySelector('.tumulus-scale-z');
-    const szv = card.querySelector('.scale-z-val');
-    sz.addEventListener('input', (e) => { cust.scaleZ = parseFloat(e.target.value); szv.innerText = cust.scaleZ; triggerRebuild(); });
-    const rot = card.querySelector('.tumulus-rotation');
-    const rotv = card.querySelector('.rotation-val');
-    rot.addEventListener('input', (e) => { cust.rotation = parseInt(e.target.value); rotv.innerText = cust.rotation; triggerRebuild(); });
-    const elev = card.querySelector('.tumulus-elevation');
-    const elevv = card.querySelector('.elevation-val');
-    elev.addEventListener('input', (e) => { cust.elevation = parseFloat(e.target.value); elevv.innerText = cust.elevation.toFixed(1) + 'm'; triggerRebuild(); });
-
-    container.appendChild(card);
-  });
 }
 
 function initModelStudioListeners() {
@@ -2869,8 +2576,6 @@ function initModelStudioListeners() {
         renderUploadedModelsList();
         renderTreePoolList();
         renderModelTransformControls();
-        renderMosqueCustomizationsList();
-        renderTumulusCustomizationsList();
         rebuildCategoryLayer(category);
 
       } catch (err) {
@@ -2882,82 +2587,25 @@ function initModelStudioListeners() {
   }
 }
 
-loadMosqueCustomizations();
-
-const tourState = {
-  keyframes: [],
-  duration: 18,
-  loop: false,
-  playing: false,
-  currentTime: 0,
-  startedAt: 0,
-  startTime: 0
-};
-let selectedTourIndex = -1;
-
-function loadTourState() {
-  if (isPortableMode) return;
-  try {
-    const raw = localStorage.getItem('planx_3d_city_tour');
-    if (!raw) return;
-    applyTourData(JSON.parse(raw), false);
-  } catch (err) {
-    console.warn('Could not restore PlanX tour', err);
-  }
-}
-
-function applyTourData(data, persist = true) {
-  tourState.keyframes = Array.isArray(data?.keyframes) ? data.keyframes : [];
-  tourState.duration = Number(data?.duration) || tourState.duration || 18;
-  tourState.loop = !!data?.loop;
-  selectedTourIndex = tourState.keyframes.length ? 0 : -1;
-  if (persist) saveTourState();
-  updateTourControls();
-  renderTourList();
-}
-
-async function loadBundledTourStateIfAvailable() {
-  if (tourState.keyframes.length) return false;
-  try {
-    const r = await fetch('../data/planx_tour.json', { cache: 'no-store' });
-    if (!r.ok) return false;
-    const data = await r.json();
-    applyTourData(data, true);
-    setStatus(t('tourLoaded'));
-    return true;
-  } catch (err) {
-    console.warn('Bundled PlanX tour could not be loaded', err);
-    return false;
-  }
-}
-
-function saveTourState() {
-  if (isPortableMode) return;
-  try {
-    localStorage.setItem('planx_3d_city_tour', JSON.stringify({
-      keyframes: tourState.keyframes,
-      duration: tourState.duration,
-      loop: tourState.loop
-    }));
-  } catch (err) {
-    console.warn('Could not save PlanX tour', err);
-  }
-}
-
-loadTourState();
-
 function createAsphaltTexture() {
   const c = document.createElement('canvas');
-  c.width = 512; c.height = 512;
+  c.width = 256; c.height = 256;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#2e3135';
+  // Neutral luminance lets the selected theme/analysis colour tint one shared
+  // texture. The old per-road 512px texture allocated megabytes of GPU memory.
+  ctx.fillStyle = '#b8b8b8';
   ctx.fillRect(0, 0, c.width, c.height);
-  for (let i = 0; i < 2200; i++) {
-    const x = Math.random() * c.width;
-    const y = Math.random() * c.height;
-    const r = Math.random() * 1.2 + 0.2;
-    const g = 80 + Math.floor(Math.random() * 70);
-    ctx.fillStyle = `rgba(${g},${g},${g},0.20)`;
+  let seed = 0x4f534d33;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  for (let i = 0; i < 900; i++) {
+    const x = random() * c.width;
+    const y = random() * c.height;
+    const r = random() * 1.1 + 0.2;
+    const g = 65 + Math.floor(random() * 120);
+    ctx.fillStyle = `rgba(${g},${g},${g},0.18)`;
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
   }
   const t = new THREE.CanvasTexture(c);
@@ -3508,7 +3156,7 @@ function fallbackSceneBounds() {
   return { minX: -500, maxX: 500, minY: -500, maxY: 500 };
 }
 
-function activateFlatTerrainFallback(sourceBounds = null, height = 0) {
+function activateFlatTerrainFallback(sourceBounds = null, height = 0, statusMessage = 'DEM not found; using a flat presentation plane.') {
   const b = sourceBounds || bounds || deriveVectorBounds(layerDataCache) || fallbackSceneBounds();
   bounds = { ...b };
   demSampler = {
@@ -3527,7 +3175,7 @@ function activateFlatTerrainFallback(sourceBounds = null, height = 0) {
   demReady = true;
   demLoadingStarted = false;
   _lastTerrainY = height;
-  setStatus('DEM not found; using a flat presentation plane.');
+  if (statusMessage) setStatus(statusMessage);
 }
 
 function normalizeAccessText(value) {
@@ -3893,18 +3541,13 @@ async function loadProjectDem() {
     noData: image.getGDALNoData()
   };
   demReady = true;
-  setStatus(`${t('demLoaded')} (Bergama_Elevation_Cropped.tif).`);
+  setStatus(`${t('demLoaded')} (mydem.tif).`);
 }
 
 function clearGroup(g) {
-  while (g.children.length) {
-    const c = g.children.pop();
-    if (c.geometry) c.geometry.dispose();
-    if (c.material) {
-      const mats = Array.isArray(c.material) ? c.material : [c.material];
-      mats.forEach((m) => m.dispose());
-    }
-  }
+  if (!g) return;
+  disposeObjectResources(g);
+  g.clear();
 }
 
 function createRoiMaskTexture(width, depth) {
@@ -4241,8 +3884,6 @@ function buildTerrainSideSkirt(width, depth, demMin, fallbackHeight) {
   if (roiFeatures.length) {
     roiFeatures.forEach((feature) => getPolygonRings(feature.geometry).forEach(addBottomPolygon));
   } else {
-    const halfW = width * 0.5;
-    const halfD = depth * 0.5;
     addBottomPolygon([[
       [bounds.minX, bounds.minY],
       [bounds.maxX, bounds.minY],
@@ -4739,6 +4380,7 @@ async function buildTerrain(adalar, buildToken = sceneBuildToken) {
         depth / Math.max(2, settings.terrainTileMeters || 60))));
   if (isSceneBuildStale(buildToken)) {
     geo.dispose();
+    disposeTexture(groundTex);
     return false;
   }
   const terrainOpacity = useRasterTexture ? settings.terrainTextureOpacity : 1;
@@ -5395,7 +5037,7 @@ function buildWaterlinesLayer(waterlines) {
   }
 }
 
-async function buildIslandLayer(adalar, buildToken = sceneBuildToken) {
+async function buildIslandLayer(adalar) {
   clearGroup(islandGroup);
   if (!adalar?.features?.length) return;
   
@@ -6026,6 +5668,45 @@ function polygonCentroid(points) {
   return new THREE.Vector3(cx * k, 0, cz * k);
 }
 
+function pointInRoofRing(point, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    const crosses = ((a.z > point.z) !== (b.z > point.z))
+      && (point.x < (b.x - a.x) * (point.z - a.z) / ((b.z - a.z) || 1e-12) + a.x);
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function pyramidApexForRing(ring, height) {
+  const centroid = polygonCentroid(ring);
+  if (pointInRoofRing(centroid, ring)) {
+    centroid.y = height;
+    return centroid;
+  }
+  // A polygon centroid may lie outside a strongly concave footprint. Use the
+  // centroid of its largest interior triangulation face as a guaranteed-safe
+  // apex instead of producing crossed/inverted pyramid faces.
+  const contour = ring.map((p) => new THREE.Vector2(p.x, p.z));
+  if (THREE.ShapeUtils.isClockWise(contour)) contour.reverse();
+  const triangles = THREE.ShapeUtils.triangulateShape(contour, []);
+  let best = null;
+  let bestArea = -1;
+  for (const triangle of triangles) {
+    const a = contour[triangle[0]];
+    const b = contour[triangle[1]];
+    const c = contour[triangle[2]];
+    const area = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+    if (area > bestArea) {
+      bestArea = area;
+      best = new THREE.Vector3((a.x + b.x + c.x) / 3, height, (a.y + b.y + c.y) / 3);
+    }
+  }
+  return best || new THREE.Vector3(ring[0].x, height, ring[0].z);
+}
+
 function convexHull2D(points) {
   const ps = points.map((p) => ({ x: p.x, z: p.z }))
     .sort((a, b) => (a.x - b.x) || (a.z - b.z));
@@ -6150,7 +5831,12 @@ function roofGeometryFromTriangles(points, faces) {
 }
 
 function roofMeshFor(shape, footprintPoints, hBase, height, roofShape = settings.roofShape, roofHeight = settings.roofHeight) {
-  const ring = footprintPoints.filter((_, i) => i === 0 || footprintPoints[i - 1].distanceTo(footprintPoints[i]) > 1e-6);
+  const ring = [];
+  for (const point of footprintPoints) {
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.z)) continue;
+    if (!ring.length || ring[ring.length - 1].distanceTo(point) > 1e-6) ring.push(point);
+  }
+  if (ring.length > 2 && ring[0].distanceTo(ring[ring.length - 1]) <= 1e-6) ring.pop();
   const safeShape = roofShapeValue(roofShape, 'Pyramid');
   const rh = Math.max(0, Number(roofHeight) || 0);
   let roofGeo;
@@ -6159,10 +5845,9 @@ function roofMeshFor(shape, footprintPoints, hBase, height, roofShape = settings
     roofGeo = new THREE.ShapeGeometry(shape);
     roofGeo.rotateX(Math.PI / 2);
   } else if (safeShape === 'Pyramid') {
-    const center = polygonCentroid(ring);
-    center.y = rh;
-    const faces = ring.map((a, i) => [a, ring[(i + 1) % ring.length], center]);
-    roofGeo = roofGeometryFromTriangles(ring.concat([center]), faces);
+    const apex = pyramidApexForRing(ring, rh);
+    const faces = ring.map((a, i) => [a, ring[(i + 1) % ring.length], apex]);
+    roofGeo = roofGeometryFromTriangles(ring.concat([apex]), faces);
   } else {
     // Footprint-following roofs (like Pyramid): eaves are the real polygon edges,
     // not a bounding box. Orientation/ridge axis comes from the OBB; the eave is
@@ -6278,73 +5963,6 @@ function roofMeshFor(shape, footprintPoints, hBase, height, roofShape = settings
   return roof;
 }
 
-// Legacy tree renderer retained only for regression reference.
-function buildTreeLayerLegacy(agaclar) {
-  clearGroup(treeGroup);
-  if (!agaclar?.features?.length) return;
-  const feats = agaclar.features.filter(f => f.geometry?.type === 'Point');
-  if (!feats.length) return;
-  const heightFields = namesWithMapping('tree_height_field', ['planx_tree_height', 'tree_height', 'height', 'boy', 'agac_boyu', 'ağaç_boyu', 'aÄŸaÃ§_boyu', 'yukseklik', 'yükseklik', 'yÃ¼kseklik']);
-
-  // Group by variant (0,1,2)
-  const buckets = [[], [], []];
-  feats.forEach((f, i) => {
-    const h = parseNumberProp(f.properties || {}, heightFields, 8);
-    const treeH = Number.isFinite(h) && h > 1 ? h : 8;
-    const [x, z] = metersToLocal(f.geometry.coordinates[0], f.geometry.coordinates[1]);
-    const y = terrainLocalYAt(x, z) + LAYER.content;
-    buckets[i % 3].push({ x, y, z, h: treeH });
-  });
-
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.95 });
-  const treeVariants = assetPoolVariants('trees');
-  const leafMats = [0, 1, 2].map((idx) => new THREE.MeshStandardMaterial({
-    color: assetColor(treeVariants[idx], [0x3b6e2e, 0x497e3a, 0x4a7530][idx]),
-    roughness: idx === 2 ? 0.88 : 0.9
-  }));
-  const crownGeos = [
-    new THREE.ConeGeometry(1, 2.2, 7),       // conifer
-    new THREE.SphereGeometry(1, 6, 5),        // deciduous round
-    new THREE.IcosahedronGeometry(1, 1)       // bushy irregular
-  ];
-  const trunkGeo = new THREE.CylinderGeometry(0.1, 0.18, 1, 5);
-  const dummy = new THREE.Object3D();
-
-  buckets.forEach((trees, vi) => {
-    if (!trees.length) return;
-    const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
-    trunkInst.castShadow = true;
-    const crownInst = new THREE.InstancedMesh(crownGeos[vi], leafMats[vi], trees.length);
-    crownInst.castShadow = true;
-
-    trees.forEach(({ x, y, z, h }, idx) => {
-      const trunkH = Math.max(1.2, h * 0.22);
-      const crownH = Math.max(2, h * 0.78);
-      // deterministic rotation from position
-      const rot = ((x * 13.7 + z * 7.3) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-
-      dummy.position.set(x, y + trunkH * 0.5, z);
-      dummy.rotation.set(0, rot, 0);
-      dummy.scale.set(1, trunkH, 1);
-      dummy.updateMatrix();
-      trunkInst.setMatrixAt(idx, dummy.matrix);
-
-      const cr = crownH * (vi === 0 ? 0.38 : vi === 1 ? 0.50 : 0.44);
-      const ch = crownH * (vi === 0 ? 1.0  : vi === 1 ? 0.72 : 0.68);
-      const cy = y + trunkH + crownH * (vi === 0 ? 0.48 : 0.35);
-      dummy.position.set(x, cy, z);
-      dummy.rotation.set(0, rot, 0);
-      dummy.scale.set(cr, ch, cr);
-      dummy.updateMatrix();
-      crownInst.setMatrixAt(idx, dummy.matrix);
-    });
-
-    trunkInst.instanceMatrix.needsUpdate = true;
-    crownInst.instanceMatrix.needsUpdate = true;
-    treeGroup.add(trunkInst, crownInst);
-  });
-}
-
 function parseRandRangeExpr(expr) {
   const text = String(expr || '').trim();
   if (!text) return null;
@@ -6375,7 +5993,7 @@ function treeLeafTextureForVariant(variantName) {
   c.height = 128;
   const ctx = c.getContext('2d');
   if (!ctx) {
-    const fallback = new THREE.CanvasTexture(c);
+    const fallback = markPersistentTexture(new THREE.CanvasTexture(c));
     treeLeafTextureCache.set(key, fallback);
     return fallback;
   }
@@ -6398,6 +6016,7 @@ function treeLeafTextureForVariant(variantName) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  markPersistentTexture(tex);
   treeLeafTextureCache.set(key, tex);
   return tex;
 }
@@ -6516,7 +6135,7 @@ function representativeTreeCoords(geometry) {
 }
 
 // InstancedMesh trees — dynamic variant buckets (up to 10 presets) with optional randomize + rand(min,max) heights.
-function buildTreeLayer(agaclar, treeModel) {
+function buildTreeLayer(agaclar) {
   clearGroup(treeGroup);
   if (!agaclar?.features?.length) return;
   const treeSamples = [];
@@ -6575,10 +6194,11 @@ function buildTreeLayer(agaclar, treeModel) {
   const customModelEntry = settings.activeTreeModel !== 'default'
     ? uploadedModels.find(m => m.id === settings.activeTreeModel)
     : null;
-  // Priority: random pool > single active model > bundled default tree.glb.
+  // Priority: random pool > single active uploaded model. Otherwise the
+  // procedural renderer below supplies the default without a missing GLB fetch.
   const modelScenes = treePoolScenes.length
     ? treePoolScenes
-    : (customModelEntry ? [customModelEntry.scene] : (treeModel ? [treeModel] : []));
+    : (customModelEntry ? [customModelEntry.scene] : []);
 
   if (modelBasedTrees && modelScenes.length) {
     const tsx = settings.treeScaleX !== undefined ? settings.treeScaleX : 1.0;
@@ -6684,262 +6304,7 @@ function buildTreeLayer(agaclar, treeModel) {
   });
 }
 
-const modelCache = new Map();
 const gltfLoader = new GLTFLoader();
-
-function loadGltfModel(url) {
-  if (modelCache.has(url)) {
-    return Promise.resolve(modelCache.get(url));
-  }
-  return new Promise((resolve) => {
-    gltfLoader.load(url, 
-      (gltf) => {
-        modelCache.set(url, gltf.scene);
-        resolve(gltf.scene);
-      },
-      undefined,
-      (err) => {
-        console.warn(`Model could not be loaded from ${url}. Using fallback.`, err);
-        resolve(null);
-      }
-    );
-  });
-}
-
-function createProceduralMosque() {
-  const group = new THREE.Group();
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.8 });
-  const domeMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.6, roughness: 0.2 });
-  const coneMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.5 });
-  
-  const main = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), wallMat);
-  main.position.y = 1.5;
-  main.castShadow = true;
-  main.receiveShadow = true;
-  group.add(main);
-  
-  const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(1.6, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-    domeMat
-  );
-  dome.position.y = 3;
-  dome.castShadow = true;
-  group.add(dome);
-  
-  const minaretOffsets = [
-    [-1.9, 1.9],
-    [1.9, 1.9]
-  ];
-  minaretOffsets.forEach(([mx, mz]) => {
-    const minaret = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 5, 8), wallMat);
-    body.position.y = 2.5;
-    body.castShadow = true;
-    const balcony = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.18, 0.3, 8), wallMat);
-    balcony.position.y = 4.5;
-    balcony.castShadow = true;
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1, 8), wallMat);
-    top.position.y = 5.1;
-    top.castShadow = true;
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 8), coneMat);
-    cap.position.y = 5.9;
-    cap.castShadow = true;
-    minaret.add(body, balcony, top, cap);
-    minaret.position.set(mx, 0, mz);
-    group.add(minaret);
-  });
-  
-  return group;
-}
-
-function buildMosqueLayer(mosques, mosqueModel) {
-  clearGroup(mosqueGroup);
-  if (!settings.showMosques || !mosques?.features?.length) return;
-  
-  const globalActiveMosqueEntry = settings.activeMosqueModel !== 'default'
-    ? uploadedModels.find(m => m.id === settings.activeMosqueModel)
-    : null;
-  const globalTemplate = globalActiveMosqueEntry ? globalActiveMosqueEntry.scene : (mosqueModel ? mosqueModel : createProceduralMosque());
-  
-  mosques.features.forEach((f, index) => {
-    if (!f.geometry || f.geometry.type !== 'Point') return;
-    const [x, z] = metersToLocal(f.geometry.coordinates[0], f.geometry.coordinates[1]);
-    const cust = mosqueCustomizations[index] || {};
-    const y = terrainLocalYAt(x, z) + LAYER.content + (settings.mosqueElevation || 0) + (Number(cust.elevation) || 0);
-
-    let template = globalTemplate;
-    if (cust.modelId === 'procedural') {
-      template = createProceduralMosque();
-    } else if (cust.modelId && cust.modelId !== 'default') {
-      const modelEntry = uploadedModels.find(m => m.id === cust.modelId);
-      if (modelEntry) template = modelEntry.scene;
-    }
-    
-    const m = template.clone();
-    m.position.set(x, y, z);
-    
-    const globalScaleX = settings.mosqueScaleX !== undefined ? settings.mosqueScaleX : 1.0;
-    const globalScaleY = settings.mosqueScaleY !== undefined ? settings.mosqueScaleY : 1.0;
-    const globalScaleZ = settings.mosqueScaleZ !== undefined ? settings.mosqueScaleZ : 1.0;
-    
-    const props = f.properties || {};
-    // The Model Studio global mosque scale is a base; per-placement overrides
-    // (or attribute scales) multiply on top so the category slider stays effective.
-    const px = (cust.scaleX !== undefined ? cust.scaleX : parseNumberProp(props, ['planx_scale_x', 'scale_x', 'planx_scale', 'scale'], 1.0)) * globalScaleX;
-    const py = (cust.scaleY !== undefined ? cust.scaleY : parseNumberProp(props, ['planx_scale_y', 'scale_y', 'planx_scale', 'scale'], 1.0)) * globalScaleY;
-    const pz = (cust.scaleZ !== undefined ? cust.scaleZ : parseNumberProp(props, ['planx_scale_z', 'scale_z', 'planx_scale', 'scale'], 1.0)) * globalScaleZ;
-    m.scale.set(px, py, pz);
-    
-    let angleRad;
-    if (cust.rotation !== undefined) {
-      angleRad = -THREE.MathUtils.degToRad(cust.rotation);
-    } else {
-      const deg = numericPropFirst(props, ['planx_angle', 'planx_rotation', 'angle', 'rotation', 'yon', 'yön']);
-      if (deg !== null) {
-        angleRad = -THREE.MathUtils.degToRad(deg);
-      } else {
-        angleRad = -THREE.MathUtils.degToRad(settings.mosqueRotation || 0);
-      }
-    }
-    m.rotation.y = angleRad;
-    
-    const tintColor = cust.color || '#ffffff';
-    m.traverse(child => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        if (cust.color && cust.color !== '#ffffff') {
-          if (Array.isArray(child.material)) {
-            child.material = child.material.map(mat => {
-              const newMat = mat.clone();
-              newMat.color.set(tintColor);
-              return newMat;
-            });
-          } else {
-            child.material = child.material.clone();
-            child.material.color.set(tintColor);
-          }
-        }
-      }
-    });
-    
-    mosqueGroup.add(m);
-  });
-}
-
-function createProceduralTumulus() {
-  // Simple burial-mound model: a low earthy dome on a stone retaining ring,
-  // used as the default when no GLB tumulus model is uploaded.
-  const group = new THREE.Group();
-  const soilMat = new THREE.MeshStandardMaterial({ color: 0x7c6b4f, roughness: 0.97, metalness: 0.0 });
-  const grassMat = new THREE.MeshStandardMaterial({ color: 0x6f7d44, roughness: 0.95, metalness: 0.0 });
-  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.85, metalness: 0.05 });
-
-  // Mound: a flattened half-sphere (dome) ~14 m wide, ~5 m tall.
-  const radius = 7.5;
-  const height = 5.0;
-  const moundGeo = new THREE.SphereGeometry(radius, 28, 18, 0, Math.PI * 2, 0, Math.PI / 2);
-  moundGeo.scale(1, height / radius, 1);
-  const mound = new THREE.Mesh(moundGeo, grassMat);
-  mound.castShadow = true;
-  mound.receiveShadow = true;
-  group.add(mound);
-
-  // Inner soil core slightly below the grass skin to avoid a hollow look at the rim.
-  const coreGeo = new THREE.SphereGeometry(radius * 0.96, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2);
-  coreGeo.scale(1, (height * 0.9) / (radius * 0.96), 1);
-  const core = new THREE.Mesh(coreGeo, soilMat);
-  core.position.y = -0.05;
-  core.receiveShadow = true;
-  group.add(core);
-
-  // Stone retaining ring (krepis) around the base.
-  const ringGeo = new THREE.TorusGeometry(radius * 0.98, 0.55, 10, 40);
-  const ring = new THREE.Mesh(ringGeo, stoneMat);
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.45;
-  ring.castShadow = true;
-  ring.receiveShadow = true;
-  group.add(ring);
-
-  return group;
-}
-
-let cachedDefaultTumulusModel = null;
-
-function buildTumulusLayer(tumulus, tumulusModel) {
-  clearGroup(tumulusGroup);
-  if (!settings.showTumulus || !tumulus?.features?.length) return;
-
-  const globalActiveEntry = settings.activeTumulusModel !== 'default'
-    ? uploadedModels.find(m => m.id === settings.activeTumulusModel)
-    : null;
-  // Global template: uploaded GLB, optional bundled GLB, or the default procedural mound.
-  const globalTemplate = globalActiveEntry
-    ? globalActiveEntry.scene
-    : (tumulusModel ? tumulusModel : createProceduralTumulus());
-
-  const gScaleX = settings.tumulusScaleX !== undefined ? settings.tumulusScaleX : 1.0;
-  const gScaleY = settings.tumulusScaleY !== undefined ? settings.tumulusScaleY : 1.0;
-  const gScaleZ = settings.tumulusScaleZ !== undefined ? settings.tumulusScaleZ : 1.0;
-
-  tumulus.features.forEach((f, index) => {
-    if (!f.geometry || f.geometry.type !== 'Point') return;
-    const [x, z] = metersToLocal(f.geometry.coordinates[0], f.geometry.coordinates[1]);
-    const cust = tumulusCustomizations[index] || {};
-    const y = terrainLocalYAt(x, z) + LAYER.content + (settings.tumulusElevation || 0) + (Number(cust.elevation) || 0);
-
-    // Per-placement model override: procedural mound, an uploaded tumulus model, or the global template.
-    let template = globalTemplate;
-    if (cust.modelId === 'procedural') {
-      template = createProceduralTumulus();
-    } else if (cust.modelId && cust.modelId !== 'default') {
-      const modelEntry = uploadedModels.find(m => m.id === cust.modelId);
-      if (modelEntry) template = modelEntry.scene;
-    }
-
-    const m = template.clone();
-    m.position.set(x, y, z);
-
-    const props = f.properties || {};
-    // Per-feature attribute multiplier and per-placement overrides stack on the global X/Y/Z scale.
-    const pScale = parseNumberProp(props, ['planx_scale', 'scale', 'tumulus_scale', 'olcek', 'ölçek'], 1.0);
-    const sx = (cust.scaleX !== undefined ? cust.scaleX : pScale) * gScaleX;
-    const sy = (cust.scaleY !== undefined ? cust.scaleY : pScale) * gScaleY;
-    const sz = (cust.scaleZ !== undefined ? cust.scaleZ : pScale) * gScaleZ;
-    m.scale.set(sx, sy, sz);
-
-    if (cust.rotation !== undefined) {
-      m.rotation.y = -THREE.MathUtils.degToRad(cust.rotation);
-    } else {
-      const deg = numericPropFirst(props, ['planx_angle', 'planx_rotation', 'angle', 'rotation', 'yon', 'yön']);
-      m.rotation.y = deg !== null
-        ? -THREE.MathUtils.degToRad(deg)
-        : -THREE.MathUtils.degToRad(settings.tumulusRotation || 0);
-    }
-
-    const tintColor = cust.color || '#ffffff';
-    m.traverse(child => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        if (cust.color && cust.color !== '#ffffff') {
-          if (Array.isArray(child.material)) {
-            child.material = child.material.map(mat => {
-              const newMat = mat.clone();
-              newMat.color.set(tintColor);
-              return newMat;
-            });
-          } else {
-            child.material = child.material.clone();
-            child.material.color.set(tintColor);
-          }
-        }
-      }
-    });
-    tumulusGroup.add(m);
-  });
-}
 
 function numericPropFirst(props, names) {
   for (const name of names) {
@@ -7318,8 +6683,7 @@ function buildFurnitureLayer() {
 function getSemanticColor(fn) {
   const f = String(fn || '').toUpperCase();
   // Function-distinct palette driven by the active colour theme (activeColorTheme).
-  // Subtle per-function shifts keep functions readable; the default 'Plugin Tones'
-  // theme reproduces the historical muted greys/slates.
+  // Subtle per-function shifts keep functions readable in every theme.
   const pal = activeColorTheme().buildings || {};
   if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE') || f.includes('DETACHED') || f.includes('TERRACE') || f.includes('DORMITORY') || f.includes('KONUT') || f.includes('YERLEŞİK') || f.includes('MESKEN')) return pal.resid;
   if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS') || f.includes('COLLEGE') || f.includes('KINDERGARTEN') || f.includes('OKUL') || f.includes('EĞİTİM') || f.includes('ÜNİVERSİTE')) return pal.educ;
@@ -7374,21 +6738,8 @@ function jitterBuildingColor(hex, seedKey) {
   return '#' + col.getHexString();
 }
 
-// House-like OSM building types read better with a pitched (gable) roof; every
-// other building (apartments, commercial, industrial, civic and large blocks)
-// defaults to a flat roof, which looks far more urban than a pyramid on every
-// block. Used only as a smart default — an explicit roof_shape tag or a
-// user-customised per-function roof shape always wins.
-const PITCHED_ROOF_BUILDINGS = /^(house|detached|semidetached_house|semi_detached|terrace|bungalow|cabin|hut|farm|farmhouse|villa|chalet)$/;
-
-function roofShapeForBuilding(props, levels) {
-  const bt = String(propFirst(props, ['building', 'planx_function', 'function']) || '').toLowerCase();
-  return (PITCHED_ROOF_BUILDINGS.test(bt) && (Number(levels) || 0) <= 3) ? 'Gable' : 'Flat';
-}
-
 async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
   clearGroup(buildingGroup);
-  buildingFunctionMaterials.clear();
   if (!yapilar?.features?.length) return;
 
   const functions = [...new Set(yapilar.features.map((f) => String(buildingFunctionValue(f.properties || {}))))];
@@ -7428,16 +6779,11 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
     const featureFacade = resolveFacadeForLevels(selectedFacade, levels);
     const featureFacadeScale = Math.max(1, Math.min(8, parseNumberProp(props, ['planx_facade_scale', 'facade_scale', 'cephe_olcegi'], fnStyle.facadeScale)));
     const featureRoofTexture = presetValue(propFirst(props, ['planx_roof_texture', 'roof_texture', 'cati_doku', 'cati_texture']), textureSets.roof, fnStyle.roofTexture);
-    // Resolve the roof shape: an explicit OSM/PlanX roof tag wins; otherwise, if
-    // the per-function roof shape is still the global default (user hasn't picked
-    // one in the Style dock), use a smart per-building default — gable on houses,
-    // flat on everything else — instead of a pyramid on every building.
-    const globalRoofDefault = roofShapeValue(settings.roofShape, 'Pyramid');
+    // An explicit OSM/PlanX roof tag wins; otherwise use the active per-function
+    // style. The previous smart Flat/Gable substitution made the global Pyramid
+    // choice impossible to apply, even though the UI showed it as selected.
     const explicitRoof = propFirst(props, ['planx_roof_shape', 'roof_shape', 'cati_tipi']);
-    const smartRoof = (fnStyle.roofShape === globalRoofDefault)
-      ? roofShapeForBuilding(props, levels)
-      : fnStyle.roofShape;
-    const featureRoofShape = roofShapeValue(explicitRoof || smartRoof, fnStyle.roofShape);
+    const featureRoofShape = roofShapeValue(explicitRoof || fnStyle.roofShape, settings.roofShape);
     const featureRoofHeight = parseNumberProp(props, ['planx_roof_height', 'roof_height', 'cati_yuksekligi', 'çatı_yüksekliği'], fnStyle.roofHeight);
     const featureRoofColor = normalizeHexColor(propFirst(props, ['planx_roof_color', 'roof_color', 'cati_renk']), '#ffffff');
 
@@ -7741,6 +7087,22 @@ function buildZoningEnvelopesLayer(yapilar) {
 function createPedestrianModel(index = 0) {
   const variants = assetPoolVariants('pedestrians');
   const variant = variants[index % Math.max(1, variants.length)] || 'Commuter';
+  const templateKey = `${variant}|${index % 4}|${index % 5}`;
+  const cached = pedestrianTemplateCache.get(templateKey);
+  if (cached) {
+    const mesh = cached.mesh.clone(true);
+    return {
+      mesh,
+      limbRefs: {
+        leftArm: mesh.getObjectByName('ped-left-arm'),
+        rightArm: mesh.getObjectByName('ped-right-arm'),
+        leftLeg: mesh.getObjectByName('ped-left-leg'),
+        rightLeg: mesh.getObjectByName('ped-right-leg'),
+        leftShoe: mesh.getObjectByName('ped-left-shoe'),
+        rightShoe: mesh.getObjectByName('ped-right-shoe')
+      }
+    };
+  }
   const outfit = assetColor(variant, [0x1e293b, 0x334155, 0x475569, 0x0f766e][index % 4]);
   const accent = new THREE.Color(outfit).offsetHSL(0.02, -0.08, 0.08).getHex();
   const skin = [0xf2c7a0, 0xd7a67f, 0xb9825d, 0x8d5a3b][index % 4];
@@ -7768,22 +7130,30 @@ function createPedestrianModel(index = 0) {
     return pivot;
   };
   const leftArm = makeLimb(clothMat, 0.62, 0.08, 1.34, 0);
+  leftArm.name = 'ped-left-arm';
   leftArm.position.x = -0.25;
   const rightArm = makeLimb(clothMat, 0.62, 0.08, 1.34, 0);
+  rightArm.name = 'ped-right-arm';
   rightArm.position.x = 0.25;
   const leftLeg = makeLimb(pantsMat, 0.72, 0.10, 0.68, 0);
+  leftLeg.name = 'ped-left-leg';
   leftLeg.position.x = -0.11;
   const rightLeg = makeLimb(pantsMat, 0.72, 0.10, 0.68, 0);
+  rightLeg.name = 'ped-right-leg';
   rightLeg.position.x = 0.11;
   root.add(leftArm, rightArm, leftLeg, rightLeg);
 
   const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.24), shoeMat);
+  leftShoe.name = 'ped-left-shoe';
   leftShoe.position.set(-0.11, 0.02, -0.04);
   const rightShoe = leftShoe.clone();
+  rightShoe.name = 'ped-right-shoe';
   rightShoe.position.x = 0.11;
   root.add(leftShoe, rightShoe);
   root.scale.setScalar(0.95 + (index % 5) * 0.025);
-  return { mesh: root, limbRefs: { leftArm, rightArm, leftLeg, rightLeg, leftShoe, rightShoe } };
+  markObjectResourcesPersistent(root);
+  pedestrianTemplateCache.set(templateKey, { mesh: root });
+  return createPedestrianModel(index);
 }
 
 // Paint every road as one dissolved surface: a single canvas of round-join /
@@ -7792,7 +7162,6 @@ function createPedestrianModel(index = 0) {
 // edges, no z-fighting and no stray marking lines.
 // --- Bike lanes (OSM cycleways): procedural green strips + optional cyclists ---
 function createBikeLaneTexture() {
-  if (createBikeLaneTexture.tex) return createBikeLaneTexture.tex;
   const c = document.createElement('canvas'); c.width = 128; c.height = 256;
   const ctx = c.getContext('2d');
   ctx.fillStyle = settings.bikeLaneColor || '#16a34a'; ctx.fillRect(0, 0, 128, 256);
@@ -7800,7 +7169,7 @@ function createBikeLaneTexture() {
   for (let y = 16; y < 256; y += 48) { ctx.beginPath(); ctx.moveTo(64, y); ctx.lineTo(64, y + 24); ctx.stroke(); }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 8); t.colorSpace = THREE.SRGBColorSpace;
-  createBikeLaneTexture.tex = t; return t;
+  return t;
 }
 function bikeLaneFeatureWidth(feature) {
   const w = parseNumberProp(feature?.properties || {}, namesWithMapping('bike_lane_width_field', ['width', 'cycleway_width', 'bike_lane_width']), settings.bikeLaneWidth);
@@ -7809,7 +7178,7 @@ function bikeLaneFeatureWidth(feature) {
 function createBikeLaneMaterial() {
   return new THREE.MeshStandardMaterial({ color: 0xffffff, map: createBikeLaneTexture(), roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
 }
-function createBikeLaneCurve(coords, closed = false) {
+function createBikeLaneCurve(coords, closed = false, lateralOffset = 0) {
   const pts = [];
   for (const c of coords || []) { if (!c || c.length < 2) continue; const [x, z] = metersToLocal(c[0], c[1]); pts.push(new THREE.Vector3(x, 0, z)); }
   if (pts.length < 2) return null;
@@ -7817,11 +7186,21 @@ function createBikeLaneCurve(coords, closed = false) {
   const len = Math.max(1, xz.getLength());
   const n = Math.max(pts.length, Math.ceil(len / 3) + 1);
   const out = [];
-  for (let i = 0; i <= n; i++) { const tp = xz.getPointAt(i / n); tp.y = terrainLocalYAt(tp.x, tp.z) + LAYER.bikeLane; out.push(tp); }
+  for (let i = 0; i <= n; i++) {
+    const u = i / n;
+    const tp = xz.getPointAt(u);
+    if (lateralOffset) {
+      const tangent = xz.getTangent(u);
+      const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+      tp.addScaledVector(normal, lateralOffset);
+    }
+    tp.y = terrainLocalYAt(tp.x, tp.z) + LAYER.bikeLane;
+    out.push(tp);
+  }
   return new THREE.CatmullRomCurve3(out, closed, 'centripetal');
 }
-function buildBikeLaneStrip(coords, width, mat, buildToken) {
-  const curve = createBikeLaneCurve(coords, false);
+function buildBikeLaneStrip(coords, width, mat, buildToken, lateralOffset = 0) {
+  const curve = createBikeLaneCurve(coords, false, lateralOffset);
   if (!curve) return;
   bikeLaneCurves.push(curve);
   if (!settings.showBikeLanes) return;
@@ -7840,7 +7219,10 @@ function buildBikeLaneStrip(coords, width, mat, buildToken) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices); geo.computeVertexNormals();
-  if (isSceneBuildStale(buildToken)) return;
+  if (isSceneBuildStale(buildToken)) {
+    geo.dispose();
+    return;
+  }
   const mesh = new THREE.Mesh(geo, mat); mesh.receiveShadow = true; mesh.renderOrder = 32; bikeLaneGroup.add(mesh);
 }
 function buildBikeLaneLayer(bikeLanes = EMPTY_GEOJSON, buildToken = sceneBuildToken) {
@@ -7850,7 +7232,18 @@ function buildBikeLaneLayer(bikeLanes = EMPTY_GEOJSON, buildToken = sceneBuildTo
   for (const f of bikeLanes.features) {
     if (!f.geometry) continue;
     const width = bikeLaneFeatureWidth(f);
-    for (const line of lineSetsFromGeometry(f.geometry)) { buildBikeLaneStrip(line, width, mat, buildToken); if (isSceneBuildStale(buildToken)) return; }
+    const side = String(f.properties?.side || 'center').toLowerCase();
+    const sideSign = side === 'left' ? 1 : side === 'right' ? -1 : 0;
+    const roadFeature = {
+      ...f,
+      properties: { ...(f.properties || {}), width: f.properties?.road_width ?? null }
+    };
+    const roadHalfWidth = featureRoadWidth(roadFeature) * 0.5;
+    const lateralOffset = sideSign * Math.max(width * 0.55, roadHalfWidth - width * 0.5);
+    for (const line of lineSetsFromGeometry(f.geometry)) {
+      buildBikeLaneStrip(line, width, mat, buildToken, lateralOffset);
+      if (isSceneBuildStale(buildToken)) return;
+    }
   }
   buildBicycleTraffic();
 }
@@ -7912,6 +7305,7 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     polygonOffsetFactor: -4,
     polygonOffsetUnits: -4
   });
+  const roadMaterialCache = new Map();
   const amenityPoints = settings.roadColorMode === 'Amenity distance' ? estimateAmenityPoints() : [];
 
   for (const f of explodeLineFeatures(yollar)) {
@@ -7970,14 +7364,14 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     roadGeo.setIndex(indices);
     roadGeo.computeVertexNormals();
     const featureColor = roadVisualColor(f, amenityPoints);
-    const featureRoadMat = roadMat.clone();
-    if (settings.roadStyle === 'Asphalt') {
-      featureRoadMat.map = createAsphaltTexture(`#${featureColor.getHexString()}`);
-      featureRoadMat.color = new THREE.Color(0xffffff);
-    } else {
+    const materialKey = featureColor.getHexString();
+    let featureRoadMat = roadMaterialCache.get(materialKey);
+    if (!featureRoadMat) {
+      featureRoadMat = roadMat.clone();
       featureRoadMat.color = featureColor;
+      featureRoadMat.needsUpdate = true;
+      roadMaterialCache.set(materialKey, featureRoadMat);
     }
-    featureRoadMat.needsUpdate = true;
     if (isSceneBuildStale(buildToken)) return;
     const roadMesh = new THREE.Mesh(roadGeo, featureRoadMat);
     roadMesh.receiveShadow = true;
@@ -8008,7 +7402,7 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
         t.wrapS = THREE.RepeatWrapping;
         t.wrapT = THREE.RepeatWrapping;
         t.repeat.set(1, 1);
-        buildRoadsAndTraffic.dashedTex = t;
+        buildRoadsAndTraffic.dashedTex = markPersistentTexture(t);
       }
 
       const dashedMarkingMat = new THREE.MeshStandardMaterial({
@@ -8116,7 +7510,7 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     const isNight = (_solarCache.elevationDeg ?? 30) < -3;
     // Continuous (round, not per-curve floor) so low densities still spawn a
     // proportional, non-zero number of cars instead of collapsing to zero.
-    const spawnCount = Math.min(300, Math.round(vehicleRoadCurves.length * 10 * settings.carDensity));
+    const spawnCount = Math.min(160, Math.round(vehicleRoadCurves.length * 8 * settings.carDensity));
     for (let i = 0; i < spawnCount; i++) {
       const curve = vehicleRoadCurves[Math.floor(Math.random() * vehicleRoadCurves.length)];
       const type = pickVehicleType();
@@ -8128,6 +7522,7 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
     }
   }
 
+  roadMat.dispose();
 }
 
 // Procedural vehicle factory. Front faces -Z (headlights -Z, brake lights +Z),
@@ -8151,6 +7546,11 @@ function pickVehicleType() {
 }
 
 function createVehicle(type, bodyColor, isNight) {
+  const templateKey = `${type}|${new THREE.Color(bodyColor).getHexString()}|${isNight ? 1 : 0}`;
+  const cached = vehicleTemplateCache.get(templateKey);
+  if (cached) {
+    return { group: cached.group.clone(true), speedScale: cached.speedScale };
+  }
   const g = new THREE.Group();
   const cMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.38, metalness: 0.32 });
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x1a2433, roughness: 0.12, metalness: 0.2 });
@@ -8256,7 +7656,9 @@ function createVehicle(type, bodyColor, isNight) {
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
   // Heavier/longer vehicles move a touch slower.
   const speedScale = type === 'bus' ? 0.55 : type === 'truck' ? 0.6 : type === 'van' ? 0.85 : 1.0;
-  return { group: g, speedScale };
+  markObjectResourcesPersistent(g);
+  vehicleTemplateCache.set(templateKey, { group: g, speedScale });
+  return createVehicle(type, bodyColor, isNight);
 }
 
 function buildPedestrianLayer() {
@@ -8266,7 +7668,10 @@ function buildPedestrianLayer() {
   const candidateRoutes = roadCurves.map((curve) => ({ curve, surface: 'sidewalk' }))
     .concat(settings.showPedestrianPaths ? pedestrianPathCurves.map((curve) => ({ curve, surface: 'path' })) : []);
   if (!candidateRoutes.length) return;
-  const pedCount = Math.min(600, candidateRoutes.length * Math.floor(20 * settings.pedestrianDensity));
+  const pedCount = Math.min(
+    180,
+    Math.round(candidateRoutes.length * 2.5 * Math.max(0, settings.pedestrianDensity))
+  );
   for (let i = 0; i < pedCount; i++) {
     const route = candidateRoutes[Math.floor(Math.random() * candidateRoutes.length)];
     const { mesh: pedGeo, limbRefs } = createPedestrianModel(i);
@@ -8575,31 +7980,6 @@ function buildCrosswalkLayer(yollar) {
   }
 }
 
-function buildRoiBoundary(roi) {
-  clearGroup(roiBoundaryGroup);
-  if (!roi?.features?.length) return;
-  const mat = new THREE.LineBasicMaterial({ color: 0xff4444, linewidth: 2, depthTest: false });
-  for (const f of roi.features) {
-    if (!f.geometry) continue;
-    const rings = f.geometry.type === 'Polygon'
-      ? [f.geometry.coordinates]
-      : f.geometry.coordinates;
-    for (const poly of rings) {
-      for (const ring of poly) {
-        const pts = [];
-        for (const c of ring) {
-          const [lx, lz] = metersToLocal(c[0], c[1]);
-          const y = terrainLocalYAt(lx, lz) + 2.5;
-          pts.push(new THREE.Vector3(lx, y, lz));
-        }
-        if (pts.length < 2) continue;
-        const geo = new THREE.BufferGeometry().setFromPoints(pts);
-        roiBoundaryGroup.add(new THREE.Line(geo, mat));
-      }
-    }
-  }
-}
-
 function hideLoadingOverlay(delay = 450) {
   window.__sceneReady = true;
   const loading = document.getElementById('loading');
@@ -8712,7 +8092,7 @@ function applyBasemapColorAdjust(mat) {
   };
 }
 
-function buildBasemapOverlay(buildToken = sceneBuildToken) {
+function buildBasemapOverlay() {
   clearGroup(basemapGroup);
   if (!settings.showBasemap || !basemapTexture) return;
   const bb = projectManifest?.basemap?.bbox;
@@ -8798,9 +8178,7 @@ async function rebuildScene() {
     const bins = await loadGeoJson('../data/yerlesim/mytrashbins.geojson', { label: 'Trash bins' });
     const busstops = await loadGeoJson('../data/yerlesim/mybusstops.geojson', { label: 'Bus stops' });
     const bikeLanes = await loadGeoJson('../data/yerlesim/mybikelanes.geojson', { label: 'Bike lanes' });
-    const fences = await loadGeoJson('../data/yerlesim/myfences.geojson', { label: 'Fences' });
     const waterlines = await loadGeoJson('../data/yerlesim/mywaterlines.geojson', { label: 'Water lines' });
-    const mosques = await loadGeoJson('../data/yerlesim/mymosques.geojson', { label: 'Mosques' });
 
     const roi = await loadGeoJson('../data/yerlesim/roi.geojson', { required: manifestRequiresInput('roi'), label: 'ROI' });
     layerDataCache = {
@@ -8808,12 +8186,11 @@ async function rebuildScene() {
        yapilar: asFeatureCollection(yapilar, 'Buildings'),
        yollar: asFeatureCollection(yollar, 'Roads'),
        agaclar: asFeatureCollection(agaclar, 'Trees'),
-       mosques: asFeatureCollection(mosques, 'Mosques'),
        parseller: null,
        hardscape: null,
-       sidewalks: null,
+       sidewalks: EMPTY_GEOJSON,
        pedestrianPaths: null,
-       fences: asFeatureCollection(fences, 'Fences'),
+       fences: EMPTY_GEOJSON,
        waterlines: asFeatureCollection(waterlines, 'Water lines'),
        bikeLanes: asFeatureCollection(bikeLanes, 'Bike lanes'),
        furniture: {
@@ -8838,17 +8215,9 @@ async function rebuildScene() {
     const hardscape = await loadGeoJson('../data/yerlesim/myhardscape.geojson', { label: 'Hardscape' });
     layerDataCache.hardscape = asFeatureCollection(hardscape, 'Hardscape');
   }
-  if (settings.showSidewalks && !layerDataCache.sidewalks) {
-    const sidewalks = await loadGeoJson('../data/yerlesim/mysidewalks.geojson', { label: 'Sidewalks' });
-    layerDataCache.sidewalks = asFeatureCollection(sidewalks, 'Sidewalks');
-  }
   if (settings.showPedestrianPaths && !layerDataCache.pedestrianPaths) {
     const pedestrianPaths = await loadGeoJson('../data/yerlesim/mypedestrian_paths.geojson', { label: 'Pedestrian paths' });
     layerDataCache.pedestrianPaths = asFeatureCollection(pedestrianPaths, 'Pedestrian paths');
-  }
-  if (settings.showFences && !layerDataCache.fences) {
-    const fences = await loadGeoJson('../data/yerlesim/myfences.geojson', { label: 'Fences' });
-    layerDataCache.fences = asFeatureCollection(fences, 'Fences');
   }
   if (settings.showWaterlines && !layerDataCache.waterlines) {
     const waterlines = await loadGeoJson('../data/yerlesim/mywaterlines.geojson', { label: 'Water lines' });
@@ -8859,7 +8228,6 @@ async function rebuildScene() {
   const yapilar = asFeatureCollection(layerDataCache.yapilar, 'Buildings');
   const yollar = asFeatureCollection(layerDataCache.yollar, 'Roads');
   const agaclar = asFeatureCollection(layerDataCache.agaclar, 'Trees');
-  const mosques = asFeatureCollection(layerDataCache.mosques, 'Mosques');
   const parseller = layerDataCache.parseller ? asFeatureCollection(layerDataCache.parseller, 'Parcels') : null;
   const hardscape = layerDataCache.hardscape ? asFeatureCollection(layerDataCache.hardscape, 'Hardscape') : null;
   const sidewalks = layerDataCache.sidewalks ? asFeatureCollection(layerDataCache.sidewalks, 'Sidewalks') : null;
@@ -8867,7 +8235,7 @@ async function rebuildScene() {
   const fences = layerDataCache.fences ? asFeatureCollection(layerDataCache.fences, 'Fences') : null;
   const waterlines = layerDataCache.waterlines ? asFeatureCollection(layerDataCache.waterlines, 'Water lines') : null;
   const bikeLanes = layerDataCache.bikeLanes ? asFeatureCollection(layerDataCache.bikeLanes, 'Bike lanes') : null;
-  Object.assign(layerDataCache, { adalar, yapilar, yollar, agaclar, parseller, hardscape, sidewalks, pedestrianPaths, fences, waterlines, bikeLanes, mosques });
+  Object.assign(layerDataCache, { adalar, yapilar, yollar, agaclar, parseller, hardscape, sidewalks, pedestrianPaths, fences, waterlines, bikeLanes });
   updateDashboard(layerDataCache);
 
   // Calculate and update stats
@@ -8892,7 +8260,7 @@ async function rebuildScene() {
     const topFuncs = Object.entries(funcMap).sort((a, b) => b[1] - a[1]).slice(0, 4);
     topFuncs.forEach(([k, v]) => {
       const icon = getFunctionIcon(k);
-      html += `<div class="stat-row stat-func"><span>${icon} ${k.slice(0, 20)}</span><span class="stat-val">${v}</span></div>`;
+      html += `<div class="stat-row stat-func"><span>${icon} ${escapeHtml(k.slice(0, 20))}</span><span class="stat-val">${v}</span></div>`;
     });
     statDiv.innerHTML = html;
   }
@@ -8902,20 +8270,27 @@ async function rebuildScene() {
   if (isSceneBuildStale(buildToken)) return;
 
   if (!demReady && !demLoadingStarted) {
-    demLoadingStarted = true;
-    loadingText.innerText = t('sceneDem') + '...';
-    setSceneState('sceneDem');
-    loadProjectDem()
-      .then(() => rebuildSceneSafe())
-      .catch((err) => {
-        if (isSceneBuildStale(buildToken)) return;
-        const demMissing = String(err?.message || err).includes('DEM not found');
-        if (demMissing) console.info('DEM not found; using flat terrain fallback.');
-        else console.warn('DEM could not be loaded; using flat terrain fallback:', err);
-        activateFlatTerrainFallback(vectorBounds || bounds);
-        rebuildSceneSafe();
-      });
-    return;
+    if (projectManifest?.summary?.hasDem === false) {
+      activateFlatTerrainFallback(
+        vectorBounds || bounds, 0,
+        'Flat terrain ready (no DEM was selected in QGIS).'
+      );
+    } else {
+      demLoadingStarted = true;
+      loadingText.innerText = t('sceneDem') + '...';
+      setSceneState('sceneDem');
+      loadProjectDem()
+        .then(() => rebuildSceneSafe())
+        .catch((err) => {
+          if (isSceneBuildStale(buildToken)) return;
+          const demMissing = String(err?.message || err).includes('DEM not found');
+          if (demMissing) console.info('DEM not found; using flat terrain fallback.');
+          else console.warn('DEM could not be loaded; using flat terrain fallback:', err);
+          activateFlatTerrainFallback(vectorBounds || bounds);
+          rebuildSceneSafe();
+        });
+      return;
+    }
   }
   if (!demReady) return;
   if (!bounds) {
@@ -8927,14 +8302,12 @@ async function rebuildScene() {
   centerY = (bounds.minY + bounds.maxY) / 2;
   if (terrainMesh) {
     world.remove(terrainMesh);
-    terrainMesh.geometry.dispose();
-    terrainMesh.material.dispose();
+    disposeObjectResources(terrainMesh);
     terrainMesh = null;
   }
   if (terrainOverlayMesh) {
     world.remove(terrainOverlayMesh);
-    terrainOverlayMesh.geometry.dispose();
-    terrainOverlayMesh.material.dispose();
+    disposeObjectResources(terrainOverlayMesh);
     terrainOverlayMesh = null;
   }
   terrainSurfaceCache = null;
@@ -8943,7 +8316,7 @@ async function rebuildScene() {
     try {
       loadingText.innerText = t('scenePlanTexture') + '...';
       setSceneState('scenePlanTexture');
-      terrainTexture = await loadTerrainTextureFromGeoTiff();
+      terrainTexture = markPersistentTexture(await loadTerrainTextureFromGeoTiff());
     } catch (err) {
       console.warn('Plan texture yuklenemedi, pavement ile devam ediliyor.', err);
       setStatus(t('planTextureFail'));
@@ -8953,7 +8326,7 @@ async function rebuildScene() {
     try {
       loadingText.innerText = t('sceneBasemap') + '...';
       setSceneState('sceneBasemap');
-      baseMapTexture = await loadBaseMapTexture();
+      baseMapTexture = markPersistentTexture(await loadBaseMapTexture());
     } catch (err) {
       console.warn('QGIS basemap texture yuklenemedi, zemin dokusu ile devam ediliyor.', err);
       setStatus(t('basemapFail'));
@@ -8967,32 +8340,18 @@ async function rebuildScene() {
   // Basemap underlay over the base (Basemap & Texture dock).
   if (settings.showBasemap && projectManifest?.basemap?.image && !basemapTexture) {
     try {
-      basemapTexture = await loadBasemapImage();
+      basemapTexture = markPersistentTexture(await loadBasemapImage());
     } catch (err) {
       console.warn('Basemap image could not be loaded', err);
     }
   }
-  buildBasemapOverlay(buildToken);
+  buildBasemapOverlay();
 
   loadingText.innerText = t('processing');
   setSceneState('sceneLayers');
 
-  let mosqueModel = null;
-  if (settings.showMosques) {
-    if (!cachedDefaultMosqueModel) {
-      cachedDefaultMosqueModel = await loadGltfModel('../assets/models/mosque.glb');
-    }
-    mosqueModel = cachedDefaultMosqueModel;
-  }
-  let treeModel = null;
-  if (settings.showTrees && (settings.treeRenderMode === 'Model-based' || settings.activeTreeModel !== 'default')) {
-    if (!cachedDefaultTreeModel) {
-      cachedDefaultTreeModel = await loadGltfModel('../assets/models/tree.glb');
-    }
-    treeModel = cachedDefaultTreeModel;
-  }
   if (settings.showIslands && (!isRasterTextureMode() || adalar.features.length)) {
-    await runLayerBuild('Blocks', () => buildIslandLayer(adalar, buildToken), () => clearGroup(islandGroup));
+    await runLayerBuild('Blocks', () => buildIslandLayer(adalar), () => clearGroup(islandGroup));
   } else {
     clearGroup(islandGroup);
   }
@@ -9042,14 +8401,9 @@ async function rebuildScene() {
   }
   await runLayerBuild('Pedestrians', () => buildPedestrianLayer(), () => clearGroup(pedestrianGroup));
   if (settings.showTrees) {
-    await runLayerBuild('Trees', () => buildTreeLayer(agaclar, treeModel), () => clearGroup(treeGroup));
+    await runLayerBuild('Trees', () => buildTreeLayer(agaclar), () => clearGroup(treeGroup));
   } else {
     clearGroup(treeGroup);
-  }
-  if (settings.showMosques) {
-    await runLayerBuild('Mosques', () => buildMosqueLayer(mosques, mosqueModel), () => clearGroup(mosqueGroup));
-  } else {
-    clearGroup(mosqueGroup);
   }
   if (settings.showFurniture) {
     await runLayerBuild('Street furniture', () => buildFurnitureLayer(), () => clearGroup(furnitureGroup));
@@ -9071,12 +8425,6 @@ async function rebuildScene() {
   renderBlockCategoryStyleDock();
   renderFunctionStyleDock();
   updateDashboard(layerDataCache);
-  if (typeof renderMosqueCustomizationsList === 'function') {
-    renderMosqueCustomizationsList();
-  }
-  if (typeof renderTumulusCustomizationsList === 'function') {
-    renderTumulusCustomizationsList();
-  }
   setSceneState('sceneReady');
 
   hideLoadingOverlay();
@@ -9095,8 +8443,14 @@ function rebuildSceneSafe() {
   });
 }
 
-let globalGui = null;
-let functionGuiRefs = null;
+let sceneRebuildTimer = null;
+function requestSceneRebuild(delay = 120) {
+  if (sceneRebuildTimer !== null) window.clearTimeout(sceneRebuildTimer);
+  sceneRebuildTimer = window.setTimeout(() => {
+    sceneRebuildTimer = null;
+    rebuildSceneSafe();
+  }, Math.max(0, delay));
+}
 
 function setSceneState(textOrKey, kind = 'ok') {
   const pill = document.getElementById('scene-state');
@@ -9117,9 +8471,6 @@ function updateDashboard(data) {
   const yollar = data.yollar || EMPTY_GEOJSON;
   const agaclar = data.agaclar || EMPTY_GEOJSON;
   const parseller = data.parseller || EMPTY_GEOJSON;
-  const hardscape = data.hardscape || EMPTY_GEOJSON;
-  const sidewalks = data.sidewalks || EMPTY_GEOJSON;
-  const pedestrianPaths = data.pedestrianPaths || EMPTY_GEOJSON;
   const furniture = data.furniture || {};
 
   const bldCount = yapilar.features.length;
@@ -9156,12 +8507,17 @@ function updateDashboard(data) {
   const meta = document.getElementById('project-meta');
   if (meta) {
     if (projectManifest) {
-      const title = projectManifest.project?.title || 'PlanX 3D City Project';
-      const exportedAt = projectManifest.exportedAt ? new Date(projectManifest.exportedAt).toLocaleString() : '-';
-      const crs = projectManifest.summary?.crs?.length ? projectManifest.summary.crs.join(', ') : t('crsUnknown');
+      const title = escapeHtml(projectManifest.project?.title || '3D OSM Model');
+      const exportedAt = escapeHtml(projectManifest.exportedAt ? new Date(projectManifest.exportedAt).toLocaleString() : '-');
+      const crsValue = projectManifest.summary?.crs;
+      const crs = escapeHtml(
+        Array.isArray(crsValue) && crsValue.length
+          ? crsValue.join(', ')
+          : (crsValue || (projectManifest.summary?.epsg ? `EPSG:${projectManifest.summary.epsg}` : t('crsUnknown')))
+      );
       const modeLabel = isRasterTextureMode() ? 'Raster Plan Texture' : 'Vector Plan';
-      const accessField = projectManifest.roadAccess?.field ? `<br>Traffic filter: ${projectManifest.roadAccess.field}` : '';
-      const themeLabel = projectManifest.assetTheme || settings.assetTheme || 'Modern Urban';
+      const accessField = projectManifest.roadAccess?.field ? `<br>Traffic filter: ${escapeHtml(projectManifest.roadAccess.field)}` : '';
+      const themeLabel = escapeHtml(projectManifest.assetTheme || settings.assetTheme || 'Modern Urban');
       meta.innerHTML = `<strong>${title}</strong><br>Mode: ${modeLabel}<br>Asset theme: ${themeLabel}<br>Export: ${exportedAt}<br>CRS: ${crs}${accessField}`;
     } else {
       meta.textContent = t('manifestMissing');
@@ -9195,19 +8551,11 @@ function updateDashboard(data) {
     html += `<div class="stat-row"><span>${t('statFlr')}</span><span class="stat-val">${avgFlr}</span></div>`;
     topFuncs.forEach(([k, v]) => {
       const icon = getFunctionIcon(k);
-      html += `<div class="stat-row stat-func"><span>${icon} ${String(k).slice(0, 20)}</span><span class="stat-val">${v}</span></div>`;
+      html += `<div class="stat-row stat-func"><span>${icon} ${escapeHtml(String(k).slice(0, 20))}</span><span class="stat-val">${v}</span></div>`;
     });
     statDiv.innerHTML = html;
   }
 }
-
-function addGui() {
-  // The lil-gui "Urban Controls" panel was removed for a simpler, dock-only
-  // UI (v0.7.0). Function colour/facade editing lives in the Style dock.
-  functionGuiRefs = { refreshFunctionGui: () => {} };
-}
-
-addGui();
 
 // Building hover highlight helpers
 function _unhoverBuilding() {
@@ -9232,8 +8580,8 @@ function _doHoverBuilding(mesh) {
 const hoverTip = document.getElementById('bldg-hover-tip');
 let _hoverThrottle = 0;
 window.addEventListener('mousemove', (e) => {
-  if (isWalkMode || isGameMode) { if (hoverTip) hoverTip.style.display = 'none'; _unhoverBuilding(); return; }
-  if (e.target.closest('#ui-container') || e.target.closest('.lil-gui') || e.target.closest('#recording-container')) {
+  if (isWalkMode) { if (hoverTip) hoverTip.style.display = 'none'; _unhoverBuilding(); return; }
+  if (e.target.closest('#ui-container')) {
     if (hoverTip) hoverTip.style.display = 'none'; _unhoverBuilding(); return;
   }
   const now = performance.now();
@@ -9255,7 +8603,7 @@ window.addEventListener('mousemove', (e) => {
     const icon = getFunctionIcon(buildingFunctionValue(p) || '');
     const floorVal = buildingLevelsRaw(p);
     const floors = floorVal != null ? `${floorVal} ${t('biKat').toLowerCase()}` : '-';
-    hoverTip.innerHTML = `<div class="tooltip-title">${icon} ${(buildingFunctionValue(p) || '-').slice(0, 26)}</div><div class="tooltip-row"><span>${t('biKat')}</span><span>${floors}</span></div>`;
+    hoverTip.innerHTML = `<div class="tooltip-title">${icon} ${escapeHtml((buildingFunctionValue(p) || '-').slice(0, 26))}</div><div class="tooltip-row"><span>${t('biKat')}</span><span>${escapeHtml(floors)}</span></div>`;
     hoverTip.style.display = 'block';
     const tx = Math.min(e.clientX + 16, innerWidth - 200);
     const ty = Math.max(e.clientY - 60, 8);
@@ -9267,10 +8615,9 @@ window.addEventListener('mouseleave', () => { _unhoverBuilding(); if (hoverTip) 
 
 // Click: show full detail panel
 const detailTip = document.getElementById('bldg-detail-tip');
-let _detailOpen = false;
 window.addEventListener('click', (e) => {
-  if (isWalkMode || isGameMode) return;
-  if (e.target.closest('#ui-container') || e.target.closest('.lil-gui') || e.target.closest('#recording-container')) return;
+  if (isWalkMode) return;
+  if (e.target.closest('#ui-container')) return;
   if (e.target.closest('#bldg-detail-tip')) return;
 
   const mouse = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
@@ -9278,7 +8625,7 @@ window.addEventListener('click', (e) => {
   const hits = rc.intersectObjects(buildingGroup.children);
 
   if (!hits.length) {
-    if (detailTip) { detailTip.style.display = 'none'; _detailOpen = false; }
+    if (detailTip) detailTip.style.display = 'none';
     return;
   }
   const p = hits[0].object.userData || {};
@@ -9295,31 +8642,33 @@ window.addEventListener('click', (e) => {
     ['Cati', p.planx_roof_shape],
     ['Cati doku', p.planx_roof_texture],
   ].filter(([, value]) => value);
+  const safeFunction = escapeHtml((buildingFunctionValue(p) || '-').slice(0, 24));
+  const safeLevels = escapeHtml(buildingLevelsRaw(p) ?? '-');
+  const safeNizam = escapeHtml(p.nizam || '-');
   if (detailTip) {
     detailTip.innerHTML = `
       <div class="tooltip-title">${icon} ${t('binaInfo')} <span class="tip-close" onclick="this.closest('#bldg-detail-tip').style.display='none'">✕</span></div>
-      <div class="tooltip-row"><span>${t('biFonk')}</span><span>${(buildingFunctionValue(p) || '-').slice(0, 24)}</span></div>
-      <div class="tooltip-row"><span>${t('biKat')}</span><span>${buildingLevelsRaw(p) ?? '-'}</span></div>
-      <div class="tooltip-row"><span>${t('biNiz')}</span><span>${p.nizam || '-'}</span></div>
-      ${p.taks != null ? `<div class="tooltip-row"><span>TAKS</span><span>${p.taks}</span></div>` : ''}
-      ${p.kaks != null ? `<div class="tooltip-row"><span>KAKS</span><span>${p.kaks}</span></div>` : ''}
+      <div class="tooltip-row"><span>${t('biFonk')}</span><span>${safeFunction}</span></div>
+      <div class="tooltip-row"><span>${t('biKat')}</span><span>${safeLevels}</span></div>
+      <div class="tooltip-row"><span>${t('biNiz')}</span><span>${safeNizam}</span></div>
+      ${p.taks != null ? `<div class="tooltip-row"><span>TAKS</span><span>${escapeHtml(p.taks)}</span></div>` : ''}
+      ${p.kaks != null ? `<div class="tooltip-row"><span>KAKS</span><span>${escapeHtml(p.kaks)}</span></div>` : ''}
       <div class="tooltip-row"><span>Taban alanı</span><span>${areaStr}</span></div>
       ${calcFootprintArea ? `<div class="tooltip-row"><span>Hesaplanan taban</span><span>${calcFootprintArea.toFixed(0)} m²</span></div>` : ''}
       ${calcFloorArea ? `<div class="tooltip-row"><span>Toplam inşaat</span><span>${calcFloorArea.toFixed(0)} m²</span></div>` : ''}
       ${calcPopulation !== null ? `<div class="tooltip-row"><span>Tahmini nüfus</span><span>${calcPopulation.toFixed(0)}</span></div>` : ''}
       ${calcDwellings !== null ? `<div class="tooltip-row"><span>Tahmini daire</span><span>${calcDwellings.toFixed(0)}</span></div>` : ''}
       ${calcVehicles !== null ? `<div class="tooltip-row"><span>Tahmini araç</span><span>${calcVehicles.toFixed(0)}</span></div>` : ''}
-      ${styleRows.map(([label, value]) => `<div class="tooltip-row"><span>${label}</span><span>${value}</span></div>`).join('')}
+      ${styleRows.map(([label, value]) => `<div class="tooltip-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join('')}
     `;
     detailTip.style.display = 'block';
-    _detailOpen = true;
   }
 });
 
 // Double-click: fly camera to building
 window.addEventListener('dblclick', (e) => {
-  if (isWalkMode || isGameMode) return;
-  if (e.target.closest('#ui-container') || e.target.closest('.lil-gui') || e.target.closest('#recording-container')) return;
+  if (isWalkMode) return;
+  if (e.target.closest('#ui-container')) return;
   const mouse = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   rc.setFromCamera(mouse, camera);
   const hits = rc.intersectObjects(buildingGroup.children);
@@ -9337,7 +8686,9 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
   labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  if (document.getElementById('export-size-preset')?.value === 'current') updateExportControls();
 });
 
 
@@ -9364,85 +8715,6 @@ walkControls.addEventListener('unlock', () => {
   crouchWalk = false;
   if(walkBtn) walkBtn.classList.remove('active');
   document.getElementById('walk-hud')?.classList.add('hidden');
-  // Also exit game mode if pointer unlocked
-  if (isGameMode) {
-    isGameMode = false;
-    const gameBtn = document.getElementById('game-toggle');
-    if (gameBtn) gameBtn.classList.remove('active');
-    const gameHud = document.getElementById('game-hud');
-    if (gameHud) gameHud.classList.add('hidden');
-  }
-});
-
-const gameBtn = document.getElementById('game-toggle');
-if (gameBtn) {
-  gameBtn.addEventListener('click', () => {
-    if (!isGameMode) {
-      // Enter walk mode first, then game mode
-      if (!isWalkMode) walkControls.lock();
-      isGameMode = true;
-      gameBtn.classList.add('active');
-      const gameHud = document.getElementById('game-hud');
-      if (gameHud) gameHud.classList.remove('hidden');
-      const scoreEl = document.getElementById('game-score');
-      if (scoreEl) scoreEl.textContent = gameScore;
-    } else {
-      isGameMode = false;
-      gameBtn.classList.remove('active');
-      const gameHud = document.getElementById('game-hud');
-      if (gameHud) gameHud.classList.add('hidden');
-    }
-  });
-}
-
-function shootStone() {
-  const geo = new THREE.SphereGeometry(0.12, 6, 6);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = false;
-
-  const dir = new THREE.Vector3();
-  camera.getWorldDirection(dir);
-  mesh.position.copy(camera.position).addScaledVector(dir, 0.5);
-
-  const speed = 28;
-  const vel = dir.clone().multiplyScalar(speed);
-  vel.y += 2; // slight upward arc
-
-  // Raycast against pedestrians for instant hit detection
-  rc.setFromCamera(new THREE.Vector2(0, 0), camera);
-  const hits = rc.intersectObjects(pedestrianGroup.children, true);
-  if (hits.length > 0 && hits[0].distance < 40) {
-    const hitMesh = hits[0].object;
-    gameScore++;
-    const scoreEl = document.getElementById('game-score');
-    if (scoreEl) scoreEl.textContent = gameScore;
-
-    // Bounce animation: quick scale pulse
-    const origScale = hitMesh.scale.clone();
-    hitMesh.scale.set(1.5, 0.4, 1.5);
-    setTimeout(() => {
-      hitMesh.scale.set(0.8, 1.8, 0.8);
-      setTimeout(() => hitMesh.scale.copy(origScale), 150);
-    }, 100);
-
-    // Show hit feedback
-    const fb = document.getElementById('game-feedback');
-    if (fb) {
-      fb.textContent = t('sapanHit');
-      fb.style.opacity = '1';
-      setTimeout(() => { fb.style.opacity = '0'; }, 700);
-    }
-  }
-
-  scene.add(mesh);
-  stoneProjectiles.push({ mesh, velocity: vel, life: 1.8 });
-}
-
-// Click to shoot in game mode
-window.addEventListener('click', (e) => {
-  if (!isGameMode || !isWalkMode) return;
-  shootStone();
 });
 
 document.addEventListener('keydown', (e) => {
@@ -9453,11 +8725,6 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.code === 'Escape' && isWalkMode) {
     walkControls.unlock();
-    return;
-  }
-  // Ctrl+Space = stop recording from anywhere (including pointer-lock)
-  if (e.code === 'Space' && e.ctrlKey) {
-    stopRecording();
     return;
   }
   if (!isWalkMode) return;
@@ -9587,18 +8854,6 @@ function animate() {
     p.mesh.lookAt(pos.clone().add(tan.clone().multiplyScalar(p.offsetDir))); // look along direction
   }
 
-  // Stone projectile update (Sapan Modu)
-  for (let i = stoneProjectiles.length - 1; i >= 0; i--) {
-    const s = stoneProjectiles[i];
-    s.mesh.position.addScaledVector(s.velocity, delta);
-    s.velocity.y -= 9.8 * delta; // gravity arc
-    s.life -= delta;
-    if (s.life <= 0) {
-      scene.remove(s.mesh);
-      stoneProjectiles.splice(i, 1);
-    }
-  }
-  
   // Auto-orbit (only in non-walk mode)
   if (settings.autoOrbit && !isWalkMode) {
     controls.autoRotate = true;
@@ -9621,19 +8876,15 @@ function animate() {
     if (_flyControlsTarget) controls.target.lerp(_flyControlsTarget, ease * 0.12);
   }
 
-  applyTourPlayback();
-
   // SSAO settle: run full SSAO only when camera has been still 300ms
   // → smooth orbit at 60fps, quality rendering when static
   const _now = performance.now();
   const _camMoving = (_now - _lastCameraMove) < 300;
-  const _hasAnim = isWalkMode || cars.length > 0 || pedestrians.length > 0
-    || settings.weather !== 'Clear' || stoneProjectiles.length > 0 || _flyT < 1.0;
-  if (isRecording) {
-    renderer.render(scene, camera);
-  } else if (settings.enableSSAO && !_camMoving && !_hasAnim && (_now - _lastSSAORender) > 120) {
+  ssaoPass.enabled = Boolean(settings.enableSSAO && !_camMoving);
+  bloomPass.enabled = Boolean(settings.enableBloom && bloomPass.strength > 0.001);
+  const usePostProcessing = ssaoPass.enabled || bloomPass.enabled;
+  if (usePostProcessing) {
     composer.render();
-    _lastSSAORender = _now;
   } else {
     renderer.render(scene, camera);
   }
@@ -9731,15 +8982,12 @@ function updateHtmlLang() {
   const scenePill = document.getElementById('scene-state');
   if (scenePill?.dataset.sceneI18n) scenePill.textContent = t(scenePill.dataset.sceneI18n);
   renderFunctionStyleDock();
-  renderTourList();
   // Re-render Model Studio's dynamic panels so their labels follow the language.
   const studioDock = document.getElementById('model-studio-dock');
   if (studioDock && !studioDock.classList.contains('hidden')) {
     if (typeof renderUploadedModelsList === 'function') renderUploadedModelsList();
     if (typeof renderTreePoolList === 'function') renderTreePoolList();
     if (typeof renderModelTransformControls === 'function') renderModelTransformControls();
-    if (typeof renderMosqueCustomizationsList === 'function') renderMosqueCustomizationsList();
-    if (typeof renderTumulusCustomizationsList === 'function') renderTumulusCustomizationsList();
   }
 }
 
@@ -9761,138 +9009,348 @@ window.addEventListener('unhandledrejection', (event) => {
   handleSceneError(event?.reason || new Error('Unhandled scene promise rejection'));
 });
 
-rebuildSceneSafe().then(() => {
-  if (functionGuiRefs) functionGuiRefs.refreshFunctionGui();
-});
+rebuildSceneSafe();
 animate();
 
-// --- Cinematic Recording Tool ---
-let mediaRecorder;
-let recordedChunks = [];
-let recordingInterval;
-let startTime;
+// --- Export Studio -------------------------------------------------------
+const MAX_EXPORT_EDGE = 7680;
+const MAX_EXPORT_PIXELS = 33177600;
+let exportBusy = false;
+let sceneRecorder = null;
+let recorderChunks = [];
+let recorderStream = null;
+let recorderTimer = null;
+let recorderStartedAt = 0;
+let viewerUnloading = false;
 
-const btnRecord = document.getElementById('btn-record');
-const btnStop = document.getElementById('btn-stop');
-const recTime = document.getElementById('recording-time');
-const uiContainer = document.getElementById('ui-container');
-const recordingPanel = document.getElementById('recording-panel');
-const btnToggleRec = document.getElementById('btn-toggle-rec');
-const recQuality = document.getElementById('rec-quality');
-
-if (btnToggleRec && recordingPanel) {
-  btnToggleRec.addEventListener('click', () => {
-    recordingPanel.classList.toggle('hidden');
-  });
+function renderSceneFrame() {
+  ssaoPass.enabled = Boolean(settings.enableSSAO);
+  bloomPass.enabled = Boolean(settings.enableBloom && bloomPass.strength > 0.001);
+  if (ssaoPass.enabled || bloomPass.enabled) composer.render();
+  else renderer.render(scene, camera);
 }
 
-// Elements hidden during recording (everything except recording-container)
-const _recHideEls = ['panel-toggle','lang-toggle','scene-toggle','layers-toggle','style-toggle','mobility-toggle','furniture-toggle','analysis-toggle','narrative-toggle','advanced-toggle','walk-toggle','game-toggle','main-panel','layer-dock','scene-dock','style-dock','mobility-dock','furniture-dock','analysis-dock','narrative-dock'];
-
-function _recHideUi() {
-  _recHideEls.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.visibility = 'hidden';
-  });
-  if (globalGui) globalGui.domElement.style.visibility = 'hidden';
-}
-function _recShowUi() {
-  _recHideEls.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.visibility = '';
-  });
-  if (globalGui) globalGui.domElement.style.visibility = '';
+function setExportStatus(message, state = '') {
+  const status = document.getElementById('export-status');
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle('error', state === 'error');
+  status.classList.toggle('success', state === 'success');
 }
 
-function stopRecording() {
-  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
-  isRecording = false;
-  mediaRecorder.stop();
-  clearInterval(recordingInterval);
-  _recShowUi();
-  if (btnRecord) btnRecord.style.display = 'inline-block';
-  if (btnStop)   btnStop.style.display   = 'none';
-  if (recTime)   recTime.style.display   = 'none';
-  if (recordingPanel) {
-    recordingPanel.style.removeProperty('background');
-    recordingPanel.style.removeProperty('border');
-  }
-  if (btnToggleRec) btnToggleRec.classList.remove('recording');
+function setRecorderStatus(message, state = '') {
+  const status = document.getElementById('record-status');
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle('error', state === 'error');
+  status.classList.toggle('success', state === 'success');
 }
 
-if (btnRecord && btnStop) {
-  btnRecord.addEventListener('click', () => {
-    const canvas = document.querySelector('canvas');
-    if (!canvas) return;
-
-    // Hide non-recording UI, keep recording-container visible
-    isRecording = true;
-    _recHideUi();
-    recordingPanel.classList.remove('hidden'); // ensure panel is open
-
-    // Switch record ↔ stop buttons
-    btnRecord.style.display = 'none';
-    btnStop.style.display = 'inline-block';
-    recTime.style.display = 'inline-block';
-    btnToggleRec.classList.add('recording');
-
-    // Start timer
-    startTime = Date.now();
-    recTime.innerText = '00:00';
-    recordingInterval = setInterval(() => {
-      const diff = Math.floor((Date.now() - startTime) / 1000);
-      const m = String(Math.floor(diff / 60)).padStart(2, '0');
-      const s = String(diff % 60).padStart(2, '0');
-      recTime.innerText = `${m}:${s}`;
-    }, 1000);
-
-    // Setup recorder
-    const stream = canvas.captureStream(30);
-    const bps = recQuality ? parseInt(recQuality.value, 10) : 5000000;
-    mediaRecorder = new MediaRecorder(stream, {
-      mimeType: 'video/webm',
-      videoBitsPerSecond: bps
-    });
-    recordedChunks = [];
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-    mediaRecorder.onstop = () => {
-      isRecording = false;
-      const blob = new Blob(recordedChunks, { type: 'video/webm' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `planx_3d_city_${Date.now()}.webm`;
-      document.body.appendChild(a); a.click();
-      URL.revokeObjectURL(url); a.remove();
-    };
-    mediaRecorder.start();
-  });
-
-  btnStop.addEventListener('click', stopRecording);
-}
-
-// --- Screenshot ---
-function takeScreenshot() {
-  // Render one clean frame first (without UI)
-  uiContainer.style.visibility = 'hidden';
-  if (globalGui) globalGui.domElement.style.visibility = 'hidden';
-  if (settings.enableSSAO) composer.render(); else renderer.render(scene, camera);
-
-  const canvas = document.querySelector('canvas');
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.download = `planx_3d_city_${Date.now()}.png`;
-  link.href = canvas.toDataURL('image/png');
+  link.download = filename;
+  link.href = url;
+  document.body.appendChild(link);
   link.click();
-
-  uiContainer.style.visibility = '';
-  if (globalGui) globalGui.domElement.style.visibility = '';
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-const btnScreenshot = document.getElementById('btn-screenshot');
-if (btnScreenshot) btnScreenshot.addEventListener('click', takeScreenshot);
+function canvasToBlob(mimeType, quality) {
+  return new Promise((resolve, reject) => {
+    renderer.domElement.toBlob((blob) => {
+      if (!blob) reject(new Error('The browser could not encode this image format.'));
+      else resolve(blob);
+    }, mimeType, quality);
+  });
+}
+
+function resolveExportSize() {
+  const preset = document.getElementById('export-size-preset')?.value || 'current';
+  let width;
+  let height;
+  if (preset === 'current') {
+    const current = renderer.getSize(new THREE.Vector2());
+    width = Math.round(current.x);
+    height = Math.round(current.y);
+  } else if (/^\d+x\d+$/.test(preset)) {
+    [width, height] = preset.split('x').map(Number);
+  } else {
+    width = Number(document.getElementById('export-width')?.value);
+    height = Number(document.getElementById('export-height')?.value);
+  }
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width < 320 || height < 240) {
+    throw new Error('Enter a valid output size (minimum 320 x 240).');
+  }
+  width = Math.min(MAX_EXPORT_EDGE, Math.round(width));
+  height = Math.min(MAX_EXPORT_EDGE, Math.round(height));
+  if (width * height > MAX_EXPORT_PIXELS) {
+    const scale = Math.sqrt(MAX_EXPORT_PIXELS / (width * height));
+    width = Math.floor(width * scale);
+    height = Math.floor(height * scale);
+    setExportStatus(`Output was safely limited to ${width} x ${height}.`);
+  }
+  return { width, height };
+}
+
+async function captureSceneImage(mimeType, quality, width, height) {
+  const oldSize = renderer.getSize(new THREE.Vector2());
+  const oldPixelRatio = renderer.getPixelRatio();
+  const oldAspect = camera.aspect;
+  try {
+    renderer.setPixelRatio(1);
+    composer.setPixelRatio(1);
+    renderer.setSize(width, height, false);
+    composer.setSize(width, height);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderSceneFrame();
+    const blob = await canvasToBlob(mimeType, quality);
+    if (mimeType === 'image/webp' && blob.type !== 'image/webp') {
+      throw new Error('WebP encoding is not supported by this browser.');
+    }
+    return blob;
+  } finally {
+    renderer.setPixelRatio(oldPixelRatio);
+    composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    renderer.setSize(oldSize.x, oldSize.y, false);
+    composer.setSize(oldSize.x, oldSize.y);
+    camera.aspect = oldAspect;
+    camera.updateProjectionMatrix();
+    renderSceneFrame();
+  }
+}
+
+async function exportCurrentScene() {
+  if (exportBusy) return;
+  const button = document.getElementById('export-scene');
+  exportBusy = true;
+  if (button) button.disabled = true;
+  try {
+    const format = document.getElementById('export-format')?.value || 'png';
+    const quality = Number(document.getElementById('export-quality')?.value || 0.92);
+    const baseName = document.getElementById('export-filename')?.value || 'osm_3d_model';
+    const { width, height } = resolveExportSize();
+    setExportStatus(`Rendering ${width} x ${height}...`);
+
+    let blob;
+    let extension = format;
+    if (format === 'png' || format === 'jpeg' || format === 'webp') {
+      const mime = format === 'jpeg' ? 'image/jpeg' : `image/${format}`;
+      blob = await captureSceneImage(mime, quality, width, height);
+      extension = format === 'jpeg' ? 'jpg' : format;
+    } else if (format === 'pdf') {
+      const jpeg = await captureSceneImage('image/jpeg', quality, width, height);
+      blob = await buildPdfFromJpeg(jpeg, width, height, sanitizeExportBaseName(baseName));
+    } else if (format === 'svg') {
+      const png = await captureSceneImage('image/png', 1, width, height);
+      const dataUrl = await blobToDataUrl(png);
+      blob = new Blob([buildSvgSnapshot(dataUrl, width, height, sanitizeExportBaseName(baseName))], { type: 'image/svg+xml' });
+    } else if (format === 'html') {
+      const jpeg = await captureSceneImage('image/jpeg', quality, width, height);
+      const dataUrl = await blobToDataUrl(jpeg);
+      blob = new Blob([buildHtmlSnapshot(dataUrl, width, height, sanitizeExportBaseName(baseName))], { type: 'text/html' });
+    } else {
+      throw new Error(`Unsupported export format: ${format}`);
+    }
+    downloadBlob(blob, timestampedFilename(baseName, extension));
+    setExportStatus(`${format.toUpperCase()} exported at ${width} x ${height}.`, 'success');
+  } catch (error) {
+    console.error('Scene export failed', error);
+    setExportStatus(error?.message || 'Export failed.', 'error');
+  } finally {
+    exportBusy = false;
+    if (button) button.disabled = false;
+  }
+}
+
+async function copySceneToClipboard() {
+  if (exportBusy) return;
+  if (!window.ClipboardItem || !navigator.clipboard?.write) {
+    setExportStatus('Image clipboard access is not available in this browser.', 'error');
+    return;
+  }
+  exportBusy = true;
+  try {
+    const { width, height } = resolveExportSize();
+    setExportStatus(`Rendering ${width} x ${height} for clipboard...`);
+    const png = await captureSceneImage('image/png', 1, width, height);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    setExportStatus('PNG copied to clipboard.', 'success');
+  } catch (error) {
+    console.error('Clipboard export failed', error);
+    setExportStatus(error?.message || 'Clipboard export failed.', 'error');
+  } finally {
+    exportBusy = false;
+  }
+}
+
+const RECORDING_FORMATS = [
+  { mime: 'video/webm;codecs=vp9', label: 'WebM - VP9', extension: 'webm' },
+  { mime: 'video/webm;codecs=vp8', label: 'WebM - VP8', extension: 'webm' },
+  { mime: 'video/webm', label: 'WebM', extension: 'webm' },
+  { mime: 'video/mp4;codecs=avc1.42E01E', label: 'MP4 - H.264', extension: 'mp4' },
+  { mime: 'video/mp4', label: 'MP4', extension: 'mp4' }
+];
+
+function supportedRecordingFormats() {
+  if (!window.MediaRecorder) return [];
+  return RECORDING_FORMATS.filter((format) => MediaRecorder.isTypeSupported(format.mime));
+}
+
+function resetRecorderUi() {
+  window.clearInterval(recorderTimer);
+  recorderTimer = null;
+  document.querySelector('.recorder-section')?.classList.remove('recording');
+  const start = document.getElementById('record-start');
+  const stop = document.getElementById('record-stop');
+  if (start) start.disabled = false;
+  if (stop) stop.disabled = true;
+}
+
+function stopRecorderTracks() {
+  recorderStream?.getTracks().forEach((track) => track.stop());
+  recorderStream = null;
+}
+
+function startSceneRecording() {
+  if (sceneRecorder?.state === 'recording') return;
+  if (!renderer.domElement.captureStream || !window.MediaRecorder) {
+    setRecorderStatus('Screen recording is not supported by this browser.', 'error');
+    return;
+  }
+  try {
+    const supported = supportedRecordingFormats();
+    const selectedMime = document.getElementById('record-format')?.value || 'auto';
+    const format = selectedMime === 'auto'
+      ? supported[0]
+      : supported.find((item) => item.mime === selectedMime);
+    if (!format) throw new Error('No supported video encoder is available.');
+    const fps = Number(document.getElementById('record-fps')?.value || 30);
+    const bitrate = Number(document.getElementById('record-bitrate')?.value || 16000000);
+    recorderStream = renderer.domElement.captureStream(fps);
+    recorderChunks = [];
+    sceneRecorder = new MediaRecorder(recorderStream, {
+      mimeType: format.mime,
+      videoBitsPerSecond: bitrate
+    });
+    sceneRecorder.addEventListener('dataavailable', (event) => {
+      if (event.data?.size) recorderChunks.push(event.data);
+    });
+    sceneRecorder.addEventListener('error', (event) => {
+      setRecorderStatus(event.error?.message || 'Recording failed.', 'error');
+    });
+    sceneRecorder.addEventListener('stop', () => {
+      try {
+        if (viewerUnloading) {
+          return;
+        } else if (recorderChunks.length) {
+          const blob = new Blob(recorderChunks, { type: format.mime });
+          const baseName = document.getElementById('export-filename')?.value || 'osm_3d_model';
+          downloadBlob(blob, timestampedFilename(baseName, format.extension));
+          setRecorderStatus(`Recording saved (${(blob.size / 1048576).toFixed(1)} MB).`, 'success');
+        } else {
+          setRecorderStatus('The recorder produced no video frames.', 'error');
+        }
+      } finally {
+        recorderChunks = [];
+        sceneRecorder = null;
+        stopRecorderTracks();
+        resetRecorderUi();
+      }
+    }, { once: true });
+    renderSceneFrame();
+    sceneRecorder.start(1000);
+    recorderStartedAt = performance.now();
+    document.querySelector('.recorder-section')?.classList.add('recording');
+    const start = document.getElementById('record-start');
+    const stop = document.getElementById('record-stop');
+    if (start) start.disabled = true;
+    if (stop) stop.disabled = false;
+    recorderTimer = window.setInterval(() => {
+      const elapsed = Math.floor((performance.now() - recorderStartedAt) / 1000);
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = String(elapsed % 60).padStart(2, '0');
+      setRecorderStatus(`Recording ${minutes}:${seconds} · ${fps} fps`);
+    }, 250);
+  } catch (error) {
+    console.error('Recorder start failed', error);
+    stopRecorderTracks();
+    resetRecorderUi();
+    setRecorderStatus(error?.message || 'Could not start recording.', 'error');
+  }
+}
+
+function stopSceneRecording() {
+  if (sceneRecorder?.state === 'recording') {
+    setRecorderStatus('Finalizing video...');
+    sceneRecorder.stop();
+  }
+}
+
+function updateExportControls() {
+  const format = document.getElementById('export-format')?.value || 'png';
+  const preset = document.getElementById('export-size-preset')?.value || 'current';
+  const size = preset === 'current'
+    ? renderer.getSize(new THREE.Vector2())
+    : (/^\d+x\d+$/.test(preset)
+      ? (() => { const [x, y] = preset.split('x').map(Number); return { x, y }; })()
+      : null);
+  const widthInput = document.getElementById('export-width');
+  const heightInput = document.getElementById('export-height');
+  if (size) {
+    if (widthInput) widthInput.value = Math.round(size.x);
+    if (heightInput) heightInput.value = Math.round(size.y);
+  }
+  if (widthInput) widthInput.disabled = preset !== 'custom';
+  if (heightInput) heightInput.disabled = preset !== 'custom';
+  const qualityRow = document.getElementById('export-quality-row');
+  if (qualityRow) qualityRow.hidden = format === 'png' || format === 'svg';
+  const notes = {
+    png: 'PNG preserves full image quality and is ideal for editing and publication.',
+    jpeg: 'JPEG creates a smaller photographic image; use the quality slider to balance size and detail.',
+    webp: 'WebP gives high quality at a compact size when supported by the embedded browser.',
+    pdf: 'PDF fits the rendered scene onto an A4 presentation page with no external assets.',
+    svg: 'SVG wraps the rendered scene in a scalable publication container; the 3D pixels remain raster.',
+    html: 'HTML creates a self-contained, offline snapshot with the image and OSM attribution embedded.'
+  };
+  const note = document.getElementById('export-format-note');
+  if (note) note.textContent = notes[format];
+}
+
+function initExportStudio() {
+  const formatSelect = document.getElementById('record-format');
+  const formats = supportedRecordingFormats();
+  formats.forEach((format) => {
+    const option = document.createElement('option');
+    option.value = format.mime;
+    option.textContent = format.label;
+    formatSelect?.appendChild(option);
+  });
+  if (!formats.length && formatSelect) formatSelect.disabled = true;
+  document.getElementById('export-format')?.addEventListener('change', updateExportControls);
+  document.getElementById('export-size-preset')?.addEventListener('change', updateExportControls);
+  document.getElementById('export-quality')?.addEventListener('input', (event) => {
+    const output = document.getElementById('export-quality-value');
+    if (output) output.textContent = `${Math.round(Number(event.target.value) * 100)}%`;
+  });
+  document.getElementById('export-scene')?.addEventListener('click', exportCurrentScene);
+  document.getElementById('export-clipboard')?.addEventListener('click', copySceneToClipboard);
+  document.getElementById('record-start')?.addEventListener('click', startSceneRecording);
+  document.getElementById('record-stop')?.addEventListener('click', stopSceneRecording);
+  updateExportControls();
+  if (!formats.length) setRecorderStatus('Screen recording is not supported by this browser.', 'error');
+}
+
+window.addEventListener('beforeunload', () => {
+  viewerUnloading = true;
+  if (sceneRecorder?.state === 'recording') {
+    sceneRecorder.stop();
+  }
+  stopRecorderTracks();
+});
+initExportStudio();
 
 // --- FOV ---
 const fovSlider = document.getElementById('fov-slider');
@@ -9934,200 +9392,6 @@ if (autoOrbitBtn) {
   autoOrbitBtn.addEventListener('click', () => {
     settings.autoOrbit = !settings.autoOrbit;
     autoOrbitBtn.classList.toggle('active', settings.autoOrbit);
-  });
-}
-
-const TOUR_SETTING_KEYS = [
-  'showIslands', 'islandTransparency', 'showParcels', 'showHardscape', 'showBuildings', 'showTrees', 'showFurniture',
-  'showCars', 'showRoads', 'showSidewalks', 'showPedestrianPaths', 'showCrosswalks', 'showPedestrians',
-  'roadColorMode', 'showWindPlumes', 'windDirectionDeg', 'windPlumeDistance',
-  'showTerrainTexture', 'showTerrainSides'
-];
-
-function vectorToPlain(v) {
-  return { x: v.x, y: v.y, z: v.z };
-}
-
-function plainToVector(v) {
-  return new THREE.Vector3(Number(v?.x) || 0, Number(v?.y) || 0, Number(v?.z) || 0);
-}
-
-function captureTourFrame() {
-  const sceneSettings = {};
-  TOUR_SETTING_KEYS.forEach((key) => { sceneSettings[key] = settings[key]; });
-  return {
-    camera: vectorToPlain(camera.position),
-    target: vectorToPlain(controls.target),
-    timeOfDay: settings.timeOfDay,
-    settings: sceneSettings,
-    caption: document.getElementById('tour-caption')?.value?.trim() || `Keyframe ${tourState.keyframes.length + 1}`
-  };
-}
-
-function applyTourFrame(frame, rebuild = true) {
-  if (!frame) return;
-  if (frame.settings) Object.assign(settings, frame.settings);
-  if (Number.isFinite(frame.timeOfDay)) settings.timeOfDay = frame.timeOfDay;
-  camera.position.copy(plainToVector(frame.camera));
-  controls.target.copy(plainToVector(frame.target));
-  camera.lookAt(controls.target);
-  checkTimeChange();
-  updateDockControls();
-  if (rebuild) rebuildScene();
-}
-
-function renderTourList() {
-  const list = document.getElementById('tour-list');
-  if (!list) return;
-  list.innerHTML = tourState.keyframes.map((frame, index) => (
-    `<div class="tour-item ${index === selectedTourIndex ? 'active' : ''}" data-tour-index="${index}">
-      <strong>${index + 1}. ${frame.caption || 'Keyframe'}</strong><br>
-      <span>${Number(frame.timeOfDay || 0).toFixed(1)}h - ${frame.settings?.roadColorMode || 'Default'}</span>
-    </div>`
-  )).join('') || `<div class="tour-item">${t('tourEmpty')}</div>`;
-  list.querySelectorAll('[data-tour-index]').forEach((item) => {
-    item.addEventListener('click', () => {
-      selectedTourIndex = Number(item.dataset.tourIndex);
-      const frame = tourState.keyframes[selectedTourIndex];
-      const input = document.getElementById('tour-caption');
-      if (input) input.value = frame.caption || '';
-      applyTourFrame(frame, true);
-      renderTourList();
-    });
-  });
-}
-
-function updateTourControls() {
-  document.querySelectorAll('[data-tour-setting]').forEach((el) => {
-    const key = el.dataset.tourSetting;
-    if (!(key in tourState)) return;
-    if (el.type === 'checkbox') el.checked = !!tourState[key];
-    else el.value = tourState[key];
-  });
-}
-
-function addTourKeyframe() {
-  tourState.keyframes.push(captureTourFrame());
-  selectedTourIndex = tourState.keyframes.length - 1;
-  saveTourState();
-  renderTourList();
-}
-
-function updateTourKeyframe() {
-  if (selectedTourIndex < 0 || selectedTourIndex >= tourState.keyframes.length) return;
-  tourState.keyframes[selectedTourIndex] = captureTourFrame();
-  saveTourState();
-  renderTourList();
-}
-
-function deleteTourKeyframe() {
-  if (selectedTourIndex < 0 || selectedTourIndex >= tourState.keyframes.length) return;
-  tourState.keyframes.splice(selectedTourIndex, 1);
-  selectedTourIndex = Math.min(selectedTourIndex, tourState.keyframes.length - 1);
-  saveTourState();
-  renderTourList();
-}
-
-function playTour() {
-  if (tourState.keyframes.length < 2) return;
-  settings.autoOrbit = false;
-  tourState.playing = true;
-  tourState.startTime = performance.now() - tourState.currentTime * 1000;
-  controls.enabled = false;
-}
-
-function pauseTour() {
-  tourState.playing = false;
-  controls.enabled = !isWalkMode;
-  document.getElementById('tour-caption-overlay')?.classList.add('hidden');
-}
-
-function easeInOutCubic(t) {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function applyTourPlayback() {
-  if (!tourState.playing || tourState.keyframes.length < 2) return;
-  const duration = Math.max(1, Number(tourState.duration) || 18);
-  tourState.currentTime = (performance.now() - tourState.startTime) / 1000;
-  if (tourState.currentTime > duration) {
-    if (tourState.loop) {
-      tourState.startTime = performance.now();
-      tourState.currentTime = 0;
-    } else {
-      pauseTour();
-      tourState.currentTime = duration;
-    }
-  }
-  const frames = tourState.keyframes;
-  const totalSegments = frames.length - 1;
-  const progress = Math.min(1, Math.max(0, tourState.currentTime / duration));
-  const segmentFloat = progress * totalSegments;
-  const idx = Math.min(totalSegments - 1, Math.floor(segmentFloat));
-  const localT = easeInOutCubic(segmentFloat - idx);
-  const a = frames[idx];
-  const b = frames[idx + 1];
-  camera.position.lerpVectors(plainToVector(a.camera), plainToVector(b.camera), localT);
-  controls.target.lerpVectors(plainToVector(a.target), plainToVector(b.target), localT);
-  camera.lookAt(controls.target);
-  settings.timeOfDay = (Number(a.timeOfDay) || 0) + ((Number(b.timeOfDay) || 0) - (Number(a.timeOfDay) || 0)) * localT;
-  const active = localT < 0.5 ? a : b;
-  if (active.settings) Object.assign(settings, active.settings);
-  checkTimeChange();
-  const caption = document.getElementById('tour-caption-overlay');
-  if (caption) {
-    caption.textContent = active.caption || '';
-    caption.classList.toggle('hidden', !active.caption);
-  }
-}
-
-function exportTourJson() {
-  const payload = {
-    version: 'planx-tour/v2',
-    exportedAt: new Date().toISOString(),
-    project: projectManifest?.project || null,
-    manifestVersion: projectManifest?.version || null,
-    mode: projectManifest?.mode || viewerMode(),
-    ...tourState
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'planx_tour.json';
-  document.body.appendChild(a);
-  a.click();
-  URL.revokeObjectURL(a.href);
-  a.remove();
-}
-
-function initTourUi() {
-  updateTourControls();
-  renderTourList();
-  loadBundledTourStateIfAvailable().then((loaded) => {
-    if (loaded) {
-      updateTourControls();
-      renderTourList();
-    }
-  });
-  document.getElementById('tour-add')?.addEventListener('click', addTourKeyframe);
-  document.getElementById('tour-update')?.addEventListener('click', updateTourKeyframe);
-  document.getElementById('tour-delete')?.addEventListener('click', deleteTourKeyframe);
-  document.getElementById('tour-play')?.addEventListener('click', playTour);
-  document.getElementById('tour-pause')?.addEventListener('click', pauseTour);
-  document.getElementById('tour-export')?.addEventListener('click', exportTourJson);
-  document.getElementById('tour-import')?.addEventListener('change', async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const data = JSON.parse(await file.text());
-    applyTourData(data, true);
-  });
-  document.querySelectorAll('[data-tour-setting]').forEach((el) => {
-    const handler = () => {
-      const key = el.dataset.tourSetting;
-      tourState[key] = el.type === 'checkbox' ? el.checked : Number(el.value);
-      saveTourState();
-    };
-    el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', handler);
   });
 }
 
@@ -10314,14 +9578,19 @@ function applyDockSetting(key, value, inputType) {
   } else {
     settings[key] = value;
   }
+  if (key === 'roofShape') {
+    settings.roofShape = roofShapeValue(settings.roofShape, 'Pyramid');
+    Object.values(functionBuildingStyleState).forEach((style) => {
+      if (style) style.roofShape = settings.roofShape;
+    });
+    saveFunctionBuildingStyles();
+  }
   if (inputType === 'checkbox' && value === false) {
     if (key === 'showBuildings') { clearGroup(buildingGroup); clearGroup(zoningGroup); }
     else if (key === 'showIslands') clearGroup(islandGroup);
     else if (key === 'showParcels') clearGroup(parcelGroup);
     else if (key === 'showHardscape') clearGroup(hardscapeGroup);
     else if (key === 'showTrees') clearGroup(treeGroup);
-    else if (key === 'showMosques') clearGroup(mosqueGroup);
-    else if (key === 'showTumulus') clearGroup(tumulusGroup);
     else if (key === 'showFurniture') clearGroup(furnitureGroup);
     else if (key === 'showRoads') clearGroup(roadGroup);
     else if (key === 'showSidewalks') clearGroup(sidewalkGroup);
@@ -10335,14 +9604,21 @@ function applyDockSetting(key, value, inputType) {
   }
   if (key === 'assetTheme') {
     applyThemeDefaultsToSettings(true);
+    clearGroup(carGroup);
+    clearGroup(pedestrianGroup);
+    releasePersistentTexture(terrainTexture);
+    releasePersistentTexture(baseMapTexture);
     terrainTexture = null;
     baseMapTexture = null;
+    clearProceduralTemplateCaches();
     updateDockControls();
   }
   if (key === 'showTerrainTexture' || key === 'terrainTextureBrightness' || key === 'terrainTextureContrast' || key === 'terrainAnalysisMode') {
+    releasePersistentTexture(terrainTexture);
     terrainTexture = null;
   }
   if (key === 'showXyzTiles' || key === 'xyzTileUrl') {
+    releasePersistentTexture(baseMapTexture);
     baseMapTexture = null;
   }
   savePersistedSettings();
@@ -10352,14 +9628,15 @@ function applyDockSetting(key, value, inputType) {
   } else if (key === 'autoTime' || key === 'autoTimeSpeed' || key === 'trafficSpeed') {
     updateDockControls();
   } else if (key === 'showBasemap') {
-    if (settings.showBasemap && projectManifest?.basemap?.image && !basemapTexture) rebuildScene();
+    if (settings.showBasemap && projectManifest?.basemap?.image && !basemapTexture) requestSceneRebuild(0);
     else buildBasemapOverlay();
   } else if (key === 'basemapElevation') {
     buildBasemapOverlay();
   } else if (key.indexOf('basemap') === 0) {
     updateBasemapAppearance();
   } else {
-    rebuildScene();
+    const delay = ['range', 'number', 'color', 'text'].includes(inputType) ? 160 : 0;
+    requestSceneRebuild(delay);
   }
 }
 
@@ -10395,8 +9672,6 @@ function initDockUi() {
       renderUploadedModelsList();
       renderTreePoolList();
       renderModelTransformControls();
-      renderMosqueCustomizationsList();
-      renderTumulusCustomizationsList();
     }
   });
   document.querySelectorAll('.dock-close').forEach((btn) => {
@@ -10486,7 +9761,6 @@ function initDockUi() {
 }
 
 initDockUi();
-initTourUi();
 
 /* ====================================================================== */
 /* v0.3.0 features: distance measurement, help overlay, i18n for the new  */
@@ -10496,7 +9770,7 @@ initTourUi();
 (function initOsmExtras() {
   // --- i18n for the new UI (added after boot, so re-apply translations). ---
   Object.assign(i18n.EN, {
-    screenshotTitle: 'Save screenshot (PNG)',
+    exportTitle: 'Export studio',
     measureTitle: 'Measure distance',
     helpTitle: 'Help & shortcuts',
     measureHud: 'Click two points on the ground to measure · Esc to finish',
@@ -10505,12 +9779,12 @@ initTourUi();
     helpFoot: '3D OSM Model · PlanX 3D City engine',
     helpOrbit: 'Orbit / rotate', helpZoom: 'Zoom', helpPan: 'Pan',
     helpWalkRow: 'Enter walk mode', helpWalkMove: 'Move & look', helpExitRow: 'Exit walk / close',
-    helpMeasureRow: 'Measure distance', helpShotRow: 'Screenshot',
+    helpMeasureRow: 'Measure distance', helpShotRow: 'Export image, document or video',
     helpSceneRow: 'Time / weather / sun', helpLangRow: 'Switch language',
     helpDrag: 'Left-drag', helpWheel: 'Mouse wheel', helpRdrag: 'Right-drag', helpMouse: 'mouse',
   });
   Object.assign(i18n.TR, {
-    screenshotTitle: 'Ekran goruntusu kaydet (PNG)',
+    exportTitle: 'Export studyosu',
     measureTitle: 'Mesafe olc',
     helpTitle: 'Yardim ve kisayollar',
     measureHud: 'Olcmek icin zeminde iki nokta sec · Bitirmek icin Esc',
@@ -10519,7 +9793,7 @@ initTourUi();
     helpFoot: '3D OSM Model · PlanX 3D City motoru',
     helpOrbit: 'Yorunge / dondur', helpZoom: 'Yakinlastir', helpPan: 'Kaydir',
     helpWalkRow: 'Yurume moduna gir', helpWalkMove: 'Hareket et & bak', helpExitRow: 'Yurumeden cik / kapat',
-    helpMeasureRow: 'Mesafe olc', helpShotRow: 'Ekran goruntusu',
+    helpMeasureRow: 'Mesafe olc', helpShotRow: 'Gorsel, belge veya video export',
     helpSceneRow: 'Zaman / hava / gunes', helpLangRow: 'Dili degistir',
     helpDrag: 'Sol surukle', helpWheel: 'Fare tekeri', helpRdrag: 'Sag surukle', helpMouse: 'fare',
   });
@@ -10538,8 +9812,8 @@ initTourUi();
     return measureGroup;
   }
   function overUi(target) {
-    return !!(target.closest('#ui-container') || target.closest('.lil-gui') || target.closest('.dock-panel')
-      || target.closest('#measure-hud') || target.closest('#help-overlay') || target.closest('#recording-container'));
+    return !!(target.closest('#ui-container') || target.closest('.dock-panel')
+      || target.closest('#measure-hud') || target.closest('#help-overlay'));
   }
   function groundPoint(clientX, clientY) {
     const mouse = new THREE.Vector2((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1);
@@ -10664,7 +9938,7 @@ initTourUi();
       ['helpWalkMove', 'WASD + ' + t('helpMouse')],
       ['helpExitRow', '<span class="help-key">Esc</span>'],
       ['helpMeasureRow', '📏'],
-      ['helpShotRow', '📷'],
+      ['helpShotRow', 'EX'],
       ['helpSceneRow', '☀'],
     ];
   }

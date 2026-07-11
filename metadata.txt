@@ -1,11 +1,11 @@
 [general]
 name=3D OSM Model
 qgisMinimumVersion=3.28
-description=Pick an area, download OpenStreetMap data, and instantly view it as a procedural 3D city in the browser.
-version=1.0.1
+description=Create a styled OSM map and procedural 3D city, then export publication-ready images, PDF, SVG, HTML, or video.
+version=1.1.0
 author=Yusuf Eminoglu
 email=yusuf.eminoglu@deu.edu.tr
-about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, cycleways, waterways, lakes and ponds, greens, car parks, pedestrian squares, trees and street furniture (bus stops, benches, lamps, bins) using their native OSM tags, builds the study boundary as the shape you choose - inscribed circle, rounded rectangle, rectangle or the exact selected polygon (the model base extends 5 m beyond it with softly rounded corners), and opens an interactive, English-only Three.js 3D city viewer. An easy "Web theme" picker recolours the city content - buildings, roads, base and roofs - with a handful of ready palettes - five calm ones (salmon and grey, gray-teal, teal and salmon, light purple, warm sand) and five stylised looks (anime, cartoon, Pixar, futuristic and classic era) - leaving the viewer chrome untouched. A basemap layer (raster, satellite/XYZ tiles or vector) can optionally be draped under the city and restyled live - opacity, blend mode, brightness, contrast, saturation and tint - in the viewer's Basemap and Texture panel; procedural kerb sidewalks line both sides of every street. Roads, sidewalks and bike lanes are drawn procedurally with lane markings; pedestrians keep to the sidewalks and cars to the carriageway; parks, woods and forests are planted with procedural trees so green areas read as wooded rather than flat; buildings are coloured by OSM function - with a subtle per-building shade variation so blocks read as many individual buildings - and default to a function-aware floor count when no level data exists. An external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
+about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, cycleways, waterways, lakes and ponds, greens, car parks, pedestrian squares, trees and street furniture (bus stops, benches, lamps, bins) using their native OSM tags, builds the study boundary as the shape you choose - inscribed circle, rounded rectangle, rectangle or the exact selected polygon (the model base extends 5 m beyond it with softly rounded corners), and opens an interactive, English-only Three.js 3D city viewer. A coordinated "Map & web theme" picker styles both the native QGIS layer group and the exported city, with Editorial Paper active by default plus the existing calm and stylised palettes. Native layers arrive categorized by building/ground function, roads use hierarchy-aware metric widths, and water, trees and furniture have coordinated cartographic symbols. A basemap layer (raster, satellite/XYZ tiles or vector) can optionally be draped under the city and restyled live - opacity, blend mode, brightness, contrast, saturation and tint - in the viewer's Basemap and Texture panel; procedural kerb sidewalks line both sides of every street. Roads, sidewalks and bike lanes are drawn procedurally with lane markings; pedestrians keep to the sidewalks and cars to the carriageway; parks, woods and forests are planted with procedural trees so green areas read as wooded rather than flat; buildings are coloured by OSM function - with a subtle per-building shade variation so blocks read as many individual buildings - and default to a function-aware floor count when no level data exists. Pyramid, hip, gable, shed and flat roof controls are supported, including standard OSM roof-shape tags. An external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
 tracker=https://github.com/YusufEminoglu/osm_3d_model/issues
 repository=https://github.com/YusufEminoglu/osm_3d_model
 category=Web
@@ -19,6 +19,15 @@ hasProcessingProvider=no
 plugin_dependencies=
 license=MIT
 changelog=
+    3D OSM Model 1.1.0 - Export Studio, roof fixes and native-map styling.
+        - The web viewer now exports PNG, JPEG, WebP, PDF, SVG and self-contained HTML snapshots at viewport, Full HD, QHD, 4K or bounded custom sizes.
+        - Live scene recording supports the WebM/MP4 codecs available in the embedded browser, 30/60 fps and selectable bitrate; clipboard PNG export is also included.
+        - Exported media contains the clean 3D scene while orbit, walk, traffic, weather and solar animation remain live.
+        - Fixed Pyramid roofs, including concave footprints and standard OSM roof-shape aliases.
+        - Native QGIS layers now use categorized buildings/ground, hierarchy-aware metric road widths, coordinated water/tree/furniture symbols and correct draw order.
+        - Editorial Paper is now the default theme for both the QGIS map and web viewer.
+    3D OSM Model 1.0.1 - Citation metadata.
+        - Added the Zenodo DOI citation metadata used by the repository and release archive.
     3D OSM Model 1.0.0 - Verified 1.0.
         - The complete pipeline (download with mirror fallback and cache, OSM parsing including multipolygon relations, all boundary shapes, GeoJSON export, manifest, optional DEM and basemap, local viewer server) now runs end-to-end in a real headless QGIS on both QGIS 3.44 LTR and QGIS 4.0 before every release, alongside a dialog GUI check and headless-browser renders of the exported city.
         - Clipping dense areas is faster: the study boundary is prepared once for the thousands of per-feature tests, and tree scattering uses the same prepared test.
