@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.1] - 2026-07-11
+
+- Fix QGIS 4 export startup by resolving the QEventLoop input-exclusion flag through the PyQt5/PyQt6-compatible enum path.
+
 ## [1.1.0] - 2026-07-11
 
 - Advanced Export Studio with high-resolution image, PDF, SVG, HTML and live video export; Pyramid roof fixes; Editorial Paper native QGIS styling; performance and security hardening.

@@ -22,6 +22,13 @@ from .builder import build_and_export, prepare_study_area
 from .server import Osm3dServer
 
 
+# PyQt5 exposes this flag directly on QEventLoop, while PyQt6 nests it under
+# ProcessEventsFlag.  QGIS 3 and QGIS 4 therefore need different enum paths.
+_EXCLUDE_USER_INPUT_EVENTS = getattr(
+    QEventLoop, "ProcessEventsFlag", QEventLoop
+).ExcludeUserInputEvents
+
+
 class _OverpassFetchTask(QgsTask):
     """Network-only task; QGIS geometry and layer work stays on the UI thread."""
 
@@ -178,7 +185,7 @@ class Osm3dModelPlugin:
                 self.dialog.set_status("Computing study area...", busy=True)
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             cursor_set = True
-            QApplication.processEvents(QEventLoop.ExcludeUserInputEvents)
+            QApplication.processEvents(_EXCLUDE_USER_INPUT_EVENTS)
 
             prepared = prepare_study_area(
                 geom, crs,
@@ -235,7 +242,7 @@ class Osm3dModelPlugin:
             return
         if self.dialog is not None:
             self.dialog.set_status(msg, busy=True)
-        QApplication.processEvents(QEventLoop.ExcludeUserInputEvents)
+        QApplication.processEvents(_EXCLUDE_USER_INPUT_EVENTS)
 
     def _finish_export(self, params: dict, prepared: dict, osm_payload: dict):
         """Parse, clip and publish the downloaded model on the QGIS UI thread."""
