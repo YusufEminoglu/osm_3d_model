@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.2] - 2026-07-12
+
+- Keep viewer lighting stable during idle by removing activity-dependent SSAO, making it opt-in, and migrating saved settings.
+
 ## [1.1.1] - 2026-07-11
 
 - Fix QGIS 4 export startup by resolving the QEventLoop input-exclusion flag through the PyQt5/PyQt6-compatible enum path.

@@ -437,7 +437,7 @@ composer.addPass(bloomPass);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.49;
-controls.addEventListener('change', () => { _lastCameraMove = performance.now(); sun.shadow.needsUpdate = true; });
+controls.addEventListener('change', () => { sun.shadow.needsUpdate = true; });
 
 const walkControls = new PointerLockControls(camera, document.body);
 let isWalkMode = false;
@@ -533,7 +533,7 @@ const LAYER = {
   carExtra:  0.08
 };
 const FACADE_TEXTURE_SCALE_MULTIPLIER = 4.85;
-const SETTINGS_SCHEMA_VERSION = 12;
+const SETTINGS_SCHEMA_VERSION = 13;
 
 // Match the viewer's local X axis to the QGIS map orientation.
 const LOCAL_X_SIGN = -1;
@@ -563,8 +563,6 @@ const islandPlateauCache = [];
 // --- Performance ---
 const rc = new THREE.Raycaster();
 rc.firstHitOnly = true;
-let _lastCameraMove = 0;
-
 // Three.js does not release GPU resources when an Object3D is removed. Cached
 // GLTF/template resources and a handful of shared textures must survive layer
 // rebuilds; everything else is owned by the current scene generation.
@@ -1858,7 +1856,9 @@ const settings = {
   fastTerrainSegments: 120,
   demMeshQuality: 160,
   timeOfDay: 17,
-  enableSSAO: true,
+  // SSAO is opt-in. It can darken large map-scale scenes substantially and must
+  // never be switched merely because the pointer/camera became idle.
+  enableSSAO: false,
   enableBloom: true,
   showPedestrians: false,
   pedestrianDensity: 0.5,
@@ -2013,6 +2013,11 @@ function loadPersistedSettings() {
         // bike-lane layer exists. Reset these once for returning users.
         settings.buildingSetback = 0;
         settings.showBikes = true;
+      }
+      if (schemaVersion < 13) {
+        // Versions through 1.1.1 enabled SSAO only after camera damping stopped.
+        // Reset it once so returning users do not see an idle-triggered dark scene.
+        settings.enableSSAO = false;
       }
     }
     settings.roofShape = roofShapeValue(settings.roofShape, 'Pyramid');
@@ -3069,6 +3074,10 @@ function applyManifestDefaults() {
           // New in 0.8.1: setback default → 0, cyclists on with bike lanes.
           settings.buildingSetback = 0;
           settings.showBikes = true;
+        }
+        if (schemaVersion < 13) {
+          // Keep manifest-based startup consistent with loadPersistedSettings().
+          settings.enableSSAO = false;
         }
       }
       if (!persisted.assetTheme && projectManifest.assetTheme) settings.assetTheme = projectManifest.assetTheme;
@@ -8679,7 +8688,6 @@ window.addEventListener('dblclick', (e) => {
   _flyTarget = pt.clone().addScaledVector(dir, 70).add(new THREE.Vector3(0, 25, 0));
   _flyControlsTarget = pt.clone();
   _flyT = 0;
-  _lastCameraMove = performance.now();
 });
 
 window.addEventListener('resize', () => {
@@ -8876,11 +8884,10 @@ function animate() {
     if (_flyControlsTarget) controls.target.lerp(_flyControlsTarget, ease * 0.12);
   }
 
-  // SSAO settle: run full SSAO only when camera has been still 300ms
-  // → smooth orbit at 60fps, quality rendering when static
-  const _now = performance.now();
-  const _camMoving = (_now - _lastCameraMove) < 300;
-  ssaoPass.enabled = Boolean(settings.enableSSAO && !_camMoving);
+  // Keep the render path independent of pointer/camera activity. When explicitly
+  // enabled, SSAO remains on during interaction instead of darkening the scene
+  // after OrbitControls damping settles.
+  ssaoPass.enabled = Boolean(settings.enableSSAO);
   bloomPass.enabled = Boolean(settings.enableBloom && bloomPass.strength > 0.001);
   const usePostProcessing = ssaoPass.enabled || bloomPass.enabled;
   if (usePostProcessing) {

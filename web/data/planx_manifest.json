@@ -1,7 +1,7 @@
 {
   "schema": "planx-3d-city-manifest/v1",
   "plugin": "osm_3d_model",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "colorTheme": "Editorial Paper",
   "mode": "vector",
   "flexibleInputs": true,

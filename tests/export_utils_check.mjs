@@ -63,5 +63,11 @@ assert.equal(ids.length, new Set(ids).size, 'Viewer HTML must not contain duplic
 assert.ok(!viewerHtml.includes('btn-screenshot'));
 assert.match(viewerApp, /initExportStudio\(\)/);
 assert.match(viewerApp, /captureStream\(fps\)/);
+assert.match(viewerApp, /enableSSAO:\s*false/);
+assert.doesNotMatch(
+  viewerApp,
+  /_lastCameraMove|enableSSAO\s*&&\s*!_camMoving/,
+  'SSAO must not switch when pointer or camera activity stops.'
+);
 
 console.log('Export utility checks passed.');

@@ -2,7 +2,7 @@
 name=3D OSM Model
 qgisMinimumVersion=3.28
 description=Create a styled OSM map and procedural 3D city, then export publication-ready images, PDF, SVG, HTML, or video.
-version=1.1.1
+version=1.1.2
 author=Yusuf Eminoglu
 email=yusuf.eminoglu@deu.edu.tr
 about=3D OSM Model is a fast, single-button companion to PlanX 3D City. Select a small area (up to ~300 ha), and the plugin downloads OpenStreetMap buildings, roads, cycleways, waterways, lakes and ponds, greens, car parks, pedestrian squares, trees and street furniture (bus stops, benches, lamps, bins) using their native OSM tags, builds the study boundary as the shape you choose - inscribed circle, rounded rectangle, rectangle or the exact selected polygon (the model base extends 5 m beyond it with softly rounded corners), and opens an interactive, English-only Three.js 3D city viewer. A coordinated "Map & web theme" picker styles both the native QGIS layer group and the exported city, with Editorial Paper active by default plus the existing calm and stylised palettes. Native layers arrive categorized by building/ground function, roads use hierarchy-aware metric widths, and water, trees and furniture have coordinated cartographic symbols. A basemap layer (raster, satellite/XYZ tiles or vector) can optionally be draped under the city and restyled live - opacity, blend mode, brightness, contrast, saturation and tint - in the viewer's Basemap and Texture panel; procedural kerb sidewalks line both sides of every street. Roads, sidewalks and bike lanes are drawn procedurally with lane markings; pedestrians keep to the sidewalks and cars to the carriageway; parks, woods and forests are planted with procedural trees so green areas read as wooded rather than flat; buildings are coloured by OSM function - with a subtle per-building shade variation so blocks read as many individual buildings - and default to a function-aware floor count when no level data exists. Pyramid, hip, gable, shed and flat roof controls are supported, including standard OSM roof-shape tags. An external DEM can optionally be added. Built on the PlanX 3D City viewer engine at Dokuz Eylul University, Department of City and Regional Planning.
@@ -19,6 +19,9 @@ hasProcessingProvider=no
 plugin_dependencies=
 license=MIT
 changelog=
+    3D OSM Model 1.1.2 - Stable viewer lighting during idle.
+        - Removed the camera-idle SSAO switch that made the map suddenly appear dark after interaction stopped.
+        - SSAO is now opt-in, remains consistent during movement and idle, and older saved viewer settings are migrated automatically.
     3D OSM Model 1.1.1 - QGIS 4 event-loop compatibility hotfix.
         - Fixed the export startup crash caused by PyQt6 moving ExcludeUserInputEvents under QEventLoop.ProcessEventsFlag.
         - The same code path remains compatible with QGIS 3/PyQt5 and was verified in QGIS 3.44 and QGIS 4.2.
