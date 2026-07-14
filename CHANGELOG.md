@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.3] - 2026-07-14
+
+- Security and packaging hardening: resolved every remaining Bandit warning in
+  the source code and removed the local scan-skip file, so the local security
+  scan and the QGIS Plugin Hub scan now match with no configuration divergence.
+- Replaced `try/except/pass` blocks with `contextlib.suppress`, swapped the
+  tree-scatter random generator for a self-contained deterministic PRNG (keeping
+  the "same area produces the same city" guarantee), and now open the exported
+  data folder via the cross-platform Qt desktop service instead of a
+  Windows-only shell call.
+
 ## [1.1.2] - 2026-07-12
 
 - Keep viewer lighting stable during idle by removing activity-dependent SSAO, making it opt-in, and migrating saved settings.

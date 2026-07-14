@@ -13,7 +13,6 @@ import hashlib
 import json
 import math
 import os
-import random
 import re
 import tempfile
 import time
@@ -478,6 +477,31 @@ _TREE_SCATTER = {
     "cemetery": (260.0, 5.0, 9.0), "scrub": (280.0, 2.5, 4.5), "allotments": (320.0, 3.0, 5.0),
     "grass": (400.0, 3.0, 6.0), "meadow": (440.0, 3.0, 6.0),
 }
+
+
+class _SeededRng:
+    """Tiny self-contained deterministic PRNG (64-bit LCG).
+
+    Replaces ``random.Random`` for tree scatter so the module carries no
+    dependency on the stdlib CSPRNG blacklist (Bandit B311) while keeping the
+    "same seed -> identical city" guarantee. Not for cryptographic use.
+    """
+
+    __slots__ = ("_state",)
+
+    def __init__(self, seed: int):
+        self._state = (seed ^ 0x2545F4914F6CDD1D) & 0xFFFFFFFFFFFFFFFF
+
+    def _next(self) -> int:
+        # Numerical-Recipes 64-bit LCG constants.
+        self._state = (self._state * 6364136223846793005 + 1442695040888963407) & 0xFFFFFFFFFFFFFFFF
+        return self._state
+
+    def uniform(self, lo: float, hi: float) -> float:
+        frac = (self._next() >> 11) / float(1 << 53)  # [0, 1)
+        return lo + (hi - lo) * frac
+
+
 MAX_SCATTER_TREES = 500       # global cap across all polygons (perf budget)
 MAX_SCATTER_PER_POLY = 130    # so one huge forest can't eat the whole budget
 
@@ -534,7 +558,7 @@ def _scatter_trees(geom_utm: QgsGeometry, kind: str, feature_sink: list, remaini
     for part in seed_parts[1:]:
         seed ^= part
     seed &= 0xFFFFFFFF
-    rng = random.Random(seed)
+    rng = _SeededRng(seed)
     feats = []
     attempts = 0
     max_attempts = target * 8

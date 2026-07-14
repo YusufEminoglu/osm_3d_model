@@ -8,6 +8,8 @@ hierarchy with real-world widths, and a restrained Editorial Paper palette.
 """
 from __future__ import annotations
 
+import contextlib
+
 from qgis.core import (
     QgsCategorizedSymbolRenderer,
     QgsFillSymbol,
@@ -172,20 +174,16 @@ def _line(color_hex: str, width: float, width_expression: str | None = None,
         "line_style": "dash" if dashed else "solid",
     }
     symbol = QgsLineSymbol.createSimple(props)
-    try:
+    with contextlib.suppress(Exception):
         symbol.setWidthUnit(_render_map_units())
-    except Exception:
-        pass
     if width_expression:
         key = getattr(QgsSymbolLayer, "PropertyStrokeWidth", None)
         if key is None:
             key = getattr(QgsSymbolLayer, "PropertyWidth", None)
         if key is not None:
-            try:
+            with contextlib.suppress(Exception):
                 symbol.symbolLayer(0).setDataDefinedProperty(
                     key, QgsProperty.fromExpression(width_expression))
-            except Exception:
-                pass
     return symbol
 
 

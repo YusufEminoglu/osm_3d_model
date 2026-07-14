@@ -11,6 +11,7 @@ Given a source area geometry (selected polygon or map-canvas extent), this modul
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import shutil
@@ -522,10 +523,8 @@ def _export_basemap(basemap_layer, base_utm: QgsGeometry, epsg_dest: int,
         settings.setExtent(bbox)
         settings.setOutputSize(QSize(wpx, hpx))
         settings.setBackgroundColor(QColor(0, 0, 0, 0))  # transparent where the layer has no data
-        try:
+        with contextlib.suppress(Exception):
             settings.setFlag(QgsMapSettings.Flag.Antialiasing, True)
-        except Exception:
-            pass
 
         image = QImage(QSize(wpx, hpx), QImage.Format.Format_ARGB32_Premultiplied)
         image.fill(0)

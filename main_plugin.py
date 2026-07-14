@@ -343,9 +343,9 @@ class Osm3dModelPlugin:
         folder = os.path.join(self.web_root, "data", "yerlesim")
         if not os.path.isdir(folder):
             folder = os.path.join(self.web_root, "data")
-        try:
-            os.startfile(folder)  # noqa: B606 - intended Windows shell open
-        except Exception:
+        from qgis.PyQt.QtCore import QUrl
+        from qgis.PyQt.QtGui import QDesktopServices
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(folder)):
             webbrowser.open("file://" + folder.replace("\\", "/"))
 
     def _clear_osm_cache(self):
