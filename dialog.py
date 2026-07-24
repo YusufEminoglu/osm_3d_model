@@ -14,8 +14,9 @@ import os
 from qgis.core import QgsMapLayerProxyModel, QgsSettings
 from qgis.gui import QgsMapLayerComboBox
 from qgis.PyQt.QtCore import Qt, pyqtSignal
-from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtGui import QColor, QIcon, QPalette
 from qgis.PyQt.QtWidgets import (
+    QApplication,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -26,6 +27,7 @@ from qgis.PyQt.QtWidgets import (
     QLabel,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -47,7 +49,16 @@ OK = "#3f6f54"
 ERR = "#b91c1c"
 
 _ICON = os.path.join(os.path.dirname(__file__), "icons", "icon.png")
-_RUN_LABEL = "Create OSM layers & export 3D viewer"
+# "&&" renders as a literal ampersand; a single "&" would be eaten as a mnemonic.
+_RUN_LABEL = "Create OSM layers && export 3D viewer"
+
+# Live OpenStreetMap tiles, mirrored in main_plugin.Osm3dModelPlugin.
+_BASEMAP_TOOLTIP = (
+    "Adds the live OpenStreetMap tile layer to your QGIS project so you can see "
+    "and frame the study area before exporting.\n"
+    "It is placed under your other layers and reused if it is already there.\n"
+    "Tiles © OpenStreetMap contributors (ODbL)."
+)
 
 # Boundary-shape options (value, label). Values match builder.SHAPE_* and are
 # persisted in QgsSettings. The model base extends 5 m beyond whichever shape,
@@ -103,11 +114,13 @@ class Osm3dModelDialog(QDialog):
     reopenRequested = pyqtSignal()
     openFolderRequested = pyqtSignal()
     clearCacheRequested = pyqtSignal()
+    basemapRequested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._busy = False
         self._allow_close = False
+        self._ever_shown = False
         # Set by the plugin so the dialog can show a live area estimate without
         # duplicating the geometry-resolution logic. Signature: probe(source) -> str.
         self.area_probe = None
@@ -115,8 +128,43 @@ class Osm3dModelDialog(QDialog):
         if os.path.exists(_ICON):
             self.setWindowIcon(QIcon(_ICON))
         self.setMinimumWidth(440)
+        self.setMinimumHeight(340)
+        self.setSizeGripEnabled(True)
+        self._apply_palette()
         self._build_ui()
         self._restore_settings()
+        self._fit_to_contents()
+
+    def _apply_palette(self):
+        """Pin the light colour roles the card design assumes.
+
+        The stylesheet forces light backgrounds, but text, spin-box and check-box
+        foregrounds come from the inherited application palette. Under QGIS 4/Qt 6
+        that palette can be light-on-light, which made the "Open the 3D viewer
+        automatically" label and the "Max study area" value unreadable.
+        """
+        pal = self.palette()
+        roles = QPalette.ColorRole
+        groups = (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive)
+        for group in groups:
+            pal.setColor(group, roles.Window, QColor(PANEL_BG))
+            pal.setColor(group, roles.WindowText, QColor(TEXT))
+            pal.setColor(group, roles.Base, QColor("#ffffff"))
+            pal.setColor(group, roles.AlternateBase, QColor(CARD_BG))
+            pal.setColor(group, roles.Text, QColor(TEXT))
+            pal.setColor(group, roles.Button, QColor(CARD_BG))
+            pal.setColor(group, roles.ButtonText, QColor(TEXT))
+            pal.setColor(group, roles.Highlight, QColor(ACCENT_SOFT))
+            pal.setColor(group, roles.HighlightedText, QColor(TEXT))
+            pal.setColor(group, roles.ToolTipBase, QColor(CARD_BG))
+            pal.setColor(group, roles.ToolTipText, QColor(TEXT))
+            pal.setColor(group, roles.PlaceholderText, QColor(TEXT_MUTED))
+        disabled = QPalette.ColorGroup.Disabled
+        for role in (roles.WindowText, roles.Text, roles.ButtonText):
+            pal.setColor(disabled, role, QColor(TEXT_MUTED))
+        pal.setColor(disabled, roles.Base, QColor("#f7efec"))
+        pal.setColor(disabled, roles.Button, QColor("#f7efec"))
+        self.setPalette(pal)
 
     # -- UI construction ----------------------------------------------------
     def _build_ui(self):
@@ -126,12 +174,27 @@ class Osm3dModelDialog(QDialog):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._header())
+        self.header_widget = self._header()
+        root.addWidget(self.header_widget)
 
-        body = QVBoxLayout()
+        # Everything below the header scrolls. Without this the dialog needs more
+        # height than it can get on a short screen, and Qt squeezes the cards into
+        # each other instead (QGIS 4 needs ~70 px more than QGIS 3 for the same
+        # content, so it hit that ceiling first).
+        self.scroll = QScrollArea()
+        self.scroll.setObjectName("bodyScroll")
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root.addWidget(self.scroll, 1)
+
+        self.body_widget = QWidget()
+        self.body_widget.setObjectName("body")
+        self.body_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        body = QVBoxLayout(self.body_widget)
         body.setContentsMargins(16, 14, 16, 16)
         body.setSpacing(12)
-        root.addLayout(body)
+        self.scroll.setWidget(self.body_widget)
 
         body.addWidget(self._area_card())
         body.addWidget(self._options_card())
@@ -157,6 +220,8 @@ class Osm3dModelDialog(QDialog):
         self.summary_card = self._summary_card()
         self.summary_card.setVisible(False)
         body.addWidget(self.summary_card)
+
+        body.addStretch(1)
 
         footer = QLabel("PlanX 3D City engine · Dokuz Eylül University — City & Regional Planning")
         footer.setWordWrap(True)
@@ -220,6 +285,13 @@ class Osm3dModelDialog(QDialog):
         self.area_readout.setObjectName("readout")
         self.area_readout.setWordWrap(True)
         lay.addWidget(self.area_readout)
+
+        self.basemap_button = QPushButton("Add OSM basemap to the map")
+        self.basemap_button.setObjectName("ghostButton")
+        self.basemap_button.setToolTip(_BASEMAP_TOOLTIP)
+        self.basemap_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.basemap_button.clicked.connect(self.basemapRequested.emit)
+        lay.addWidget(self.basemap_button)
         return card
 
     def _options_card(self) -> QWidget:
@@ -357,6 +429,61 @@ class Osm3dModelDialog(QDialog):
     def _toggle_advanced(self, checked: bool):
         self.adv_container.setVisible(checked)
         self.adv_toggle.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
+        self._fit_to_contents()
+
+    def _fit_to_contents(self):
+        """Grow (or shrink) the window to its content, never past the screen.
+
+        Anything that does not fit scrolls, so opening Advanced can no longer
+        compress the cards into one another.
+        """
+        layout = self.layout()
+        if layout is None:
+            return
+        layout.activate()
+
+        # Keep whatever width the user has settled on; only derive it before the
+        # dialog is first shown (a raw QWidget starts at 640x480).
+        if self._ever_shown:
+            width = max(self.width(), self.minimumWidth())
+        else:
+            width = max(self.minimumWidth(), self.sizeHint().width())
+
+        frame = 2 * self.scroll.frameWidth()
+        inner = max(width - frame - 2, 100)
+        body_layout = self.body_widget.layout()
+        content = self.body_widget.sizeHint().height()
+        if body_layout is not None and body_layout.hasHeightForWidth():
+            content = max(content, body_layout.heightForWidth(inner))
+        # The root layout has no margins or spacing, so the only chrome above the
+        # scroll area is the header band (its subtitle wraps, hence heightForWidth).
+        if self.header_widget.hasHeightForWidth():
+            chrome = self.header_widget.heightForWidth(width)
+        else:
+            chrome = self.header_widget.sizeHint().height()
+        desired = min(content + chrome + frame, self._available_height())
+        self.resize(width, max(desired, self.minimumHeight()))
+
+    def _available_height(self) -> int:
+        """Usable screen height for this dialog, leaving room for window chrome."""
+        screen = None
+        get_screen = getattr(self, "screen", None)
+        if callable(get_screen):
+            screen = get_screen()
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        if screen is None:
+            return 0
+        return max(int(screen.availableGeometry().height()) - 90, 320)
+
+    def select_basemap_layer(self, layer):
+        """Point the advanced basemap combo at ``layer`` (used by Add OSM basemap)."""
+        if layer is None:
+            return
+        try:
+            self.basemap_combo.setLayer(layer)
+        except (AttributeError, RuntimeError):
+            pass
 
     def _emit_run(self):
         if self._busy:
@@ -407,6 +534,10 @@ class Osm3dModelDialog(QDialog):
 
     def showEvent(self, event):  # noqa: N802 (Qt override)
         super().showEvent(event)
+        first_show = not self._ever_shown
+        self._ever_shown = True
+        if first_show:
+            self._fit_to_contents()
         if not self._busy:
             self._refresh_area_summary()
 
@@ -457,6 +588,7 @@ class Osm3dModelDialog(QDialog):
             self.radio_canvas,
             self.radio_selection,
             self.shape_combo,
+            self.basemap_button,
             self.ha_spin,
             self.theme_combo,
             self.auto_open_check,
@@ -500,12 +632,26 @@ class Osm3dModelDialog(QDialog):
             line += f"  ·  {url}"
         self.summary_circle.setText(line)
         self.summary_card.setVisible(True)
+        self._fit_to_contents()
+        self.scroll.ensureWidgetVisible(self.summary_card)
 
     # -- Style --------------------------------------------------------------
     def _stylesheet(self) -> str:
         return f"""
         QDialog {{ background: {PANEL_BG}; }}
-        QLabel {{ color: {TEXT}; }}
+        #body {{ background: {PANEL_BG}; }}
+        #bodyScroll {{ background: {PANEL_BG}; border: 0; }}
+        #bodyScroll > QWidget > QWidget {{ background: {PANEL_BG}; }}
+        QScrollBar:vertical {{
+            background: transparent; width: 10px; margin: 2px 2px 2px 0;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {ACCENT_SOFT}; border-radius: 5px; min-height: 28px;
+        }}
+        QScrollBar::handle:vertical:hover {{ background: {ACCENT}; }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
+        QLabel {{ color: {TEXT}; background: transparent; }}
         #header {{
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                 stop:0 {ACCENT}, stop:1 {ACCENT_DARK});
@@ -531,16 +677,20 @@ class Osm3dModelDialog(QDialog):
             font-weight: 600;
             font-size: 12px;
         }}
+        /* Only the text colour: any background/border rule here would make Qt
+           render the check/radio indicators through the stylesheet, and Qt 6
+           then draws them as blank boxes. Their colours come from the palette. */
         QRadioButton {{ color: {TEXT}; padding: 2px 0; }}
-        QDoubleSpinBox {{
-            padding: 4px 6px; border: 1px solid {CARD_BORDER};
-            border-radius: 6px; background: #ffffff; min-width: 92px;
-        }}
+        QCheckBox {{ color: {TEXT}; padding: 2px 0; }}
+        QRadioButton:disabled, QCheckBox:disabled {{ color: {TEXT_MUTED}; }}
+        /* Likewise the spin box: styling it hides its native up/down arrows. */
+        QDoubleSpinBox {{ color: {TEXT}; min-width: 108px; }}
         QComboBox {{
             padding: 4px 8px; border: 1px solid {CARD_BORDER};
             border-radius: 6px; background: #ffffff; min-width: 92px; color: {TEXT};
         }}
         QComboBox:hover {{ border-color: {ACCENT}; }}
+        QComboBox:disabled {{ background: #f7efec; color: {TEXT_MUTED}; }}
         QComboBox::drop-down {{ border: 0; width: 18px; }}
         QComboBox QAbstractItemView {{
             background: #ffffff; color: {TEXT};

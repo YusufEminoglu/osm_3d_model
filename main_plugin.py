@@ -10,6 +10,7 @@ from qgis.core import (
     QgsDistanceArea,
     QgsGeometry,
     QgsProject,
+    QgsRasterLayer,
     QgsTask,
     QgsVectorLayer,
     QgsWkbTypes,
@@ -64,6 +65,14 @@ class _OverpassFetchTask(QgsTask):
 
 
 class Osm3dModelPlugin:
+    # Live OpenStreetMap tiles, added with one click so the study area can be
+    # framed on an empty project. Braces are percent-encoded for the WMS/XYZ URI.
+    OSM_BASEMAP_NAME = "OpenStreetMap"
+    OSM_BASEMAP_URI = (
+        "type=xyz&url=https://tile.openstreetmap.org/%7Bz%7D/%7Bx%7D/%7By%7D.png"
+        "&zmax=19&zmin=0&crs=EPSG3857"
+    )
+
     def __init__(self, iface):
         self.iface = iface
         self.plugin_dir = os.path.dirname(__file__)
@@ -119,6 +128,7 @@ class Osm3dModelPlugin:
                 (dialog.reopenRequested, self.reopen_viewer),
                 (dialog.openFolderRequested, self._open_data_folder),
                 (dialog.clearCacheRequested, self._clear_osm_cache),
+                (dialog.basemapRequested, self.add_osm_basemap),
             ):
                 try:
                     signal.disconnect(slot)
@@ -143,6 +153,7 @@ class Osm3dModelPlugin:
             self.dialog.reopenRequested.connect(self.reopen_viewer)
             self.dialog.openFolderRequested.connect(self._open_data_folder)
             self.dialog.clearCacheRequested.connect(self._clear_osm_cache)
+            self.dialog.basemapRequested.connect(self.add_osm_basemap)
             self.dialog.area_probe = self._area_summary
         self.dialog.show()
         self.dialog.raise_()
@@ -304,6 +315,53 @@ class Osm3dModelPlugin:
             if cursor_set:
                 QApplication.restoreOverrideCursor()
             self._running = False
+
+    # -- OSM basemap --------------------------------------------------------
+    def add_osm_basemap(self):
+        """Add (or reveal) the live OpenStreetMap tile layer in the project.
+
+        It goes to the bottom of the layer tree so it sits under everything else,
+        and a second click reuses the existing layer instead of stacking copies.
+        When no basemap underlay has been chosen yet, it is also offered to the
+        3D export as the ground texture.
+        """
+        if self._unloaded or self._running:
+            return
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+
+        for layer in project.mapLayers().values():
+            if (
+                isinstance(layer, QgsRasterLayer)
+                and layer.name() == self.OSM_BASEMAP_NAME
+                and "tile.openstreetmap.org" in layer.source()
+            ):
+                node = root.findLayer(layer.id())
+                if node is not None:
+                    node.setItemVisibilityChecked(True)
+                self._basemap_added(layer, "OSM basemap is already on the map.")
+                return
+
+        layer = QgsRasterLayer(self.OSM_BASEMAP_URI, self.OSM_BASEMAP_NAME, "wms")
+        if not layer.isValid():
+            self._fail("Could not load the OSM basemap (no network, or tiles unavailable).")
+            return
+
+        project.addMapLayer(layer, False)
+        root.addLayer(layer)  # appended == bottom of the tree, under other layers
+        self._basemap_added(
+            layer, "Added the OpenStreetMap basemap. Tiles © OpenStreetMap contributors.",
+        )
+
+    def _basemap_added(self, layer, message: str):
+        if self.dialog is not None:
+            # Only fill an empty choice, never override a basemap the user picked.
+            if self.dialog.basemap_combo.currentLayer() is None:
+                self.dialog.select_basemap_layer(layer)
+                message += " It will also underlay the 3D model."
+            self.dialog.set_status(message)
+        if self.iface is not None:
+            self.iface.messageBar().pushInfo("3D OSM Model", message)
 
     def reopen_viewer(self):
         if self._unloaded or self._running or self.server is None:

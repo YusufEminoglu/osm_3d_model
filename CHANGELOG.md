@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0] - 2026-07-24
+
+- **Add OSM basemap to the map**: one click in the Study area card puts the live
+  OpenStreetMap tile layer at the bottom of the layer tree, so an empty project
+  can be navigated and framed before exporting. Clicking again reuses the layer
+  instead of stacking copies, and when no basemap underlay has been chosen the
+  same layer is offered to the 3D export as the ground texture.
+- Fixed unreadable dialog text under QGIS 4 / Qt 6: the light card design relied
+  on the inherited application palette for check-box, spin-box and label
+  foregrounds, which could be light-on-light — so "Open the 3D viewer
+  automatically after export" and the "Max study area" value were invisible.
+  The dialog now pins its own light palette instead of inheriting one.
+- Fixed the overlapping dialog under QGIS 4 when Advanced was opened: QGIS 4
+  needs more height than QGIS 3 for the same content, and once the window hit
+  the screen ceiling the layout compressed the cards into one another. The body
+  now scrolls, so every control keeps its full size at any window height, and
+  the window resizes itself to the content when Advanced opens or closes.
+- The run button now shows the ampersand in "Create OSM layers & export 3D
+  viewer" instead of swallowing it as a keyboard mnemonic.
+
 ## [1.1.3] - 2026-07-14
 
 - Security and packaging hardening: resolved every remaining Bandit warning in

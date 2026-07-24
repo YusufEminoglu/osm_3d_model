@@ -73,9 +73,9 @@ http://127.0.0.1:8120/src/
 
 ### Use it inside QGIS
 
-1. Zoom to a small area or select polygon feature(s).
+1. Zoom to a small area or select polygon feature(s). On an empty project, click **Add OSM basemap to the map** once to get live OpenStreetMap tiles to navigate with — the same layer is then offered as the underlay beneath the 3D city.
 2. Choose the study area source, boundary shape, and coordinated map/web theme in the dialog. Editorial Paper is the warm, legible default.
-3. Optionally pick a DEM raster, or a basemap layer to drape under the city.
+3. Optionally pick a DEM raster, or a different basemap layer to drape under the city.
 4. Click **Create OSM layers & export 3D viewer**.
 5. Explore the generated city in the browser.
 
