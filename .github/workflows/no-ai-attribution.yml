@@ -1,0 +1,55 @@
+name: No AI attribution
+
+# Absolute house rule: every commit in this repository ships under Yusuf
+# Eminoglu's name alone. An AI co-author trailer makes GitHub list that
+# identity as a repository contributor - publicly and permanently - so this is
+# enforced, not merely documented.
+#
+# Defence in depth:
+#   1. local git hooks (packaging/githooks, shared via core.hooksPath)
+#   2. this workflow - catches commits made on a machine without those hooks
+#   3. py -3 packaging/pf.py attribution - on-demand audit of history + GitHub
+#
+# The whole history is scanned rather than just the pushed range, so a force
+# push that rewrites old commits cannot smuggle attribution back in.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-attribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan every commit for AI attribution
+        shell: bash
+        run: |
+          set -uo pipefail
+          PATTERN='claude|anthropic|copilot|gemini|chatgpt|openai|codex|devin|\[bot\]|noreply@anthropic'
+
+          echo "Scanning $(git rev-list --all --count) commits..."
+
+          # Author / committer identity.
+          identities=$(git log --all --format='%H %an <%ae> / %cn <%ce>' \
+                       | grep -iE "$PATTERN" || true)
+
+          # Attribution trailers in commit messages.
+          trailers=$(git log --all --format='%H%n%B%n--END--' \
+                     | grep -iE 'co-authored-by:|generated with|assisted-by:' \
+                     | grep -iE "$PATTERN" || true)
+
+          if [ -n "$identities" ] || [ -n "$trailers" ]; then
+            echo "::error::AI attribution found - this repository must credit Yusuf Eminoglu alone."
+            [ -n "$identities" ] && { echo "Offending identities:"; echo "$identities"; }
+            [ -n "$trailers" ] && { echo "Offending trailers:"; echo "$trailers"; }
+            exit 1
+          fi
+
+          echo "Clean: no AI authors, committers or co-author trailers."
