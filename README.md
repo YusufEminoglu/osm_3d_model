@@ -31,6 +31,11 @@
 
 ---
 
+## 📖 Documentation
+
+**[Comprehensive Academic Reference Manual](https://yusufeminoglu.github.io/osm_3d_model/)** — complete documentation of every feature, parameter, and workflow. Hosted on GitHub Pages.
+
+
 ## The Product Promise
 
 3D OSM Model turns a small planning study area into a live, navigable city model without asking the user to prepare a 3D dataset first. It is designed for urban planners, educators, students, local governments, mobility teams, and anyone who needs a fast spatial story from OpenStreetMap.
