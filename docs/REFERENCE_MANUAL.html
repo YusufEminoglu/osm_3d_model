@@ -5,45 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OSM 3D Model &mdash; Reference Manual</title>
 <style>
-:root {
-  --bg: #fafaf8;
-  --sidebar-bg: #f3f3f0;
-  --text: #1a1a1a;
-  --muted: #5a5a55;
-  --accent: #2a6e5e;
-  --border: #d8d5ce;
-  --card-bg: #fff;
-  --link: #1a6e5e;
-  --code-bg: #edf4f2;
-  --search-bg: #fff;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; display: flex; min-height: 100vh; }
-#sidebar { width: 270px; min-width: 270px; background: var(--sidebar-bg); border-right: 1px solid var(--border); padding: 24px 20px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-#sidebar h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; }
-#search { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--search-bg); margin-bottom: 20px; }
-#sidebar nav a { display: block; padding: 5px 0; font-size: 13px; color: var(--link); text-decoration: none; border-radius: 4px; }
-#sidebar nav a:hover { text-decoration: underline; }
-#sidebar nav a.sub { padding-left: 14px; font-size: 12px; }
-#main { flex: 1; padding: 40px 48px; max-width: 860px; }
-h1 { font-size: 28px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
-h1 + p { color: var(--muted); margin-bottom: 32px; }
-h2 { font-size: 20px; font-weight: 600; color: var(--accent); margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--border); }
-h3 { font-size: 16px; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
-p, li { font-size: 14px; color: var(--text); }
-p { margin-bottom: 10px; }
-.card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
-.card h4 { font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 6px; }
-ul { margin: 4px 0 10px 20px; }
-li { margin-bottom: 3px; }
-code { font-family: Consolas, 'Courier New', monospace; background: var(--code-bg); padding: 1px 6px; border-radius: 3px; font-size: 13px; }
-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
-th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
-th { background: var(--code-bg); font-weight: 600; }
-.refs { font-size: 12px; color: var(--muted); }
-.refs a { color: var(--link); }
-@media (max-width: 760px) { body { flex-direction: column; } #sidebar { width: 100%; min-width: auto; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); } #main { padding: 24px; } }
-.hidden { display: none; }
+:root {--bg:#fafaf8;--sidebar-bg:#f3f3f0;--text:#1a1a1a;--muted:#5a5a55;--accent:#2a6e5e;--border:#d8d5ce;--card-bg:#fff;--link:#1a6e5e;--code-bg:#edf4f2;--search-bg:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;display:flex;min-height:100vh}
+#sidebar{width:270px;min-width:270px;background:var(--sidebar-bg);border-right:1px solid var(--border);padding:24px 20px;position:sticky;top:0;height:100vh;overflow-y:auto}
+#sidebar h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}
+#search{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--search-bg);margin-bottom:20px}
+#sidebar nav a{display:block;padding:5px 0;font-size:13px;color:var(--link);text-decoration:none}
+#sidebar nav a:hover{text-decoration:underline}
+#sidebar nav a.sub{padding-left:14px;font-size:12px}
+#main{flex:1;padding:40px 48px;max-width:860px}
+h1{font-size:28px;font-weight:700;color:var(--accent);margin-bottom:4px}
+h1+p{color:var(--muted);margin-bottom:32px}
+h2{font-size:20px;font-weight:600;color:var(--accent);margin:36px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--border)}
+h3{font-size:16px;font-weight:600;color:var(--text);margin:20px 0 8px}
+p,li{font-size:14px;color:var(--text)}
+p{margin-bottom:10px}
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:14px}
+.card h4{font-size:14px;font-weight:600;color:var(--accent);margin-bottom:6px}
+ul{margin:4px 0 10px 20px}
+li{margin-bottom:3px}
+code{font-family:Consolas,'Courier New',monospace;background:var(--code-bg);padding:1px 6px;border-radius:3px;font-size:13px}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left}
+th{background:var(--code-bg);font-weight:600}
+.refs{font-size:12px;color:var(--muted)}
+.refs a{color:var(--link)}
+.formula{background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:10px 16px;margin:8px 0;font-family:Cambria,'Times New Roman',serif;font-size:15px;text-align:center}
+@media(max-width:760px){body{flex-direction:column}#sidebar{width:100%;min-width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border)}#main{padding:24px}}
+.hidden{display:none}
 </style>
 </head>
 <body>
@@ -51,12 +41,25 @@ th { background: var(--code-bg); font-weight: 600; }
   <input type="text" id="search" placeholder="Search manual&hellip;" autocomplete="off">
   <h2>Contents</h2>
   <nav id="toc">
-    <a href="#overview">Overview</a>
-    <a href="#features" class="sub">Features</a>
-    <a href="#params" class="sub">Parameters</a>
-    <a href="#workflow" class="sub">Workflow</a>
-    <a href="#technical" class="sub">Technical Notes</a>
-    <a href="#literature">Literature</a>
+    <a href="#overview">1. Overview</a>
+    <a href="#theory" class="sub">2. Theoretical Foundations</a>
+    <a href="#pipeline" class="sub">3. Data Pipeline</a>
+    <a href="#area" class="sub">4. Study Area Definition</a>
+    <a href="#download" class="sub">5. OSM Data Download</a>
+    <a href="#layers" class="sub">6. Data Layers</a>
+    <a href="#heights" class="sub">7. Building Height Logic</a>
+    <a href="#viewer" class="sub">8. Three.js Viewer</a>
+    <a href="#panels" class="sub">9. Viewer Panel System</a>
+    <a href="#themes" class="sub">10. Color Themes (11)</a>
+    <a href="#facades" class="sub">11. Procedural Buildings</a>
+    <a href="#roads" class="sub">12. Roads and Traffic</a>
+    <a href="#terrain" class="sub">13. Terrain and Basemap</a>
+    <a href="#exportstudio" class="sub">14. Export Studio</a>
+    <a href="#cache" class="sub">15. Caching and Server</a>
+    <a href="#params" class="sub">16. Parameters</a>
+    <a href="#workflow" class="sub">17. Workflow</a>
+    <a href="#technical" class="sub">18. Technical Notes</a>
+    <a href="#literature" class="sub">19. Literature</a>
   </nav>
 </aside>
 <main id="main">
@@ -64,92 +67,216 @@ th { background: var(--code-bg); font-weight: 600; }
 <p>One-click OpenStreetMap to interactive Three.js 3D city viewer &bull; v1.2.0</p>
 
 <h2 id="overview">1. Overview</h2>
-<p>OSM 3D Model is a single-click QGIS-to-browser pipeline that downloads live OpenStreetMap data for a user-defined study area and opens an interactive Three.js 3D city viewer. The plugin handles the entire data pipeline&mdash;Overpass API download with multi-mirror fallback and 7-day disk cache, OSM tag parsing into 10 memory layers, GeoJSON export with a manifest, and a local HTTP server that launches the browser-based PlanX 3D City engine. The viewer renders procedural buildings with roofs, roads with lane markings and animated traffic, sidewalks with pedestrians, trees, street furniture, water features, and optional DEM terrain and basemap underlay.</p>
+<p>OSM 3D Model is a single-click QGIS-to-browser pipeline that downloads live OpenStreetMap data for a user-defined study area and opens an interactive Three.js 3D city viewer. The plugin handles the entire data pipeline&mdash;Overpass API download with multi-mirror fallback and 7-day disk cache, OSM tag parsing into 11 memory layers, GeoJSON export with a manifest, and a local HTTP server that launches the browser-based PlanX 3D City engine. The viewer renders procedural buildings with roof styles, roads with lane markings and animated traffic, sidewalks with pedestrians, trees, street furniture, water features, and optional DEM terrain and basemap underlay.</p>
 
-<p>The plugin operates as a toolbar-activated dialog. It has no processing provider integration. All processing is on-demand and non-destructive: source OSM data is never modified.</p>
+<h2 id="theory">2. Theoretical Foundations</h2>
 
-<h2 id="features">2. Feature Documentation</h2>
+<h3>2.1 OSM Data Quality for 3D Urban Modelling</h3>
+<p>Goetz (2013) demonstrated the feasibility of generating CityGML-compliant 3D city models from OpenStreetMap data, establishing the methodological foundation this plugin follows. The approach uses OSM's two-dimensional geometry (building footprints, road centrelines, green-space polygons) enriched with semantic tags and optional height attributes, then procedurally extrudes the third dimension. Fan et al. (2014) validated building footprint completeness and positional accuracy in OSM, finding &gt;80% completeness in well-mapped urban areas. Biljecki et al. (2017) demonstrated that LOD1 building models generated from OSM without external elevation data can achieve useful accuracy when building height or floor-count attributes are present, directly supporting the plugin's three-tier height derivation strategy.</p>
 
-<h3>2.1 Study Area Definition</h3>
+<h3>2.2 Procedural Content Generation in Urban Contexts</h3>
+<p>The web viewer follows Parish and Muller's (2001) procedural city generation paradigm, extended from their CityEngine system. Buildings are generated from footprint polygons using parametric roof styles (flat, pyramid, gable, hip, shed). Roads are extruded from linestrings with lane marking shaders. Trees are instanced with multiple stylistic variants. Street furniture (benches, lamps, bins) is aligned to road edges. The deterministic PRNG for tree placement ensures reproducibility using a seeded LCG based on polygon coordinates. This approach produces visually rich results without requiring detailed 3D model libraries.</p>
+
+<h3>2.3 Web-Based 3D GIS Visualisation</h3>
+<p>The viewer uses WebGL via Three.js for browser-based rendering, following the trend identified by Resch et al. (2014) toward web-based 3D GIS platforms. The architecture separates data preparation (Python/QGIS) from visualisation (JavaScript/WebGL), communicating through a local HTTP server with GeoJSON as the interchange format. This separation enables offline operation while maintaining browser-based interactivity and cross-platform compatibility.</p>
+
+<h2 id="pipeline">3. Data Pipeline</h2>
+<div class="card">
+  <h4>Ten-Step Export Pipeline</h4>
+  <ol>
+    <li><strong>Area resolution:</strong> User selects canvas extent or polygon features. Returns (QgsGeometry, QgsCoordinateReferenceSystem).</li>
+    <li><strong>Study area preparation:</strong> Reproject to WGS84 for Overpass, UTM for geometry. <code>compute_study_area()</code> applies shape (circle/rounded/extent/polygon) and area clamp (1&ndash;300 ha, default 150 ha). Circle uses pole-of-inaccessibility algorithm. Creates model base by buffering 5 m outward.</li>
+    <li><strong>OSM download:</strong> <code>QgsTask</code> background thread fetches from Overpass API with multi-mirror fallback.</li>
+    <li><strong>Parse and build:</strong> Iterates every OSM element, clips to study boundary, builds 11 in-memory vector layers with computed attributes.</li>
+    <li><strong>GeoJSON export:</strong> Writes each layer to GeoJSON via <code>QgsVectorFileWriter.writeAsVectorFormatV3()</code>.</li>
+    <li><strong>Atomic publish:</strong> Staging directory &rarr; <code>web/data/yerlesim/</code> with backup on failure. Every GeoJSON validated as valid FeatureCollection.</li>
+    <li><strong>Optional DEM export:</strong> <code>gdal:warpreproject</code>, bounded to ~512 px max dimension, output as <code>web/data/dem/mydem.tif</code>.</li>
+    <li><strong>Optional basemap export:</strong> <code>QgsMapRendererCustomPainterJob</code> at max 2048 px, transparent PNG, output as <code>web/data/basemap/basemap.png</code>.</li>
+    <li><strong>Manifest:</strong> Writes <code>planx_manifest.json</code> with schema, field mappings, theme colours, and viewer defaults.</li>
+    <li><strong>Viewer launch:</strong> HTTP server starts on a free port (8120&ndash;8139), browser opens <code>http://127.0.0.1:{port}/src/</code>.</li>
+  </ol>
+</div>
+
+<h2 id="area">4. Study Area Definition</h2>
 <div class="card">
   <h4>Area Sources and Boundary Shapes</h4>
-  <p>Two area sources: <strong>Current map extent</strong> (canvas) or <strong>Selected polygon features</strong> (active vector layer). Four boundary shapes: <strong>Circle</strong> (largest inscribed circle, default), <strong>Rounded rectangle</strong> (corner radius ~16% of short side), <strong>Extent</strong> (plain bounding box), and <strong>Polygon</strong> (exact selected geometry). The area is auto-reprojected to its local UTM zone and clamped to a configurable maximum size (default 150 ha).</p>
-  <p>All shapes include a 5 m presentation platform extending beyond the clip boundary with rounded corners.</p>
+  <p>Two area sources: <strong>Current map extent</strong> (canvas) or <strong>Selected polygon features</strong> (active layer, dissolved via <code>unaryUnion()</code>). Four boundary shapes: <strong>Circle</strong> (pole of inaccessibility algorithm, largest inscribed circle, clamped to max area, default), <strong>Rounded rectangle</strong> (corners at ~16% of short side via double-buffer technique), <strong>Extent</strong> (plain bounding box), and <strong>Polygon</strong> (exact selected geometry). Area is auto-reprojected to local UTM zone: \(\mathrm{zone} = \lfloor(\lambda + 180)/6\rfloor + 1\), EPSG = 32600 + zone (north) or 32700 + zone (south). Clamped to a configurable maximum (1&ndash;300 ha, default 150 ha). Study area inherits a 5 m presentation platform extending beyond the clip boundary with rounded corners.</p>
 </div>
 
-<h3>2.2 OSM Data Download</h3>
+<h2 id="download">5. OSM Data Download</h2>
 <div class="card">
-  <h4>Overpass API Pipeline</h4>
-  <p>Queries Overpass API for buildings, highways, cycleways, waterways, water areas, green spaces, parking lots, pedestrian squares, trees, bus stops, benches, street lamps, and waste baskets. Three mirror endpoints (<code>overpass-api.de</code>, <code>overpass.kumi.systems</code>, <code>overpass.private.coffee</code>) are tried in order. Responses are cached in <code>%TEMP%/osm_3d_model_cache/</code> with a 7-day TTL keyed by SHA-256 of the query string.</p>
+  <h4>Overpass API Pipeline with Multi-Mirror and Cache</h4>
+  <p>Queries Overpass API for buildings, highways (including cycleway deduplication), waterways, water areas, green spaces (parks, forests, pitches, cemeteries, parking lots, pedestrian squares), trees, bus stops, benches, street lamps, and waste baskets within the WGS84 bounding box. Uses <code>out body geom;</code> suffix for full geometry with 60-second timeout.</p>
+  <p><strong>Multi-mirror:</strong> Three endpoints tried in order: <code>overpass-api.de</code>, <code>overpass.kumi.systems</code>, <code>overpass.private.coffee</code>. HTTP 429 triggers next mirror. First valid non-empty JSON wins.</p>
+  <p><strong>Cache:</strong> SHA-256 of query string, first 40 chars, stored in <code>%TEMP%/osm_3d_model_cache/</code>. TTL: 7 days (604800 s). Cache validation checks payload structure for corrupt files.</p>
 </div>
 
-<h3>2.3 Layer Types</h3>
+<h2 id="layers">6. Data Layers (11)</h2>
 <div class="card">
-  <h4>Exported Data Layers</h4>
-  <p>Ten memory layers are created and exported as GeoJSON: OSM Buildings (MultiPolygon, with building type, levels, height, footprint, and GFA columns), OSM Roads (MultiLineString, with highway class and width), OSM Bike lanes, OSM Greens (MultiPolygon, including parks, forests, cemeteries, parking lots, and pedestrian plazas), OSM Waterways (MultiLineString), OSM Water areas (MultiPolygon), OSM Trees (Point), OSM Bus stops (Point), OSM Benches (Point), OSM Street lights (Point), and OSM Trash bins (Point).</p>
+  <h4>Exported GeoJSON Layers</h4>
+  <table>
+    <tr><th>Layer</th><th>Geometry</th><th>Key Attributes</th></tr>
+    <tr><td>OSM Buildings</td><td>MultiPolygon</td><td>osm_id, building, building_levels, height, roof_shape, roof_height, name</td></tr>
+    <tr><td>OSM Roads</td><td>MultiLineString</td><td>osm_id, highway, width, name</td></tr>
+    <tr><td>OSM Bike lanes</td><td>MultiLineString</td><td>osm_id, highway, width, name, road_width, side</td></tr>
+    <tr><td>OSM Greens</td><td>MultiPolygon</td><td>osm_id, leisure, landuse, natural, amenity, highway, place, name</td></tr>
+    <tr><td>OSM Waterlines</td><td>MultiLineString</td><td>osm_id, waterway, width, name</td></tr>
+    <tr><td>OSM Water areas</td><td>MultiPolygon</td><td>osm_id, natural, waterway, landuse, name</td></tr>
+    <tr><td>OSM Trees</td><td>Point</td><td>osm_id, natural, height</td></tr>
+    <tr><td>OSM Bus stops</td><td>Point</td><td>osm_id, highway, name</td></tr>
+    <tr><td>OSM Benches</td><td>Point</td><td>osm_id, amenity</td></tr>
+    <tr><td>OSM Street lights</td><td>Point</td><td>osm_id, highway</td></tr>
+    <tr><td>OSM Trash bins</td><td>Point</td><td>osm_id, amenity</td></tr>
+  </table>
+  <p>Export uses <code>QgsVectorFileWriter.writeAsVectorFormatV3()</code> with GeoJSON driver and UTF-8. Atomic publish: staging directory &rarr; target via <code>Path.replace()</code> with backup on failure. Each GeoJSON validated as a non-empty FeatureCollection.</p>
 </div>
 
-<h3>2.4 Three.js Viewer</h3>
+<h2 id="heights">7. Building Height Logic</h2>
 <div class="card">
-  <h4>Scene Composition</h4>
-  <p>The browser viewer renders: procedural buildings with roof styles (pyramid, gable, hip, shed, flat) and 4 facade textures; roads with lane markings, sidewalks, and bike lanes; animated traffic (cars, vans, buses, trucks) and pedestrians; procedural trees (instanced, with multiple variant profiles); street furniture aligned to roads; water areas and linear waterways; optional DEM terrain and basemap underlay; and a model base island with configurable drop and color.</p>
+  <h4>Three-Tier Fallback with 57 Type-Specific Defaults</h4>
+  <ol>
+    <li>Parse <code>building:levels</code> or <code>levels</code> tag, rounded to integer, clamped to &ge;1.</li>
+    <li>If absent: parse <code>height</code> tag (supports m, cm, km, ft, feet, inch units), divide by 3.0, round, clamp to &ge;1.</li>
+    <li>Function-based default from 57-entry dictionary: apartments=4, residential=4, house/detached/terrace=2, bungalow=1, office=5, retail/supermarket/kiosk=1, commercial=3, industrial=1, school=3, university/college=4, hospital=5, church/mosque/temple/synagogue/chapel=1 (cathedral=2), warehouse/hangar/manufacture=1, garage/shed/hut/roof/carport=1, unknown=3.</li>
+    <li>Add <code>roof:levels</code> if present. Final: max(1, base + roof_levels).</li>
+  </ol>
+  <p>Additional columns: <code>height</code> (OSM height tag, float metres), <code>roof_height</code> (OSM roof:height tag), <code>footprint_m2</code> (computed), <code>gfa_m2</code> (computed = footprint &times; building_levels).</p>
 </div>
 
-<h3>2.5 Viewer Panels</h3>
+<h2 id="viewer">8. Three.js Viewer</h2>
 <div class="card">
-  <h4>Dock Panel System</h4>
-  <p>The viewer provides 8 panel types: <strong>Dashboard</strong> (scene metrics and data health), <strong>Layers</strong> (per-category visibility toggles), <strong>Style</strong> (building modes, roof shapes, facade textures, tree render modes), <strong>Scene &amp; Sun</strong> (time-of-day slider, weather, fog, SSAO, bloom, traffic density), <strong>Model Studio</strong> (custom GLB model upload by furniture category), <strong>Basemap &amp; Texture</strong> (opacity, blend mode, shadow catching), <strong>Export Studio</strong> (PNG/JPEG/WebP/PDF/SVG/HTML stills, WebM/MP4 video recording, clipboard copy), and <strong>Walk Mode</strong> (first-person WASD navigation at pedestrian eye height).</p>
+  <h4>Scene Composition and Rendering</h4>
+  <p>The viewer (<code>web/src/app.js</code>, ~9500+ lines) is a single-page Three.js application. Core rendering: <code>WebGLRenderer</code> with antialiasing, <code>PCFSoftShadowMap</code> shadows, ACES filmic tone mapping (exposure 1.32). Post-processing: <code>EffectComposer</code> chain: <code>RenderPass</code> &rarr; <code>SSAOPass</code> (optional) &rarr; <code>UnrealBloomPass</code> (optional, strength 0.3, radius 0.4, threshold 0.85) &rarr; <code>OutputPass</code>. <code>CSS2DRenderer</code> for 2D labels overlaid on 3D.</p>
+  <p><strong>Lighting:</strong> <code>DirectionalLight</code> (intensity 1.38, shadow map 2048x2048, position 200,450,150) + <code>AmbientLight</code> (intensity 1.18). Procedural sky dome with <code>ShaderMaterial</code> (horizon #f6fbff to zenith #9ed8ff), star field (pseudo-random hash) at night.</p>
+  <p><strong>Camera:</strong> <code>PerspectiveCamera</code> (45&deg; FOV, near 1, far 10000). <code>OrbitControls</code> (damping 0.05, max polar angle ~90&deg;). Also supports <code>PointerLockControls</code> for first-person walk mode (WASD, Shift sprint, C crouch). Fit algorithm: distance = max(220, min(maxDim &times; 2.4, 320, 1800)).</p>
+  <p><strong>Boot sequence:</strong> loadManifest &rarr; applyManifestDefaults &rarr; loadGeoJson (all layers) &rarr; loadProjectDem &rarr; loadBaseMapTexture &rarr; buildTerrain &rarr; buildIslandLayer &rarr; building/road/sidewalk/waterline/fences/trees/furniture/traffic layers all rebuilt based on settings &rarr; loading screen fades out.</p>
 </div>
 
-<h3>2.6 Color Themes</h3>
+<h2 id="panels">9. Viewer Panel System</h2>
 <div class="card">
-  <h4>Eleven Coordinated Palettes</h4>
-  <p>Editorial Paper (default, warm ivory), Plugin Tones (salmon and grey), Tinted Gray Teal, Teal &amp; Salmon, Light Purple &amp; Black, Warm Sand &amp; Slate, Anime (bright cel-shaded pastels), Cartoon (bold primaries), Pixar (warm creams and oranges), Futuristic City (dark neon with cyan/violet glass), and Classic Era (vintage sepia with terracotta roofs). Themes set coordinated colors for the island base, terrain, roads, parks, water, roof texture, and asset theme.</p>
+  <h4>Eight Dockable Panels with Toolbar Tray</h4>
+  <table>
+    <tr><th>Panel</th><th>Controls</th></tr>
+    <tr><td><strong>Dashboard</strong></td><td>Scene metrics (building count, green area, avg floors, population, dwellings, vehicles), project metadata, area statistics</td></tr>
+    <tr><td><strong>Layers</strong></td><td>Per-category visibility: buildings, roads, bike lanes, waterways, greens, trees, sidewalks, furniture, cars, cyclists, pedestrians, outside-ROI terrain</td></tr>
+    <tr><td><strong>Style</strong></td><td>Block texture/transparency, road colour/texture, ground texture, terrain tile size, asset theme, tree render mode/variant/height, building mode/facade scale/floor height/roof shape/height/texture, procedural rules (ledges, storefronts, setback, ledge projection), per-category block styles</td></tr>
+    <tr><td><strong>Scene &amp; Sun</strong></td><td>Time-of-day slider (6:00&ndash;22:00), solar animation, weather presets, fog density, SSAO/Bloom toggles, traffic/pedestrian density, model base controls, camera bookmarks</td></tr>
+    <tr><td><strong>Basemap &amp; Texture</strong></td><td>Show basemap toggle, opacity, blend mode (Normal/Multiply/Screen/Add/Difference), shadow catching, drape height, brightness/contrast/saturation/tint</td></tr>
+    <tr><td><strong>Model Studio</strong></td><td>Upload custom GLB models per furniture category, library management, tree model pool (random selection), per-category transforms (position/scale/rotation)</td></tr>
+    <tr><td><strong>Export Studio</strong></td><td>PNG/JPEG/WebP/PDF/SVG/HTML stills, WebM/MP4 screen recording (30/60 fps, standard/high/ultra bitrate), clipboard copy</td></tr>
+    <tr><td><strong>Walk Mode</strong></td><td>First-person WASD navigation at pedestrian eye height, Shift sprint, C crouch</td></tr>
+  </table>
+  <p>All settings are persisted to localStorage under the key <code>planx_3d_city_settings</code> (schema v13) with migration logic. Scene rebuild tokens abort stale rebuilds when settings change rapidly.</p>
 </div>
 
-<h2 id="params">3. Parameters and Controls</h2>
+<h2 id="themes">10. Color Themes (11)</h2>
+<div class="card">
+  <h4>Coordinated Palettes for Island, Terrain, Roads, Parks, Water, Roofs</h4>
+  <table>
+    <tr><th>Theme</th><th>Character</th><th>Island Base</th></tr>
+    <tr><td>Editorial Paper</td><td>Warm ivory; default</td><td>#e6dfd3</td></tr>
+    <tr><td>Plugin Tones</td><td>Salmon and grey</td><td>#d4c5c0</td></tr>
+    <tr><td>Tinted Gray Teal</td><td>Muted cool grey-green</td><td>#c8d6d2</td></tr>
+    <tr><td>Teal &amp; Salmon</td><td>Warm-cool contrast</td><td>#c8c0b8</td></tr>
+    <tr><td>Light Purple &amp; Black</td><td>Elegant purple accents</td><td>#d8d5e0</td></tr>
+    <tr><td>Warm Sand &amp; Slate</td><td>Natural earth tones</td><td>#ddd5c8</td></tr>
+    <tr><td>Anime (Anime Cel)</td><td>Bright cel-shaded pastels</td><td>#9fb6c4</td></tr>
+    <tr><td>Cartoon</td><td>Bold primary colours</td><td>#c4c8c0</td></tr>
+    <tr><td>Pixar</td><td>Warm creams and oranges</td><td>#e8dcc8</td></tr>
+    <tr><td>Futuristic City</td><td>Dark neon, cyan/violet glass</td><td>#121420</td></tr>
+    <tr><td>Classic Era</td><td>Vintage sepia, terracotta roofs</td><td>#d4c8b0</td></tr>
+  </table>
+  <p>QGIS parallel styling: <code>qgis_styling.py</code> applies a categorised symbol renderer to buildings (6 function categories), roads (8 hierarchy levels with metric width expressions), and greens (8 categories including water, parking, pedestrian squares). Point layers receive single-symbol renderers. Theme palette is mirrored in both the QGIS project layers and the viewer manifest, ensuring visual consistency across environments.</p>
+</div>
+
+<h2 id="facades">11. Procedural Buildings and Facades</h2>
+<div class="card">
+  <h4>Canvas-Drawn Textures and Parametric Roofs</h4>
+  <p><strong>Facade textures:</strong> Canvas-drawn at runtime using <code>FACADE_RECIPES</code> with a storey-based window grid. Ground floor: shopfronts for Commercial/Mixed-Use (light blue glazing), entrance doors for Residential/Civic. Upper floors: coloured window rectangles, ~48% randomly lit (warm gold, amber/orange, cool blue, soft teal). A separate emissive map texture enables night glow when the day/night cycle enters night mode. 17 procedural roof texture variants (tile patterns, standing seam, shingle, solar, ceramic).</p>
+  <p><strong>Roof geometry:</strong> Flat (with penthouse, HVAC, helipad/solar panels), Pyramid (concave-footprint-aware), Hip (ridge line at mid-height), Gable (ridge along OBB long axis), Shed (single slope).</p>
+  <p><strong>Building setback:</strong> <code>offsetRing()</code> performs iterative vertex offset with hole detection, producing the footprint available for building generation. <code>perBuildingColorVariation</code> adds HSL lightness variation seeded by OSM ID for visual distinction.</p>
+  <p><strong>Procedural ground textures:</strong> Asphalt, water, island block, and fence materials all generated via canvas drawing routines with configurable colours from the active theme.</p>
+</div>
+
+<h2 id="roads">12. Roads and Traffic</h2>
+<div class="card">
+  <h4>Road Surfaces, Sidewalks, Bike Lanes, and Animated Traffic</h4>
+  <p><strong>Roads:</strong> <code>buildRoadLayer()</code> constructs ribbon meshes along OSM way linestrings, extruded with configurable width per road class (motorway, trunk, primary, secondary, tertiary, residential, service, footway, cycleway). Lane markings: procedural dashed centre/side lines.</p>
+  <p><strong>Sidewalks:</strong> Kerbed sidewalk ribbons on both sides, width scaled by road class. Placed via offset from road centrelines. Streetlights and trees alternate along sidewalks.</p>
+  <p><strong>Bike lanes:</strong> Green ribbon strips offset to road-relative sides, using the OSM cycleway side tag when available.</p>
+  <p><strong>Traffic:</strong> Instanced meshes for cars, vans, buses, and trucks with wheels and lights. Spawned on car-capable roads (excludes footways, cycleways). Frame-rate independent motion controlled by <code>settings.trafficSpeed</code>. Pedestrians keep to sidewalks with sidewalk-relative positioning. Cyclists ride on bike lanes when present. Night mode activates vehicle headlights/taillights and streetlight bulbs.</p>
+</div>
+
+<h2 id="terrain">13. Terrain and Basemap</h2>
+<div class="card">
+  <h4>Optional DEM and Raster Underlay</h4>
+  <p><strong>DEM:</strong> Warped via <code>gdal:warpreproject</code> to the model base extent, bounded to ~512 px maximum dimension to keep file size manageable. The viewer loads GeoTIFF via the <code>geotiff.js</code> library and constructs a height-mapped terrain mesh. Terrain resolution is configurable.</p>
+  <p><strong>Basemap:</strong> Rendered via <code>QgsMapRendererCustomPainterJob</code> at max 2048 px to transparent PNG. In the viewer, it appears as a flat underlay beneath the city with configurable opacity, blend mode (Normal/Multiply/Screen/Add/Difference), brightness, contrast, saturation, and tint. Shadow catching can be enabled to project building shadows onto the basemap surface. Drape height controls the vertical offset between basemap and city features.</p>
+</div>
+
+<h2 id="exportstudio">14. Export Studio</h2>
+<div class="card">
+  <h4>Stills, Video Recording, and Clipboard</h4>
+  <p>Still formats: PNG, JPEG (quality slider), WebP, PDF (raw PDF 1.4 from JPEG with proper cross-reference table), SVG (embeds JPEG as href), HTML (self-contained page). Size options: viewport, Full HD (1920x1080), QHD (2560x1440), 4K (3840x2160), custom. Video recording: WebM or MP4, 30 or 60 fps, standard/high/ultra bitrate. Filename sanitisation and timestamped generation. Clipboard copy via <code>navigator.clipboard.write()</code>.</p>
+</div>
+
+<h2 id="cache">15. Caching and HTTP Server</h2>
+<div class="card">
+  <h4>Atomic Data Publish with Security Headers</h4>
+  <p><strong>Cache:</strong> SHA-256 of Overpass query (first 40 chars), stored as JSON in <code>%TEMP%/osm_3d_model_cache/</code>. TTL: 7 days. On-hit validation: corrupt files are discarded and re-fetched. Cache management UI exposes clear-cache button with count and byte-freed report.</p>
+  <p><strong>HTTP server:</strong> <code>ThreadingTCPServer</code> on <code>127.0.0.1</code>, ports 8120&ndash;8139, daemon threads. <code>QuietHandler</code> adds security headers: <code>Cache-Control: no-store</code>, <code>Cross-Origin-Resource-Policy: same-origin</code>, <code>Referrer-Policy: no-referrer</code>, <code>X-Content-Type-Options: nosniff</code>, <code>X-Frame-Options: DENY</code>. Custom MIME types: <code>application/json</code> (.geojson), <code>image/tiff</code> (.tif), <code>image/webp</code> (.webp), <code>application/javascript</code> (.js).</p>
+</div>
+
+<h2 id="params">16. Parameters and Controls</h2>
 <table>
-  <tr><th>Parameter</th><th>Type</th><th>Range</th><th>Default</th><th>Description</th></tr>
-  <tr><td>Study area source</td><td>Radio</td><td>Map view / Selection</td><td>Map view</td><td>Source of boundary geometry</td></tr>
-  <tr><td>Boundary shape</td><td>Combo</td><td>Circle / Rounded / Extent / Polygon</td><td>Circle</td><td>How the boundary is derived from the area</td></tr>
-  <tr><td>Max study area</td><td>QDoubleSpinBox</td><td>1.0 &ndash; 300.0 ha</td><td>150 ha</td><td>Clamp for polite Overpass requests</td></tr>
-  <tr><td>Map &amp; web theme</td><td>Combo</td><td>11 options</td><td>Editorial Paper</td><td>Coordinated palette for QGIS and viewer</td></tr>
-  <tr><td>DEM (optional)</td><td>QgsMapLayerComboBox</td><td>Raster layers</td><td>None</td><td>Terrain draped beneath the city</td></tr>
-  <tr><td>Basemap (optional)</td><td>QgsMapLayerComboBox</td><td>Any layer</td><td>None</td><td>Rendered as flat underlay beneath the city</td></tr>
-  <tr><td>Open viewer automatically</td><td>QCheckBox</td><td>on / off</td><td>on</td><td>Browser opens after export completes</td></tr>
+  <tr><th>Parameter</th><th>Type</th><th>Range</th><th>Default</th></tr>
+  <tr><td>Study area source</td><td>Radio</td><td>Map view / Selection</td><td>Map view</td></tr>
+  <tr><td>Boundary shape</td><td>Combo</td><td>Circle / Rounded / Extent / Polygon</td><td>Circle</td></tr>
+  <tr><td>Max study area</td><td>QDoubleSpinBox</td><td>1&ndash;300 ha</td><td>150 ha</td></tr>
+  <tr><td>Map &amp; web theme</td><td>Combo</td><td>11 options</td><td>Editorial Paper</td></tr>
+  <tr><td>DEM (optional)</td><td>QgsMapLayerComboBox</td><td>Raster layers</td><td>None</td></tr>
+  <tr><td>Basemap (optional)</td><td>QgsMapLayerComboBox</td><td>Any layer</td><td>None</td></tr>
+  <tr><td>Open viewer automatically</td><td>QCheckBox</td><td>On / Off</td><td>On</td></tr>
+  <tr><td>Clear OSM cache</td><td>QPushButton</td><td>&mdash;</td><td>Reports files + bytes freed</td></tr>
 </table>
 
-<h2 id="workflow">4. Workflow Guide</h2>
+<h2 id="workflow">17. Workflow Guide</h2>
 <ol>
-  <li>Pan and zoom the QGIS canvas to the desired study area, or select polygon features representing the boundary.</li>
+  <li>Pan and zoom the QGIS canvas to the desired study area, or select polygon features.</li>
   <li>Click the OSM 3D Model toolbar icon to open the dialog.</li>
   <li>Optionally click <em>Add OSM basemap to the map</em> for a reference tile layer.</li>
-  <li>Choose the area source, boundary shape, and max area. The live area readout shows estimated hectares.</li>
+  <li>Choose area source, boundary shape, and max area. The live area readout shows estimated hectares.</li>
   <li>Select a theme from the dropdown (affects both QGIS layer styling and 3D viewer colours).</li>
-  <li>Optionally expand <em>Advanced</em> to add a DEM raster or basemap layer.</li>
-  <li>Click <em>Create OSM layers &amp; export 3D viewer</em>. The plugin downloads OSM data, processes it, exports GeoJSON, and opens the viewer in the default browser.</li>
-  <li>In the viewer, use the toolbar to open panels for layer visibility, styling, time-of-day, export, and walk mode.</li>
-  <li>The export result is also added as a styled QGIS layer group named "3D OSM Model" for inspection and further analysis.</li>
+  <li>Optionally expand <em>Advanced</em> to add a DEM raster or basemap layer, or clear the OSM cache.</li>
+  <li>Click <em>Create OSM layers &amp; export 3D viewer</em>. The plugin downloads, processes, exports, and opens the viewer.</li>
+  <li>In the viewer, use the toolbar to open panels. Switch themes live via the Style dock without re-exporting.</li>
+  <li>The export result is also added as a styled QGIS layer group ("3D OSM Model") for inspection and analysis.</li>
+  <li>Use Export Studio for stills, video, or clipboard output. Use Walk Mode for first-person exploration.</li>
 </ol>
 
-<h2 id="technical">5. Technical Notes</h2>
+<h2 id="technical">18. Technical Notes</h2>
 <ul>
-  <li><strong>CRS handling:</strong> The study area centroid is projected to a local UTM EPSG code. All geometry processing and clipping uses metric coordinates.</li>
-  <li><strong>Multipolygon assembly:</strong> OSM relations are stitched into multipolygons with proper outer/inner ring handling for buildings with courtyards.</li>
-  <li><strong>Tree scattering:</strong> A deterministic LCG-based PRNG seeds tree placement from polygon footprint coordinates, producing identical results on re-runs.</li>
-  <li><strong>Server security:</strong> Local HTTP server binds to 127.0.0.1 only, sends same-origin CORS policy, Cache-Control: no-store, and X-Content-Type-Options / X-Frame-Options security headers.</li>
-  <li><strong>Atomic GeoJSON publish:</strong> Files are written to a staging directory and atomically published with backup on failure.</li>
-  <li><strong>Viewer architecture:</strong> Three.js with ES module imports, WebGLRenderer with shadow mapping, EffectComposer with UnrealBloomPass, and OrbitControls. Settings persist in IndexedDB. Scene rebuild tokens abort stale rebuilds.</li>
-  <li><strong>QGIS compatibility:</strong> 3.28 through 4.99. Pure qgis.core / qgis.gui / qgis.PyQt with no external Python dependencies.</li>
+  <li><strong>CRS handling:</strong> Study area centroid &rarr; local UTM EPSG code. All geometry processing uses metric coordinates.</li>
+  <li><strong>Multipolygon assembly:</strong> OSM relations stitched into multipolygons with outer/inner ring logic for building courtyards.</li>
+  <li><strong>Tree scattering:</strong> Deterministic LCG PRNG seeded from polygon coordinates + area + kind code &rarr; identical on re-runs.</li>
+  <li><strong>Server security:</strong> 127.0.0.1 bind only. Same-origin CORS, no-store cache, nosniff, DENY framing, no-referrer.</li>
+  <li><strong>Atomic publish:</strong> Staging directory &rarr; target via <code>Path.replace()</code> with backup on failure.</li>
+  <li><strong>Viewer:</strong> ~9500-line Three.js app. ES module imports. WebGLRenderer with shadow maps + EffectComposer (SSAO/Bloom). Settings persist in IndexedDB (v13 schema). Scene rebuild tokens abort stale rebuilds.</li>
+  <li><strong>QGIS compatibility:</strong> 3.28&ndash;4.99. Pure qgis.core/gui/PyQt. No external Python dependencies.</li>
 </ul>
 
-<h2 id="literature">6. Literature</h2>
+<h2 id="literature">19. Literature</h2>
 <ol class="refs">
   <li>Haklay, M. &amp; Weber, P. (2008). OpenStreetMap: User-generated street maps. <em>IEEE Pervasive Computing</em>, 7(4), 12&ndash;18. <a href="https://doi.org/10.1109/MPRV.2008.80">DOI: 10.1109/MPRV.2008.80</a></li>
   <li>Biljecki, F., Ledoux, H., &amp; Stoter, J. (2017). Generating 3D city models without elevation data. <em>Computers, Environment and Urban Systems</em>, 64, 1&ndash;18. <a href="https://doi.org/10.1016/j.compenvurbsys.2017.01.001">DOI: 10.1016/j.compenvurbsys.2017.01.001</a></li>
   <li>Goetz, M. (2013). Towards generating highly detailed 3D CityGML models from OpenStreetMap. <em>International Journal of Geographical Information Science</em>, 27(5), 845&ndash;865. <a href="https://doi.org/10.1080/13658816.2012.721552">DOI: 10.1080/13658816.2012.721552</a></li>
-  <li>Dirksen, C. (2014). <em>Three.js Essentials</em>. Packt Publishing.</li>
   <li>Kolbe, T. H. (2009). Representing and exchanging 3D city models with CityGML. In J. Lee &amp; S. Zlatanova (Eds.), <em>3D Geo-Information Sciences</em> (pp. 15&ndash;31). Springer. <a href="https://doi.org/10.1007/978-3-540-87395-2_2">DOI: 10.1007/978-3-540-87395-2_2</a></li>
+  <li>Parish, Y. I. H. &amp; Muller, P. (2001). Procedural modeling of cities. <em>Proceedings of SIGGRAPH 2001</em>, 301&ndash;308. <a href="https://doi.org/10.1145/383259.383292">DOI: 10.1145/383259.383292</a></li>
+  <li>Fan, H., Zipf, A., Fu, Q., &amp; Neis, P. (2014). Quality assessment for building footprints data on OpenStreetMap. <em>International Journal of Geographical Information Science</em>, 28(4), 700&ndash;719. <a href="https://doi.org/10.1080/13658816.2013.867495">DOI: 10.1080/13658816.2013.867495</a></li>
+  <li>Resch, B., Wohlfahrt, R., &amp; Wosniok, C. (2014). Web-based 4D visualization of marine geo-data using WebGL. <em>Cartography and Geographic Information Science</em>, 41(3), 235&ndash;247. <a href="https://doi.org/10.1080/15230406.2014.901001">DOI: 10.1080/15230406.2014.901001</a></li>
+  <li>Goodchild, M. F. (2007). Citizens as sensors: The world of volunteered geography. <em>GeoJournal</em>, 69(4), 211&ndash;221. <a href="https://doi.org/10.1007/s10708-007-9111-y">DOI: 10.1007/s10708-007-9111-y</a></li>
+  <li>Dirksen, C. (2014). <em>Three.js Essentials</em>. Packt Publishing.</li>
+  <li>Muller, P., Wonka, P., Haegler, S., Ulmer, A., &amp; Van Gool, L. (2006). Procedural modeling of buildings. <em>ACM Transactions on Graphics</em>, 25(3), 614&ndash;623. <a href="https://doi.org/10.1145/1141911.1141931">DOI: 10.1145/1141911.1141931</a></li>
 </ol>
 </main>
 <script>
@@ -172,10 +299,7 @@ th { background: var(--code-bg); font-weight: 600; }
       }
       if(!keep){
         next=h.nextElementSibling;
-        while(next && next.tagName!=='H2'){
-          next.classList.add('hidden');
-          next=next.nextElementSibling;
-        }
+        while(next && next.tagName!=='H2'){next.classList.add('hidden');next=next.nextElementSibling;}
         h.classList.add('hidden');
       }
     });
@@ -196,7 +320,7 @@ th { background: var(--code-bg); font-weight: 600; }
 @media print { #print-pdf-btn { display: none !important; } }
 @media (max-width: 768px) { #print-pdf-btn { bottom: 12px; right: 12px; padding: 8px 14px; font-size: 12px; } }
 </style>
-<button id="print-pdf-btn" onclick="window.print()" title="Save as PDF / Print">🖨️ Save as PDF</button>
+<button id="print-pdf-btn" onclick="window.print()" title="Save as PDF / Print">&#x1F5A8;&#xFE0F; Save as PDF</button>
 
 </body>
 </html>
