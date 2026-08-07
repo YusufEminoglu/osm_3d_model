@@ -182,5 +182,21 @@ th { background: var(--code-bg); font-weight: 600; }
   });
 })();
 </script>
+
+<!-- PDF PRINT BUTTON -->
+<style>
+#print-pdf-btn {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  background: #13a0a0; color: white; border: none; border-radius: 8px;
+  padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.2); transition: all .2s;
+  display: flex; align-items: center; gap: 8px;
+}
+#print-pdf-btn:hover { background: #0d7a7a; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+@media print { #print-pdf-btn { display: none !important; } }
+@media (max-width: 768px) { #print-pdf-btn { bottom: 12px; right: 12px; padding: 8px 14px; font-size: 12px; } }
+</style>
+<button id="print-pdf-btn" onclick="window.print()" title="Save as PDF / Print">🖨️ Save as PDF</button>
+
 </body>
 </html>
