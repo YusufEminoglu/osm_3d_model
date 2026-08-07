@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.1] - 2026-08-07
+
+- Add comprehensive academic reference manual
+
 ## [1.2.0] - 2026-07-24
 
 - **Add OSM basemap to the map**: one click in the Study area card puts the live
