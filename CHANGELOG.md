@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.5] - 2026-08-09
+
+- Add OpenStreetMap, tile-service and Overpass API notices alongside the existing
+  Three.js and geotiff.js licenses.
+- Record OpenStreetMap attribution metadata directly on the optional basemap layer.
+
 ## [1.2.4] - 2026-08-07
 
 - Added online user manual link (https://yusufeminoglu.github.io/osm_3d_model/) and GitHub repository star call-to-action.

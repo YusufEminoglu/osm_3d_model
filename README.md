@@ -239,4 +239,7 @@ This plugin is one of 15 open-source QGIS plugins for urban planning by the same
 
 Map data is provided by OpenStreetMap contributors under the ODbL. Keep the OSM attribution visible when sharing exports, screenshots, or demos.
 
+The tile, Overpass, Three.js, and geotiff.js notices are collected in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
 The plugin code is released under the [MIT License](LICENSE). The viewer engine is built on Three.js and the PlanX 3D City workflow.

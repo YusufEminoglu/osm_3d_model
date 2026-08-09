@@ -347,6 +347,8 @@ class Osm3dModelPlugin:
             self._fail("Could not load the OSM basemap (no network, or tiles unavailable).")
             return
 
+        layer.setAttribution("© OpenStreetMap contributors")
+        layer.setAttributionUrl("https://www.openstreetmap.org/copyright")
         project.addMapLayer(layer, False)
         root.addLayer(layer)  # appended == bottom of the tree, under other layers
         self._basemap_added(
