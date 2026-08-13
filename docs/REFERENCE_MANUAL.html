@@ -34,6 +34,8 @@ th{background:var(--code-bg);font-weight:600}
 .formula{background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:10px 16px;margin:8px 0;font-family:Cambria,'Times New Roman',serif;font-size:15px;text-align:center}
 @media(max-width:760px){body{flex-direction:column}#sidebar{width:100%;min-width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border)}#main{padding:24px}}
 .hidden{display:none}
+.video-embed { position: relative; width: 100%; padding-top: 56.25%; margin: 4px 0 28px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #000; }
+.video-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 </style>
 </head>
 <body>
@@ -65,6 +67,10 @@ th{background:var(--code-bg);font-weight:600}
 <main id="main">
 <h1>OSM 3D Model</h1>
 <p>One-click OpenStreetMap to interactive Three.js 3D city viewer &bull; v1.2.0</p>
+
+<div class="video-embed">
+  <iframe src="https://www.youtube-nocookie.com/embed/WkLwYUxPidA" title="OSM 3D Model &mdash; video walkthrough" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+</div>
 
 <h2 id="overview">1. Overview</h2>
 <p>OSM 3D Model is a single-click QGIS-to-browser pipeline that downloads live OpenStreetMap data for a user-defined study area and opens an interactive Three.js 3D city viewer. The plugin handles the entire data pipeline&mdash;Overpass API download with multi-mirror fallback and 7-day disk cache, OSM tag parsing into 11 memory layers, GeoJSON export with a manifest, and a local HTTP server that launches the browser-based PlanX 3D City engine. The viewer renders procedural buildings with roof styles, roads with lane markings and animated traffic, sidewalks with pedestrians, trees, street furniture, water features, and optional DEM terrain and basemap underlay.</p>
