@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/github-hero.svg" alt="3D OSM Model GitHub hero showing an OpenStreetMap study area becoming a procedural 3D city" width="100%">
+  <img src="docs/assets/github-hero.svg" alt="An OpenStreetMap study area rising into a procedural 3D city and recolouring through ten curated looks as the sun crosses the sky" width="100%">
 </p>
 
 <h1 align="center">3D OSM Model</h1>
@@ -15,7 +15,7 @@
 <p align="center">
   <a href="metadata.txt"><img alt="QGIS" src="https://img.shields.io/badge/QGIS-3.28%2B-5da85d?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-111827?style=for-the-badge"></a>
-[![Documentation](https://img.shields.io/badge/📖_Reference_Manual-13a0a0)](https://yusufeminoglu.github.io/YusufEminoglu/osm_3d_model/)
+  <a href="https://yusufeminoglu.github.io/osm_3d_model/"><img alt="Reference manual" src="https://img.shields.io/badge/docs-Reference_Manual-13a0a0?style=for-the-badge"></a>
   <img alt="OpenStreetMap native" src="https://img.shields.io/badge/data-OpenStreetMap_native-8f6f5b?style=for-the-badge">
   <img alt="Three.js viewer" src="https://img.shields.io/badge/viewer-Three.js-2f4858?style=for-the-badge">
 </p>
@@ -98,9 +98,6 @@ http://127.0.0.1:8120/src/
 
 ## Signature Features
 
-<p align="center">
-  <img src="docs/assets/capability-radar.svg" alt="Capability radar for one-button workflow, OSM-native schema, procedural 3D, mobility, terrain, presentation, and resilience" width="86%">
-</p>
 
 ### One-button OSM to 3D
 
@@ -148,6 +145,10 @@ Style dock.
 
 ### Walk mode, from a real body
 
+<p align="center">
+  <img src="docs/assets/walk-mode.svg" alt="A 1.85 metre walker moving through the street with the eye height marked at 1.73 metres" width="100%">
+</p>
+
 Walk mode is lived from inside a body rather than flown as a low camera. Every
 vertical dimension derives from one setting — the walker's stature, **1.85 m** by
 default — using standard anthropometry:
@@ -169,6 +170,10 @@ height, walking pace, solid buildings and head movement are all in the
 **Scene & Sun** dock; the HUD shows the live eye height and speed.
 
 ### Curated looks and the cinematic tour
+
+<p align="center">
+  <img src="docs/assets/looks-gallery.svg" alt="One city cycling through the ten curated looks, each changing palette, textures, massing and light together" width="100%">
+</p>
 
 A theme is a palette. A **look** is the whole composition — palette, road and
 ground textures, roof type and massing, time of day, weather and fog — tuned

@@ -13,8 +13,12 @@ It is intentionally separate from plugin versioning. Documentation, showcase ass
 
 ## Visual Assets
 
-- [Hero scene](assets/github-hero.svg)
-- [Capability radar](assets/capability-radar.svg)
-- [Export pipeline](assets/pipeline.svg)
+- [Hero scene](assets/github-hero.svg) — the study area rising into a city, recolouring through the ten looks while the sun crosses the sky
+- [Export pipeline](assets/pipeline.svg) — study area → Overpass → GeoJSON → viewer
+- [Curated looks](assets/looks-gallery.svg) — one street elevation cycling through all ten palettes
+- [Walk mode](assets/walk-mode.svg) — the 1.85 m body, its 1.73 m eye height and its gait
 
-These assets are designed to render directly inside the root `README.md` and inside the static Pages site.
+All four are animated with SMIL only — no `<style>` block and no script, both of which
+GitHub's README sanitiser strips — so they animate in the repository page, in the Pages
+site and in any plain image viewer. They are regenerated, not hand-edited; keep the
+numbers in them in step with `web/src/looks.js` and `web/src/walk.js`.
