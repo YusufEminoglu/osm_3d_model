@@ -2,13 +2,16 @@
 """3D OSM Model - QGIS plugin entry point."""
 from __future__ import annotations
 
+import contextlib
 import os
 import webbrowser
 
 from qgis.core import (
+    Qgis,
     QgsApplication,
     QgsDistanceArea,
     QgsGeometry,
+    QgsMessageLog,
     QgsProject,
     QgsRasterLayer,
     QgsTask,
@@ -82,6 +85,7 @@ class Osm3dModelPlugin:
         self.server = Osm3dServer(self.web_root)
         self._running = False
         self._unloaded = False
+        self._canvas_probe_connected = False
         self._task = None
         self._pending_run = None
 
@@ -134,6 +138,7 @@ class Osm3dModelPlugin:
                     signal.disconnect(slot)
                 except (RuntimeError, TypeError):
                     pass
+            self._disconnect_canvas_probe()
             dialog.area_probe = None
             dialog.prepare_for_unload()
             dialog.close()
@@ -155,6 +160,7 @@ class Osm3dModelPlugin:
             self.dialog.clearCacheRequested.connect(self._clear_osm_cache)
             self.dialog.basemapRequested.connect(self.add_osm_basemap)
             self.dialog.area_probe = self._area_summary
+            self._connect_canvas_probe()
         self.dialog.show()
         self.dialog.raise_()
         self.dialog.activateWindow()
@@ -375,6 +381,59 @@ class Osm3dModelPlugin:
                 self.dialog.set_status(f"Viewer opened: {url}")
         except Exception as exc:
             self._fail(str(exc))
+
+    def _connect_canvas_probe(self) -> None:
+        """Keep the dialog's hectare readout in step with the map canvas.
+
+        The readout only refreshed when the dialog opened or when a radio button
+        changed, so zooming or panning left a stale figure on screen next to a
+        "Current map view (canvas extent)" option that no longer described the
+        view. Both canvas signals are needed: extentsChanged covers zoom and pan,
+        destinationCrsChanged covers a project CRS switch, which changes the
+        measured area without moving the extent.
+        """
+        if self._canvas_probe_connected or self.iface is None:
+            return
+        canvas = self.iface.mapCanvas()
+        if canvas is None:
+            return
+        for signal_name in ("extentsChanged", "destinationCrsChanged"):
+            signal = getattr(canvas, signal_name, None)
+            if signal is None:
+                continue
+            with contextlib.suppress(RuntimeError, TypeError):
+                signal.connect(self._on_canvas_changed)
+        self._canvas_probe_connected = True
+
+    def _disconnect_canvas_probe(self) -> None:
+        if not self._canvas_probe_connected or self.iface is None:
+            self._canvas_probe_connected = False
+            return
+        canvas = self.iface.mapCanvas()
+        if canvas is not None:
+            for signal_name in ("extentsChanged", "destinationCrsChanged"):
+                signal = getattr(canvas, signal_name, None)
+                if signal is None:
+                    continue
+                with contextlib.suppress(RuntimeError, TypeError):
+                    signal.disconnect(self._on_canvas_changed)
+        self._canvas_probe_connected = False
+
+    def _on_canvas_changed(self) -> None:
+        """Refresh the area readout, never letting a canvas signal raise into Qt."""
+        if self._unloaded or self._running or self.dialog is None:
+            return
+        try:
+            if not self.dialog.isVisible():
+                return
+            self.dialog.refresh_area_summary()
+        except RuntimeError:
+            # The dialog's C++ object is gone; drop the connection.
+            self._disconnect_canvas_probe()
+        except Exception as exc:  # a readout must never break the canvas
+            QgsMessageLog.logMessage(
+                f"Area readout refresh failed: {exc}", "3D OSM Model", Qgis.Warning
+            )
 
     def _area_summary(self, source: str) -> str:
         """Short, human-readable estimate of the chosen study area for the dialog."""

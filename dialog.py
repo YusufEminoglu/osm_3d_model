@@ -10,6 +10,7 @@ the GUI and emits :pyattr:`runRequested` / :pyattr:`reopenRequested` /
 from __future__ import annotations
 
 import os
+import re
 
 from qgis.core import QgsMapLayerProxyModel, QgsSettings
 from qgis.gui import QgsMapLayerComboBox
@@ -304,6 +305,7 @@ class Osm3dModelDialog(QDialog):
         self.ha_spin.setSingleStep(10.0)
         self.ha_spin.setValue(150.0)
         self.ha_spin.setSuffix(" ha")
+        self.ha_spin.valueChanged.connect(self._refresh_area_summary)
         ha_row.addWidget(ha_label)
         ha_row.addStretch(1)
         ha_row.addWidget(self.ha_spin)
@@ -558,6 +560,15 @@ class Osm3dModelDialog(QDialog):
         self._allow_close = True
         self._set_busy(False)
 
+    def refresh_area_summary(self) -> None:
+        """Public entry point: re-measure and redraw the study-area readout.
+
+        Called by the plugin whenever the map canvas is zoomed, panned or
+        reprojected, so the hectare figure never describes a view the user has
+        already left.
+        """
+        self._refresh_area_summary()
+
     def _refresh_area_summary(self, *_):
         if self._busy or not callable(self.area_probe):
             return
@@ -570,7 +581,29 @@ class Osm3dModelDialog(QDialog):
         if text and " ha" in text:
             shape = _SHAPE_SHORT.get(self.shape_combo.currentData(), "shape")
             text = f"{text}  ·  {shape} boundary"
+            # Say so when the view is bigger than the cap, rather than letting the
+            # user read a hectare figure the export will silently not honour.
+            measured = self._measured_hectares(text)
+            cap = float(self.ha_spin.value())
+            if measured is not None and measured > cap:
+                text = f"{text}  ·  clipped to {cap:,.0f} ha — zoom in to keep it all"
         self.set_area_summary(text)
+
+    @staticmethod
+    def _measured_hectares(text: str):
+        """Pull the hectare figure back out of the probe's sentence.
+
+        The probe owns the wording and the measurement; the dialog only needs the
+        number to decide whether to warn, so it reads the first value rather than
+        duplicating a second QgsDistanceArea measurement here.
+        """
+        match = re.search(r"([\d,]+(?:\.\d+)?)\s*ha", text)
+        if not match:
+            return None
+        try:
+            return float(match.group(1).replace(",", ""))
+        except ValueError:
+            return None
 
     def set_area_summary(self, text: str):
         self.area_readout.setText(text or "—")

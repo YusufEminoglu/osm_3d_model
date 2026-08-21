@@ -1941,3 +1941,29 @@ body.measuring #map { cursor: crosshair; }
     .walk-hud { font-size: 0.68rem; padding: 6px 10px; }
     .walk-readout { padding-left: 7px; }
 }
+
+/* GitHub repository link in the toolbar. An <a> styled as a tray button, so it
+   keeps real link behaviour (middle-click, copy address) instead of being a
+   button that fakes navigation. */
+.toolbar .repo-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.toolbar .repo-btn:hover {
+    color: #ffffff;
+}
+
+.help-foot .help-star {
+    display: inline-block;
+    margin-top: 6px;
+    color: var(--planx-accent-ink);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.help-foot .help-star:hover {
+    text-decoration: underline;
+}

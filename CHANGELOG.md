@@ -1,5 +1,52 @@
 # Changelog
 
+## [1.7.0] - 2026-08-21
+
+### Added
+
+- **A GitHub link in the viewer toolbar.** The exported city now carries a repo
+  button, and the help overlay a "Star the plugin on GitHub" line, so anyone the
+  city is shown to can find the project.
+- **The hectare readout follows the map canvas.** Zooming, panning or changing
+  the project CRS now updates the "Canvas extent · ≈ N ha" estimate live; it only
+  refreshed when the dialog opened or a radio button changed, so it routinely
+  described a view the user had already left. When the extent is larger than the
+  Max study area it says so — "clipped to 150 ha — zoom in to keep it all" —
+  rather than showing a figure the export will not honour.
+
+### Changed
+
+- **Residential and Urban walls now dominate every reseed.** The photo-based
+  Residential A–F and Urban A–E facades are what an exported city is judged on,
+  so every reseed — an asset theme, a colour theme, a shuffled look — draws three
+  Residential walls for each Urban one, using all six residential facades before
+  any repeats. The flat procedural walls (CivicStone, CampusGlass,
+  MediterraneanStucco, CoastalWhite) stay in the Style dock's per-function
+  dropdown and remain the fallback; they simply no longer win a reseed.
+- **Walk mode pace and gait, after real use.** Walking is 1.8 m/s (6.5 km/h)
+  rather than the 1.4 m/s textbook mean, which read as sluggish in the viewer,
+  and Shift runs at 3.6 m/s. Head movement is roughly 40% smaller — 1.3 cm
+  vertical and 0.9 cm lateral.
+
+### Fixed
+
+- **Overpass downloads now use QGIS's own network stack.** They went through
+  Python's `urllib`, which bypasses every network setting QGIS holds: the proxy,
+  the TLS configuration and the certificate store. Behind a corporate proxy or
+  with a pinned TLS version that surfaced as `SSL: WRONG_VERSION_NUMBER` and
+  looked like the OSM servers were down. Ported from the sibling OSM Quick 3D
+  plugin, where the same fix landed in v0.50.0.
+- **A dropped connection or a 5xx is retried once on the same mirror** before
+  moving on, which converts a large share of transient Overpass failures into
+  successes. A permanent failure (a bad URL, a malformed body) is not retried, so
+  an error still surfaces promptly. The final message names the mirrors that were
+  tried and why each failed, instead of reporting only the last one.
+- New headless coverage for the mirror/retry decisions against a stubbed
+  transport: a success stops the search, a transient failure retries once, a
+  permanent one does not, every mirror is tried at most twice, an Overpass
+  `remark` fails over instead of being trusted, cancellation is honoured before
+  the first request, and the downloader cannot silently drift back to `urllib`.
+
 ## [1.6.0] - 2026-08-21
 
 ### Changed

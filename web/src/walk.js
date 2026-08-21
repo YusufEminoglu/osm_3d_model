@@ -7,7 +7,8 @@
  *
  *   standing eye height = 0.936 x stature   (Pheasant, *Bodyspace*)
  *   crouched eye height = 0.60  x stature
- *   walking pace        = 1.4 m/s           (mean adult; a jog is about 3.3)
+ *   walking pace        = 1.8 m/s           (brisk; the 1.4 m/s textbook mean
+ *                                            read as sluggish in the viewer)
  *   cadence             = one step per 0.78 m travelled
  *
  * Before this the camera accelerated to 9.2 m/s — 33 km/h, a car in a city —
@@ -24,21 +25,21 @@ export const WALK = {
   eyeRatio: 0.936,
   crouchRatio: 0.60,
   bodyRadius: 0.34,      // shoulder half-width, used for wall collision
-  baseSpeed: 1.4,        // m/s at pace 1.0
-  sprintFactor: 2.35,    // -> about 3.3 m/s, a comfortable jog
+  baseSpeed: 1.8,        // m/s at pace 1.0 — a brisk walk (6.5 km/h)
+  sprintFactor: 2.0,     // -> 3.6 m/s, a run
   crouchFactor: 0.5,
   accel: 8.0,            // m/s^2: walking pace reached in about 0.18 s
   decel: 11.0,           // stopping is quicker than starting — you plant a foot
   stepLength: 0.78,      // m per step; sets the head-bob cadence
-  bobHeight: 0.022,      // m the head rises and falls, twice per stride
-  bobSway: 0.016,        // m the head sways sideways, once per stride
+  bobHeight: 0.013,      // m the head rises and falls, twice per stride
+  bobSway: 0.009,        // m the head sways sideways, once per stride
   fov: 72,               // walk field of view; the orbit FOV is restored on exit
   dropInHeight: 25,      // above this, entering walk mode lands you at the look-at point
   defaultStature: 1.85,
   minStature: 1.2,
   maxStature: 2.2,
   minPace: 0.2,
-  maxPace: 4
+  maxPace: 2.5
 };
 
 /* Eye height for a body of this stature. The camera sits at the eyes, not at

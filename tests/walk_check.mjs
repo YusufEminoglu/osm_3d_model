@@ -32,14 +32,15 @@ assert.equal(eyeHeight(99), eyeHeight(WALK.maxStature), 'an absurd stature clamp
 assert.equal(eyeHeight(1.85), eyeHeight('1.85'), 'a slider value arrives as a string');
 
 // ---------------------------------------------------------------- the gait
-close(topSpeed(1), 1.4, 1e-9, 'walking pace');                       // 5.0 km/h
-close(topSpeed(1, { sprinting: true }), 3.29, 0.01, 'jogging pace'); // 11.8 km/h
-close(topSpeed(1, { crouching: true }), 0.7, 1e-9, 'crouched pace');
-assert.ok(topSpeed(4, { sprinting: true }) < 14, 'even the fastest setting stays human-ish');
+close(topSpeed(1), 1.8, 1e-9, 'walking pace');                      // 6.5 km/h
+close(topSpeed(1, { sprinting: true }), 3.6, 0.01, 'running pace');  // 13.0 km/h
+close(topSpeed(1, { crouching: true }), 0.9, 1e-9, 'crouched pace');
+// The ceiling only applies with both the pace slider and Shift at maximum.
+assert.ok(topSpeed(WALK.maxPace, { sprinting: true }) < 10, 'even both extremes stay off vehicle speeds');
 assert.equal(topSpeed('1'), topSpeed(1), 'a slider value arrives as a string');
 assert.equal(topSpeed(undefined), topSpeed(1), 'no pace -> the default pace');
 assert.equal(topSpeed(0), topSpeed(WALK.minPace), 'a zero pace clamps, it does not become normal speed');
-assert.ok(topSpeed(1) < 2, 'walking pace must not creep back up to a vehicle speed');
+assert.ok(topSpeed(1) < 2.2, 'walking pace must not creep back up to a vehicle speed');
 
 // ------------------------------------------------- the velocity integrator
 function run({ fps, seconds, holdFor = seconds, pace = 1 }) {
@@ -103,7 +104,7 @@ for (let phase = 0; phase < 20; phase += 0.01) {
 }
 close(maxV, WALK.bobHeight, 1e-3, 'vertical head travel at a walk');
 close(maxL, WALK.bobSway, 1e-3, 'lateral head travel at a walk');
-assert.ok(maxV < 0.05 && maxL < 0.05, 'head movement must stay a cue, never a camera shake');
+assert.ok(maxV < 0.02 && maxL < 0.02, 'head movement must stay a cue, never a camera shake');
 // The head rises and falls twice per stride and sways once.
 close(gaitOffset(0, 1).vertical, 0, 1e-9, 'stride starts level');
 close(gaitOffset(Math.PI, 1).vertical, 0, 1e-9, 'and is level again a stride later');

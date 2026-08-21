@@ -1338,7 +1338,7 @@ function applyThemeDefaultsToSettings(resetFunctionFacades = true) {
   const paving = firstAssetVariant('paving', settings.pavementStyle);
   if (Object.prototype.hasOwnProperty.call(textureSets.pavement, paving)) settings.pavementStyle = paving;
   if (resetFunctionFacades) {
-    const facades = assetPoolVariants('facades').filter((value) => Object.prototype.hasOwnProperty.call(textureSets.facade, value));
+    const facades = facadeSeedPool(assetPoolVariants('facades'));
     Object.keys(functionFacadeState).forEach((key, index) => {
       const facade = normalizeFacadeKey(facades[index % Math.max(1, facades.length)] || functionFacadeState[key]);
       functionFacadeState[key] = facade;
@@ -1379,9 +1379,8 @@ function applyColorTheme(name, { preferManifest = true, assetTheme = null } = {}
   applyThemeDefaultsToSettings(true); // reseed facades/paving/furniture from the asset theme
   const rt = pick('roofTexture'); // set roof AFTER the asset-theme reseed so it wins
   if (rt && Object.prototype.hasOwnProperty.call(textureSets.roof, rt)) settings.roofTexture = rt;
-  // Reseed per-function building colour/roof, and facade when the theme defines a
-  // (light, tintable) facade set so the building colour reads.
-  const themeFacades = (theme.facades || []).filter((name) => Object.prototype.hasOwnProperty.call(textureSets.facade, name));
+  // Reseed per-function building colour, roof and wall.
+  const themeFacades = facadeSeedPool(theme.facades);
   Object.keys(functionBuildingStyleState).forEach((fn, index) => {
     const st = functionBuildingStyleState[fn];
     if (!st) return;
@@ -2120,16 +2119,45 @@ function loadPersistedSettings() {
   }
 }
 
+/* Facade seeding pool.
+ *
+ * The photo-based Residential A-F and Urban A-E sets are what an exported city
+ * is actually judged on, so every reseed — an asset theme, a colour theme, a
+ * shuffled look — draws from them rather than from the flat procedural walls.
+ * The sequence runs three Residential to one Urban and walks each family in
+ * order, so the residential set dominates, every facade in both families is
+ * reached, and no two adjacent functions get the same wall.
+ *
+ * The procedural facades (CivicStone, CampusGlass, MediterraneanStucco,
+ * CoastalWhite) stay in the Style dock's per-function dropdown and remain the
+ * fallback when a photo texture is missing — they simply no longer win a reseed.
+ */
+const RESIDENTIAL_FACADES = ['ResidentialA', 'ResidentialB', 'ResidentialC', 'ResidentialD', 'ResidentialE', 'ResidentialF'];
+const URBAN_FACADES = ['UrbanA', 'UrbanB', 'UrbanC', 'UrbanD', 'UrbanE'];
+const FACADE_RESIDENTIAL_SHARE = 3;   // residential walls per urban wall
+
+function facadeSeedPool(fallback = []) {
+  const has = (name) => Object.prototype.hasOwnProperty.call(textureSets.facade, name);
+  const residential = RESIDENTIAL_FACADES.filter(has);
+  const urban = URBAN_FACADES.filter(has);
+  if (!residential.length) {
+    const rest = urban.length ? urban : (fallback || []).filter(has);
+    return rest.length ? rest : ['UrbanA'];
+  }
+  const pool = [];
+  const slots = Math.max(residential.length, urban.length * FACADE_RESIDENTIAL_SHARE);
+  for (let i = 0; i < slots; i += 1) {
+    pool.push(residential[i % residential.length]);
+    if (urban.length && (i + 1) % FACADE_RESIDENTIAL_SHARE === 0) {
+      pool.push(urban[((i + 1) / FACADE_RESIDENTIAL_SHARE - 1) % urban.length]);
+    }
+  }
+  return pool;
+}
+
 function defaultFunctionBuildingStyle(fn, index = 0) {
-  // Prefer the active colour theme's facade set (light, tintable facades that let
-  // the building colour read) when it defines one; the default theme leaves it
-  // unset and falls back to the historical mixed pool.
-  const themeFacades = (activeColorTheme().facades || [])
-    .filter((name) => Object.prototype.hasOwnProperty.call(textureSets.facade, name));
-  const facadeOptions = themeFacades.length
-    ? themeFacades
-    : uniqueAssetVariants('facades', Object.keys(textureSets.facade))
-        .filter((name) => Object.prototype.hasOwnProperty.call(textureSets.facade, name));
+  // Walls come from the weighted Residential/Urban pool (see facadeSeedPool).
+  const facadeOptions = facadeSeedPool(activeColorTheme().facades);
   return {
     color: getSemanticColor(fn) || ['#f1f5f9', '#dbeafe', '#fee2e2', '#dcfce7', '#fef3c7', '#ede9fe'][index % 6],
     facade: normalizeFacadeKey(facadeOptions[index % Math.max(1, facadeOptions.length)] || 'UrbanA'),

@@ -16,12 +16,12 @@ import os
 import re
 import tempfile
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 
-from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtCore import QByteArray, QUrl, QUrlQuery, QVariant
+from qgis.PyQt.QtNetwork import QNetworkRequest
 from qgis.core import (
+    QgsBlockingNetworkRequest,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
     QgsFeature,
@@ -47,6 +47,11 @@ OVERPASS_ENDPOINTS = (
 USER_AGENT = f"3D-OSM-Model-QGIS-Plugin/{PLUGIN_VERSION} (https://github.com/YusufEminoglu/osm_3d_model)"
 DEFAULT_TIMEOUT_S = 60
 MAX_RESPONSE_BYTES = 128 * 1024 * 1024
+# One extra attempt per mirror before moving on. Overpass drops connections and
+# returns 504s under load often enough that a single immediate retry converts a
+# large share of failures into successes, and it costs nothing when the first
+# attempt works.
+MIRROR_RETRY_DELAY_S = 1.2
 
 # Disk cache for Overpass responses. The public API is frequently rate-limited
 # (HTTP 429); caching the exact-query JSON means re-running on the same area (or
@@ -191,35 +196,73 @@ out body geom;
 """.strip()
 
 
-def _fetch_one(endpoint: str, query: str, timeout_s: int) -> dict:
-    parsed_endpoint = urllib.parse.urlparse(endpoint)
-    if parsed_endpoint.scheme not in {"https", "http"} or not parsed_endpoint.netloc:
-        raise OsmDownloadError(f"Invalid Overpass endpoint URL: {endpoint}")
-    data = urllib.parse.urlencode({"data": query}).encode("utf-8")
-    req = urllib.request.Request(
-        endpoint,
-        data=data,
-        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout_s + 10) as resp:  # nosec B310 - scheme validated above.
-            payload_bytes = resp.read(MAX_RESPONSE_BYTES + 1)
-            if len(payload_bytes) > MAX_RESPONSE_BYTES:
-                raise OsmDownloadError(
-                    f"response exceeded the {MAX_RESPONSE_BYTES // (1024 * 1024)} MB safety limit"
-                )
-            payload = payload_bytes.decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as exc:
-        if exc.code == 429:
-            raise OsmDownloadError("rate-limited (HTTP 429)") from exc
-        raise OsmDownloadError(f"HTTP {exc.code}: {exc.reason}") from exc
-    except Exception as exc:
-        raise OsmDownloadError(f"fetch failed: {exc}") from exc
+def _network_enum(group: str, name: str):
+    """Qt 5 exposes these enum members on QNetworkRequest, Qt 6 nests them."""
+    enum = getattr(QNetworkRequest, group, None)
+    return getattr(enum, name) if enum is not None else getattr(QNetworkRequest, name)
 
+
+def _fetch_one(endpoint: str, query: str, timeout_s: int):
+    """POST the query through QGIS's own network stack.
+
+    Returns ``(payload, detail, transient)``. ``transient`` marks a failure worth
+    retrying on the same mirror (a dropped connection, a 5xx, a rate limit) as
+    opposed to one that will fail again (a bad URL, a malformed body).
+
+    This used to go through ``urllib.request.urlopen``, which bypasses every
+    network setting QGIS holds: the proxy, the TLS configuration and the
+    certificate store. On machines behind a corporate proxy or with a pinned TLS
+    version that surfaced as ``SSL: WRONG_VERSION_NUMBER`` and looked like the
+    Overpass servers were down. QgsBlockingNetworkRequest uses the same stack as
+    the rest of QGIS, so if the browser and the QGIS Browser panel can reach the
+    internet, so can this.
+    """
+    url = QUrl(endpoint)
+    if not url.isValid() or url.scheme() != "https" or not url.host():
+        return None, "invalid HTTPS endpoint", False
+    encoded = QUrlQuery()
+    encoded.addQueryItem("data", query)
+    body = QByteArray(
+        encoded.query(QUrl.ComponentFormattingOption.FullyEncoded).encode("ascii")
+    )
+    request = QNetworkRequest(url)
+    if hasattr(request, "setTransferTimeout"):
+        request.setTransferTimeout((timeout_s + 10) * 1000)
+    request.setHeader(
+        _network_enum("KnownHeaders", "ContentTypeHeader"),
+        "application/x-www-form-urlencoded",
+    )
+    request.setRawHeader(b"Accept", b"application/json")
+    request.setRawHeader(b"User-Agent", USER_AGENT.encode("ascii", errors="replace"))
+
+    client = QgsBlockingNetworkRequest()
     try:
-        return json.loads(payload)
-    except json.JSONDecodeError as exc:
-        raise OsmDownloadError(f"non-JSON response ({len(payload)} bytes)") from exc
+        code = client.post(request, body, False, None)
+    except Exception as exc:  # noqa: BLE001 - any Qt failure is a network failure here
+        return None, str(exc).strip() or "network request exception", True
+    if code != QgsBlockingNetworkRequest.NoError:
+        detail = "network request failed"
+        error_message = getattr(client, "errorMessage", None)
+        if callable(error_message):
+            detail = str(error_message()).strip() or detail
+        return None, detail, True
+
+    reply = client.reply()
+    try:
+        status = int(reply.attribute(_network_enum("Attribute", "HttpStatusCodeAttribute")))
+    except (TypeError, ValueError):
+        status = 0
+    if status and not 200 <= status < 300:
+        transient = status == 429 or 500 <= status < 600
+        label = "rate-limited (HTTP 429)" if status == 429 else f"HTTP {status}"
+        return None, label, transient
+    content = bytes(reply.content())
+    if len(content) > MAX_RESPONSE_BYTES:
+        return None, f"response exceeded the {MAX_RESPONSE_BYTES // (1024 * 1024)} MB safety limit", False
+    try:
+        return json.loads(content.decode("utf-8")), "", False
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return None, f"non-JSON response ({len(content)} bytes): {exc}", False
 
 
 def _validate_overpass_payload(payload) -> dict:
@@ -273,26 +316,40 @@ def fetch_overpass(min_lat: float, min_lon: float, max_lat: float, max_lon: floa
                 if feedback:
                     feedback("Using cached OSM (no download) ...")
                 return cached
-    last_error = None
+    failures = []
     for index, endpoint in enumerate(OVERPASS_ENDPOINTS):
-        if cancel_check and cancel_check():
-            raise OsmDownloadError("OSM download cancelled.")
         host = urllib.parse.urlparse(endpoint).netloc or endpoint
-        if feedback:
-            prefix = "Querying" if index == 0 else f"Mirror {index} —"
-            feedback(f"{prefix} {host} ...")
-        try:
-            payload = _validate_overpass_payload(_fetch_one(endpoint, query, timeout_s))
-            if use_cache:
-                _write_cache(query, payload)
-            return payload
-        except OsmDownloadError as exc:
-            last_error = exc
-            if feedback and index + 1 < len(OVERPASS_ENDPOINTS):
-                feedback(f"{host} {exc}; trying next mirror...")
+        for attempt in range(2):
+            if cancel_check and cancel_check():
+                raise OsmDownloadError("OSM download cancelled.")
+            if feedback:
+                if attempt:
+                    feedback(f"{host} transient failure; retrying once ...")
+                else:
+                    prefix = "Querying" if index == 0 else f"Mirror {index} —"
+                    feedback(f"{prefix} {host} ...")
+            if attempt:
+                time.sleep(MIRROR_RETRY_DELAY_S)
+            payload, detail, transient = _fetch_one(endpoint, query, timeout_s)
+            if payload is not None:
+                try:
+                    payload = _validate_overpass_payload(payload)
+                except OsmDownloadError as exc:
+                    failures.append(f"{host}: {exc}")
+                    break
+                if use_cache:
+                    _write_cache(query, payload)
+                return payload
+            failures.append(f"{host}: {detail}")
+            # Only a transient failure is worth a second attempt on the same
+            # mirror; a bad URL or a malformed body will fail identically.
+            if not (transient and attempt == 0):
+                break
+        if feedback and index + 1 < len(OVERPASS_ENDPOINTS):
+            feedback(f"{host} failed; trying next mirror ...")
     raise OsmDownloadError(
-        f"All Overpass endpoints failed (last: {last_error}). Wait a minute and retry, "
-        "or pick a smaller area."
+        "All Overpass mirrors failed (" + "; ".join(failures[-3:]) + "). "
+        "Wait a minute and retry, or pick a smaller area."
     )
 
 
