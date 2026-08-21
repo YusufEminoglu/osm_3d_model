@@ -4,9 +4,17 @@
     py -3 docs/assets/make_assets.py
 
 
-Hand-written SVG with SMIL animation only: no <style> blocks and no script, both
-of which GitHub's README sanitiser strips. Every colour is a presentation
-attribute so the markup survives that pass intact.
+Hand-written SVG, animated with SMIL and presentation attributes only.
+
+GitHub strips <script> from SVG, so nothing here depends on it. (An earlier note
+here claimed <style> is stripped too - that is wrong for a standalone .svg file
+served as an image, where an internal <style> block does apply; it is only inline
+SVG in markdown that gets that treatment. SMIL is used anyway because it needs no
+cascade at all.)
+
+The rule that actually matters: no figure may depend on an animation having run.
+Every element carries the fill, opacity and position it must already have on the
+first frame.
 """
 from __future__ import annotations
 
