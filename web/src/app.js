@@ -18,6 +18,14 @@ import {
   sanitizeExportBaseName,
   timestampedFilename
 } from './export_utils.js';
+import {
+  LOOKS,
+  TOUR_DURATION,
+  TOUR_SHOTS,
+  getLook,
+  pickLookId,
+  tourStateAt
+} from './looks.js';
 
 let currentLang = 'EN';
 const urlParams = new URLSearchParams(window.location.search);
@@ -401,6 +409,10 @@ Object.assign(i18n.TR, {
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xcee4ef);
 scene.fog = new THREE.FogExp2(0xcee4ef, 0.0003);
+// Horizon haze keyed to the sun (see updateTimeOfDay).
+const FOG_DAY = new THREE.Color(0xcee4ef);
+const FOG_DUSK = new THREE.Color(0x6b5a63);
+const FOG_NIGHT = new THREE.Color(0x0d1524);
 
 const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 20000);
 camera.position.set(0, 420, 580);
@@ -1305,21 +1317,28 @@ function activeColorTheme() {
 }
 
 // Apply an easy colour theme to the scene settings (content colours only — never
-// the UI chrome). Scene colours come from the manifest viewerDefaults when present
-// (builder._THEMES, authoritative on export) and fall back to COLOR_THEMES so a
-// live switch works too. Per-function building colours/roofs are reseeded.
-function applyColorTheme(name) {
+// the UI chrome). Per-function building colours/roofs are reseeded.
+//
+// `preferManifest` decides who wins when the export's manifest also carries a
+// colour. On load that must be the manifest (builder._THEMES is authoritative:
+// the theme picked in QGIS is what the user asked for). On an explicit *live*
+// switch it must be the theme — the manifest was written for whichever theme was
+// exported, so letting it win meant every runtime theme change silently kept the
+// old roads, base and greens. `assetTheme` lets a caller pin a different asset
+// set than the theme's own, and is applied before the asset-driven reseed so the
+// paving/facade/furniture defaults come from the right pool.
+function applyColorTheme(name, { preferManifest = true, assetTheme = null } = {}) {
   const theme = COLOR_THEMES[name] || COLOR_THEMES[DEFAULT_COLOR_THEME];
   settings.colorTheme = COLOR_THEMES[name] ? name : DEFAULT_COLOR_THEME;
   const vd = (typeof projectManifest !== 'undefined' && projectManifest) ? (projectManifest.viewerDefaults || {}) : {};
-  const pick = (key) => (vd[key] != null ? vd[key] : theme[key]);
+  const pick = (key) => (preferManifest && vd[key] != null ? vd[key] : (theme[key] != null ? theme[key] : vd[key]));
   settings.roadColor = pick('roadColor') || settings.roadColor;
   settings.islandColor = pick('islandColor') || settings.islandColor;
   settings.terrainSideColor = pick('terrainSideColor') || settings.terrainSideColor;
   settings.terrainOutsideColor = pick('terrainOutsideColor') || settings.terrainOutsideColor;
   settings.parkColor = pick('parkColor') || settings.parkColor;
   settings.sportColor = pick('sportColor') || settings.sportColor;
-  const at = pick('assetTheme');
+  const at = (assetTheme && assetThemePresets[assetTheme]) ? assetTheme : pick('assetTheme');
   if (at && assetThemePresets[at]) settings.assetTheme = at;
   applyThemeDefaultsToSettings(true); // reseed facades/paving/furniture from the asset theme
   const rt = pick('roofTexture'); // set roof AFTER the asset-theme reseed so it wins
@@ -1348,7 +1367,41 @@ function maybeApplyColorThemeFromManifest(persisted) {
   const mTheme = (typeof projectManifest !== 'undefined' && projectManifest) ? (projectManifest.viewerDefaults || {}).colorTheme : null;
   if (!mTheme || !COLOR_THEMES[mTheme]) return;
   if (persisted && persisted.colorTheme === mTheme) return;
+  // A curated look picked in the viewer is an explicit, deliberate choice, so it
+  // survives a reload. The manifest's theme only wins over an export the user
+  // has not restyled — otherwise every reload would throw the look away.
+  const storedLook = (persisted && persisted.activeLook) || settings.activeLook;
+  if (storedLook && getLook(storedLook)) return;
   applyColorTheme(mTheme);
+  settings.activeLook = '';
+}
+
+// The per-function building styles (colour, roof, facade) persist under their
+// own localStorage key, independent of the colour theme, so the two can drift
+// apart: reopening an export after the theme moved on left every building
+// painted in the previous theme's colours with its roofs, which is what the
+// user actually sees. Reseed only when *nothing* matches the active theme any
+// more — a partial match means the user edited a function on purpose and that
+// edit must survive.
+function reconcileFunctionStylesWithTheme() {
+  const keys = Object.keys(functionBuildingStyleState);
+  if (!keys.length) return false;
+  const hex = (value) => String(value || '').trim().toLowerCase();
+  const stillMatches = keys.some((fn) => hex(functionBuildingStyleState[fn]?.color) === hex(getSemanticColor(fn)));
+  if (stillMatches) return false;
+  keys.forEach((fn) => {
+    const style = functionBuildingStyleState[fn];
+    if (!style) return;
+    style.color = getSemanticColor(fn);
+    style.roofShape = roofShapeValue(settings.roofShape, style.roofShape);
+    style.roofHeight = settings.roofHeight;
+    if (Object.prototype.hasOwnProperty.call(textureSets.roof, settings.roofTexture)) {
+      style.roofTexture = settings.roofTexture;
+    }
+    functionColorState[fn] = style.color;
+  });
+  saveFunctionBuildingStyles();
+  return true;
 }
 
 function assetColor(name, fallback = 0x64748b) {
@@ -1814,6 +1867,7 @@ const settings = {
   terrainAnalysisMode: 'Texture',
   assetTheme: 'Modern Urban',
   colorTheme: DEFAULT_COLOR_THEME,
+  activeLook: '',
   showXyzTiles: false,
   xyzTileUrl: '',
   roofTexture: 'USShingle',
@@ -1941,7 +1995,7 @@ const PERSISTED_SETTING_KEYS = [
   'showTerrainSides', 'terrainSideDrop', 'terrainSideColor',
   'fogDensity', 'autoTime', 'autoTimeSpeed', 'enableSSAO', 'enableBloom',
   'pavementStyle', 'hardscapeStyle', 'hardscapeHeight', 'buildingMode', 'facadeTextureScale', 'terrainAnalysisMode', 'showXyzTiles', 'xyzTileUrl',
-  'assetTheme', 'colorTheme',
+  'assetTheme', 'colorTheme', 'activeLook',
   'floorHeight', 'roofTexture', 'roofShape', 'roofHeight', 'roadStyle', 'roadColor', 'roadColorMode', 'roadWidth',
   'showLights', 'lightStyle', 'showBenches', 'benchStyle', 'showBins', 'binStyle', 'showBusStops', 'stopStyle',
   'showIslands', 'showParcels', 'showHardscape', 'showBuildings', 'showTrees', 'showFurniture',
@@ -2784,6 +2838,13 @@ function updateTimeOfDay() {
 
   sky.material.uniforms.sunPosition.value.copy(pos);
   scene.fog.density = settings.fogDensity;
+  // Fog colour used to be a fixed daylight blue, so any night scene with real
+  // fog was painted in a bright daytime haze that washed the whole city out —
+  // most visible on the dusk/night looks and on recorded fly-throughs. Track
+  // the sun instead: night -> dusk -> day, keyed on solar elevation.
+  const duskMix = THREE.MathUtils.clamp((elevationDeg + 6) / 8, 0, 1);
+  const dayMix = THREE.MathUtils.clamp((elevationDeg - 2) / 12, 0, 1);
+  scene.fog.color.copy(FOG_NIGHT).lerp(FOG_DUSK, duskMix).lerp(FOG_DAY, dayMix);
 
   // Night Mode effects
   const isNight = elevationDeg < -3;
@@ -3086,6 +3147,7 @@ function applyManifestDefaults() {
     }
     applyThemeDefaultsToSettings(false);
     maybeApplyColorThemeFromManifest(persisted);
+    reconcileFunctionStylesWithTheme();
     return;
   }
   const defaults = { ...(projectManifest.viewerDefaults || {}), ...(projectManifest.analysisDefaults || {}) };
@@ -3095,6 +3157,7 @@ function applyManifestDefaults() {
   }
   applyThemeDefaultsToSettings(false);
   maybeApplyColorThemeFromManifest(null);
+  reconcileFunctionStylesWithTheme();
 }
 
 async function loadTexture(path, repeatX = 1, repeatY = 1) {
@@ -8757,6 +8820,281 @@ document.addEventListener('keyup', (e) => {
   }
 });
 
+/* ======================================================================= */
+/* v1.5.0 — curated looks, the shuffle button and the cinematic tour.       */
+/*                                                                          */
+/* A "look" (looks.js) is a whole composition — colour theme, textures,     */
+/* massing and atmosphere — that was tuned by eye, not a random draw across */
+/* individual settings. Shuffling picks one of ten, never the current one.  */
+/* Layer visibility is deliberately untouched: silently switching heavy     */
+/* layers back on would cost frames the user had chosen to save.            */
+/* ======================================================================= */
+
+let toastTimer = null;
+function showToast(title, detail) {
+  const host = document.getElementById('toast-host');
+  if (!host) return;
+  host.replaceChildren();
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  const heading = document.createElement('strong');
+  heading.textContent = title;                       // textContent, never innerHTML
+  toast.appendChild(heading);
+  if (detail) {
+    const line = document.createElement('span');
+    line.textContent = detail;
+    toast.appendChild(line);
+  }
+  host.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toast.classList.remove('visible');
+    window.setTimeout(() => toast.remove(), 320);
+  }, 3400);
+}
+
+// Apply one curated look. Order matters: the colour theme reseeds paving,
+// facades and furniture from the asset pool, so the look's own texture and
+// massing choices have to be written after it or they would be overwritten.
+function applyLook(id, { announce = true } = {}) {
+  const look = getLook(id);
+  if (!look) return false;
+
+  applyColorTheme(look.colorTheme, { preferManifest: false, assetTheme: look.settings.assetTheme });
+  for (const [key, value] of Object.entries(look.settings)) {
+    if (key === 'assetTheme') continue;              // already applied, before the reseed
+    if (!(key in settings)) continue;
+    settings[key] = value;
+  }
+  settings.roofShape = roofShapeValue(settings.roofShape, 'Pyramid');
+
+  // Per-function styles win over the global roof settings when a building is
+  // drawn, so a look that only wrote `settings` would leave every roof alone.
+  Object.values(functionBuildingStyleState).forEach((style) => {
+    if (!style) return;
+    style.roofShape = settings.roofShape;
+    style.roofHeight = settings.roofHeight;
+    if (Object.prototype.hasOwnProperty.call(textureSets.roof, settings.roofTexture)) {
+      style.roofTexture = settings.roofTexture;
+    }
+  });
+  saveFunctionBuildingStyles();
+
+  // Same invalidation the asset-theme dock control performs: the procedural
+  // ground/basemap textures and the vehicle/pedestrian templates are baked per
+  // asset theme and would otherwise survive the switch.
+  clearGroup(carGroup);
+  clearGroup(pedestrianGroup);
+  releasePersistentTexture(terrainTexture);
+  releasePersistentTexture(baseMapTexture);
+  terrainTexture = null;
+  baseMapTexture = null;
+  clearProceduralTemplateCaches();
+
+  settings.activeLook = look.id;
+  savePersistedSettings();
+  updateWeather();
+  checkTimeChange();
+  updateDockControls();
+  renderLooksGallery();
+  requestSceneRebuild(0);
+  if (announce) showToast(look.name, look.blurb);
+  return true;
+}
+
+function shuffleLook() {
+  applyLook(pickLookId(settings.activeLook));
+}
+
+function renderLooksGallery() {
+  const host = document.getElementById('look-list');
+  if (!host) return;
+  host.replaceChildren();
+  LOOKS.forEach((look) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'look-card';
+    card.classList.toggle('active', settings.activeLook === look.id);
+    card.setAttribute('aria-pressed', settings.activeLook === look.id ? 'true' : 'false');
+
+    const strip = document.createElement('span');
+    strip.className = 'look-swatch';
+    look.swatch.forEach((hex) => {
+      const chip = document.createElement('i');
+      chip.style.background = hex;
+      strip.appendChild(chip);
+    });
+
+    const text = document.createElement('span');
+    text.className = 'look-text';
+    const name = document.createElement('strong');
+    name.textContent = look.name;
+    const blurb = document.createElement('small');
+    blurb.textContent = look.blurb;
+    text.append(name, blurb);
+
+    card.append(strip, text);
+    card.addEventListener('click', () => applyLook(look.id));
+    host.appendChild(card);
+  });
+}
+
+/* ------------------------------------------------------------------ Tour ---
+ * A fixed five-shot flight resolved against the model's own extent, so the
+ * same choreography frames a 4 ha courtyard and a 300 ha district. The tour
+ * borrows the camera and the clock and hands both back when it ends or is
+ * interrupted — a tour that permanently moved your view and reset your time of
+ * day would be a trap. Point it at Export Studio's recorder for a video.
+ */
+const tourState = { active: false, elapsed: 0, saved: null, lastTimeApplied: -1 };
+
+function tourModelRadius() {
+  if (bounds && Number.isFinite(bounds.minX) && Number.isFinite(bounds.maxY)) {
+    const halfWidth = Math.abs(bounds.maxX - bounds.minX) / 2;
+    const halfDepth = Math.abs(bounds.maxY - bounds.minY) / 2;
+    const radius = Math.hypot(halfWidth, halfDepth);
+    if (radius > 1) return radius;
+  }
+  return 300;
+}
+
+function tourGroundY() {
+  const sampled = terrainLocalYAt(0, 0);
+  if (Number.isFinite(sampled)) return sampled;
+  return Number.isFinite(terrainHeightStats?.avg) ? terrainHeightStats.avg : 0;
+}
+
+function formatClock(seconds) {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+function applyTourFrame(t) {
+  const state = tourStateAt(t);
+  if (!state) return;
+  const radius = tourModelRadius();
+  const ground = tourGroundY();
+  const bearing = state.azimuth * Math.PI / 180;
+  const targetX = state.targetX * radius;
+  const targetZ = state.targetZ * radius;
+  const camHeight = Math.max(6, state.height * radius);
+
+  camera.position.set(
+    targetX + Math.cos(bearing) * state.radius * radius,
+    ground + camHeight,
+    targetZ + Math.sin(bearing) * state.radius * radius
+  );
+  // Look slightly below the camera, capped so the establishing shot still points
+  // at the city instead of the horizon.
+  controls.target.set(targetX, ground + Math.min(camHeight * 0.45, radius * 0.06), targetZ);
+  camera.lookAt(controls.target);
+  if (Math.abs(camera.fov - state.fov) > 0.01) {
+    camera.fov = state.fov;
+    camera.updateProjectionMatrix();
+  }
+  // The sun only needs recomputing a few times a second, not every frame.
+  if (Math.abs(state.timeOfDay - tourState.lastTimeApplied) > 0.08) {
+    settings.timeOfDay = state.timeOfDay;
+    tourState.lastTimeApplied = state.timeOfDay;
+    checkTimeChange();
+  }
+
+  const shot = document.getElementById('tour-shot');
+  const clock = document.getElementById('tour-clock');
+  const progress = document.getElementById('tour-progress');
+  if (shot) shot.textContent = `${state.shotIndex + 1}/${TOUR_SHOTS.length} · ${state.shotName}`;
+  if (clock) clock.textContent = `${formatClock(state.elapsed)} / ${formatClock(state.total)}`;
+  if (progress) progress.style.width = `${(state.progress * 100).toFixed(1)}%`;
+}
+
+function startTour() {
+  if (tourState.active) return;
+  if (isWalkMode) walkControls.unlock();
+  tourState.saved = {
+    position: camera.position.clone(),
+    target: controls.target.clone(),
+    fov: camera.fov,
+    timeOfDay: settings.timeOfDay,
+    autoOrbit: settings.autoOrbit,
+    autoTime: settings.autoTime
+  };
+  settings.autoOrbit = false;
+  settings.autoTime = false;
+  controls.enabled = false;
+  controls.autoRotate = false;
+  _flyT = 1.0;                     // cancel any bookmark fly-to still in flight
+  tourState.active = true;
+  tourState.elapsed = 0;
+  tourState.lastTimeApplied = -1;
+  document.getElementById('tour-hud')?.classList.remove('hidden');
+  document.getElementById('tour-toggle')?.classList.add('active');
+  applyTourFrame(0);
+  showToast('Cinematic tour', `${TOUR_SHOTS.length} shots, ${formatClock(TOUR_DURATION)} — press T or Esc to stop.`);
+}
+
+function stopTour(restore = true) {
+  if (!tourState.active) return;
+  tourState.active = false;
+  controls.enabled = !isWalkMode;
+  if (restore && tourState.saved) {
+    const saved = tourState.saved;
+    camera.position.copy(saved.position);
+    controls.target.copy(saved.target);
+    camera.fov = saved.fov;
+    camera.updateProjectionMatrix();
+    settings.timeOfDay = saved.timeOfDay;
+    settings.autoOrbit = saved.autoOrbit;
+    settings.autoTime = saved.autoTime;
+    checkTimeChange();
+    updateDockControls();
+  }
+  tourState.saved = null;
+  document.getElementById('tour-hud')?.classList.add('hidden');
+  document.getElementById('tour-toggle')?.classList.remove('active');
+}
+
+function updateTour(delta) {
+  if (!tourState.active) return;
+  tourState.elapsed += delta;
+  const finished = tourState.elapsed >= TOUR_DURATION;
+  applyTourFrame(Math.min(tourState.elapsed, TOUR_DURATION));
+  if (finished) stopTour(true);
+}
+
+document.getElementById('look-shuffle')?.addEventListener('click', () => shuffleLook());
+document.getElementById('look-shuffle-dock')?.addEventListener('click', () => shuffleLook());
+document.getElementById('tour-toggle')?.addEventListener('click', () => (tourState.active ? stopTour(true) : startTour()));
+document.getElementById('tour-stop')?.addEventListener('click', () => stopTour(true));
+
+// Any deliberate camera input ends the tour and leaves the user where they are.
+['pointerdown', 'wheel'].forEach((type) => {
+  renderer.domElement.addEventListener(type, () => {
+    if (tourState.active) stopTour(false);
+  }, { passive: true });
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+  const target = event.target;
+  if (target && (target.isContentEditable || (target.matches && target.matches('input, textarea, select')))) return;
+  if (event.code === 'Escape' && tourState.active) {
+    stopTour(true);
+    return;
+  }
+  if (isWalkMode) return;
+  if (event.code === 'KeyL') {
+    event.preventDefault();
+    shuffleLook();
+  } else if (event.code === 'KeyT') {
+    event.preventDefault();
+    if (tourState.active) stopTour(true);
+    else startTour();
+  }
+});
+
+renderLooksGallery();
+
 function animate() {
   requestAnimationFrame(animate);
   const time = performance.now();
@@ -8875,6 +9213,10 @@ function animate() {
     settings.timeOfDay = (settings.timeOfDay + settings.autoTimeSpeed * delta) % 24;
     checkTimeChange();
   }
+
+  // Cinematic tour — owns the camera while it runs, so it goes before the
+  // fly-to blend rather than fighting it for the same frame.
+  updateTour(delta);
 
   // Fly-to animation
   if (_flyT < 1.0) {
@@ -9788,6 +10130,7 @@ initDockUi();
     helpWalkRow: 'Enter walk mode', helpWalkMove: 'Move & look', helpExitRow: 'Exit walk / close',
     helpMeasureRow: 'Measure distance', helpShotRow: 'Export image, document or video',
     helpSceneRow: 'Time / weather / sun', helpLangRow: 'Switch language',
+    helpLookRow: 'Shuffle a curated look', helpTourRow: 'Play the cinematic tour',
     helpDrag: 'Left-drag', helpWheel: 'Mouse wheel', helpRdrag: 'Right-drag', helpMouse: 'mouse',
   });
   Object.assign(i18n.TR, {
@@ -9802,6 +10145,7 @@ initDockUi();
     helpWalkRow: 'Yurume moduna gir', helpWalkMove: 'Hareket et & bak', helpExitRow: 'Yurumeden cik / kapat',
     helpMeasureRow: 'Mesafe olc', helpShotRow: 'Gorsel, belge veya video export',
     helpSceneRow: 'Zaman / hava / gunes', helpLangRow: 'Dili degistir',
+    helpLookRow: 'Rastgele hazir gorunum', helpTourRow: 'Sinematik turu oynat',
     helpDrag: 'Sol surukle', helpWheel: 'Fare tekeri', helpRdrag: 'Sag surukle', helpMouse: 'fare',
   });
   if (typeof updateHtmlLang === 'function') updateHtmlLang();
@@ -9944,6 +10288,8 @@ initDockUi();
       ['helpWalkRow', '<span class="help-key">W</span>'],
       ['helpWalkMove', 'WASD + ' + t('helpMouse')],
       ['helpExitRow', '<span class="help-key">Esc</span>'],
+      ['helpLookRow', '<span class="help-key">L</span>'],
+      ['helpTourRow', '<span class="help-key">T</span>'],
       ['helpMeasureRow', '📏'],
       ['helpShotRow', 'EX'],
       ['helpSceneRow', '☀'],

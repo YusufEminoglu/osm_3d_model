@@ -73,6 +73,10 @@
             <button id="scene-toggle" class="panel-btn scene-btn" data-dock-target="scene-dock" title="Scene &amp; Sun" data-i18n-title="dockTitleScene">☀</button>
             <button id="model-studio-toggle" class="panel-btn model-studio-btn" data-dock-target="model-studio-dock" title="Model Studio" data-i18n-title="dockTitleModelStudio">✦</button>
             <button id="basemap-toggle" class="panel-btn basemap-btn" data-dock-target="basemap-dock" title="Basemap &amp; texture">🗺</button>
+            <button id="looks-toggle" class="panel-btn looks-btn" data-dock-target="looks-dock" title="Look gallery">◈</button>
+            <span class="tb-sep" aria-hidden="true"></span>
+            <button id="look-shuffle" class="panel-btn shuffle-btn" title="Randomize look (L)">🎲</button>
+            <button id="tour-toggle" class="panel-btn tour-btn" title="Cinematic tour (T)">▶</button>
             <span class="tb-sep" aria-hidden="true"></span>
             <button id="walk-toggle" class="panel-btn walk-btn" title="Walk mode" data-i18n-title="dockTitleWalk">W</button>
             <span class="tb-sep" aria-hidden="true"></span>
@@ -105,6 +109,15 @@
             </div>
         </div>
     </div>
+
+    <aside class="dock-panel looks-dock hidden" id="looks-dock">
+        <div class="dock-head"><span>Looks</span><button class="dock-close" data-close="looks-dock" aria-label="Close look gallery">x</button></div>
+        <p class="dock-note">Ten hand-tuned compositions of palette, textures, massing and light. Applying one never changes which layers are visible.</p>
+        <div class="look-list" id="look-list"></div>
+        <div class="dock-actions">
+            <button id="look-shuffle-dock" type="button">🎲 Shuffle a look (L)</button>
+        </div>
+    </aside>
 
     <aside class="dock-panel hidden" id="layer-dock">
         <div class="dock-head"><span data-i18n="dockLayers">Layers</span><button class="dock-close" data-close="layer-dock">x</button></div>
@@ -362,6 +375,16 @@
             <div class="help-foot" data-i18n="helpFoot">3D OSM Model · PlanX 3D City engine</div>
         </div>
     </div>
+
+    <div id="tour-hud" class="tour-hud hidden" role="status" aria-live="polite">
+        <span class="tour-dot" aria-hidden="true"></span>
+        <span id="tour-shot" class="tour-shot">Establishing</span>
+        <span id="tour-clock" class="tour-clock">0:00 / 0:35</span>
+        <div class="tour-track" aria-hidden="true"><div id="tour-progress" class="tour-progress"></div></div>
+        <button id="tour-stop" class="tour-stop" type="button">Stop</button>
+    </div>
+
+    <div id="toast-host" class="toast-host" role="status" aria-live="polite"></div>
 
     <div id="osm-credit" class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> <span data-i18n="osmContributors">contributors</span></div>
 

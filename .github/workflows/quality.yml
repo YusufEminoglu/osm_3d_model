@@ -27,8 +27,10 @@ jobs:
         with:
           node-version: "22"
       - name: Check viewer syntax
-        run: node --check web/src/app.js && node --check web/src/export_utils.js
+        run: node --check web/src/app.js && node --check web/src/export_utils.js && node --check web/src/looks.js
       - name: Lint viewer globals and dead declarations
-        run: npx --yes eslint@8.57.1 web/src/app.js web/src/export_utils.js --no-eslintrc --env browser,es2021 --parser-options ecmaVersion:2022 --parser-options sourceType:module --rule no-undef:error --rule no-unused-vars:error
+        run: npx --yes eslint@8.57.1 web/src/app.js web/src/export_utils.js web/src/looks.js --no-eslintrc --env browser,es2021 --parser-options ecmaVersion:2022 --parser-options sourceType:module --rule no-undef:error --rule no-unused-vars:error
       - name: Test export utilities
         run: node tests/export_utils_check.mjs
+      - name: Test curated look catalogue
+        run: node tests/looks_check.mjs

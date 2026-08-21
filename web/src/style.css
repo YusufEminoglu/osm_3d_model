@@ -1529,3 +1529,383 @@ body.measuring #map { cursor: crosshair; }
 #main-panel {
     margin-top: 12px;
 }
+
+/* ======================================================================= */
+/* v1.5.0 — dashboard readability.                                          */
+/*                                                                          */
+/* The v0.8.0 token refactor themed the panel *surface* (.glass-panel gets   */
+/* --planx-bg-panel) but never reached the dashboard's *contents*, which     */
+/* still carried the hardcoded light-mode colours they were written with:    */
+/* p{color:#475569}, h1{color:#8a675c}, .metric-grid div{background:#fff},   */
+/* .project-meta{background:#fff}, .controls{background:rgba(255,255,255,.7)}*/
+/* In dark mode the panel flipped and its contents did not — dark slate text */
+/* on a dark navy panel, and white cards punched into it. Everything below   */
+/* re-expresses those colours as tokens so both themes stay legible.         */
+/* ======================================================================= */
+
+:root {
+    --planx-accent-ink:      #8a675c;   /* headings/values on a panel surface */
+    --planx-surface-raised:  #ffffff;   /* cards lifted off the panel         */
+    --planx-surface-sunken:  rgba(15, 23, 42, 0.045);
+    --planx-chip-bg:         #e2e8f0;
+    --planx-chip-ink:        #334155;
+    --planx-ok-bg:           #dcfce7;
+    --planx-ok-ink:          #166534;
+    --planx-warn-bg:         #fef3c7;
+    --planx-warn-ink:        #92400e;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --planx-accent-ink:     #e9c9ba;
+        --planx-surface-raised: rgba(148, 163, 184, 0.12);
+        --planx-surface-sunken: rgba(2, 6, 23, 0.34);
+        --planx-chip-bg:        rgba(148, 163, 184, 0.18);
+        --planx-chip-ink:       #dbe3ec;
+        --planx-ok-bg:          rgba(34, 197, 94, 0.20);
+        --planx-ok-ink:         #9ff0bb;
+        --planx-warn-bg:        rgba(245, 158, 11, 0.20);
+        --planx-warn-ink:       #fcd77e;
+    }
+}
+
+[data-theme="dark"] {
+    --planx-accent-ink:     #e9c9ba;
+    --planx-surface-raised: rgba(148, 163, 184, 0.12);
+    --planx-surface-sunken: rgba(2, 6, 23, 0.34);
+    --planx-chip-bg:        rgba(148, 163, 184, 0.18);
+    --planx-chip-ink:       #dbe3ec;
+    --planx-ok-bg:          rgba(34, 197, 94, 0.20);
+    --planx-ok-ink:         #9ff0bb;
+    --planx-warn-bg:        rgba(245, 158, 11, 0.20);
+    --planx-warn-ink:       #fcd77e;
+}
+
+/* Generic prose inside panels — was a flat #475569. */
+.glass-panel p,
+.glass-panel ul {
+    color: var(--planx-text-muted);
+}
+
+#main-panel h1 {
+    color: var(--planx-accent-ink);
+    letter-spacing: -0.01em;
+}
+
+.dashboard-sub {
+    color: var(--planx-text-muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.scene-pill {
+    background: var(--planx-accent-glow);
+    color: var(--planx-accent-ink);
+    border: 1px solid var(--planx-border-strong);
+}
+
+/* Six metrics in a four-column grid left a ragged 4 + 2 row. Three columns
+   fill both rows evenly and give every number more horizontal room. */
+.metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.metric-grid div {
+    background: var(--planx-surface-raised);
+    border: 1px solid var(--planx-border-strong);
+    border-radius: var(--planx-radius-sm);
+}
+
+.metric-grid span {
+    color: var(--planx-text);
+    font-size: 1.1rem;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.metric-grid small {
+    color: var(--planx-text-faint);
+    font-size: 0.66rem;
+    letter-spacing: 0.02em;
+}
+
+.project-meta {
+    background: var(--planx-surface-raised);
+    border: 1px solid var(--planx-border-strong);
+    border-radius: var(--planx-radius-sm);
+    color: var(--planx-text-muted);
+}
+
+.project-meta strong {
+    color: var(--planx-text);
+}
+
+.health-chip {
+    background: var(--planx-chip-bg);
+    color: var(--planx-chip-ink);
+}
+
+.health-chip.ok {
+    background: var(--planx-ok-bg);
+    color: var(--planx-ok-ink);
+}
+
+.health-chip.empty {
+    background: var(--planx-warn-bg);
+    color: var(--planx-warn-ink);
+}
+
+.controls {
+    background: var(--planx-surface-sunken);
+    border: 1px solid var(--planx-border);
+    border-top: 1px solid var(--planx-border);
+    border-radius: var(--planx-radius-sm);
+    color: var(--planx-text-muted);
+    padding: 12px;
+}
+
+.controls h3 {
+    color: var(--planx-text);
+}
+
+#stats-content {
+    color: var(--planx-text-muted);
+}
+
+.stat-val {
+    color: var(--planx-accent-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-func {
+    color: var(--planx-text-faint);
+}
+
+/* ======================================================================= */
+/* v1.5.0 — look gallery, shuffle toast and the cinematic tour HUD.         */
+/* ======================================================================= */
+
+.looks-dock {
+    width: 306px;
+}
+
+.look-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 10px 0 12px;
+}
+
+.look-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 8px;
+    text-align: left;
+    cursor: pointer;
+    border: 1px solid var(--planx-border);
+    border-radius: var(--planx-radius-sm);
+    background: var(--planx-surface-raised);
+    color: var(--planx-text);
+    font-family: inherit;
+    transition: border-color var(--planx-transition), background var(--planx-transition), transform var(--planx-transition);
+}
+
+.look-card:hover {
+    border-color: var(--planx-accent-soft);
+    transform: translateY(-1px);
+}
+
+.look-card:focus-visible {
+    outline: 2px solid var(--planx-accent-soft);
+    outline-offset: 1px;
+}
+
+.look-card.active {
+    border-color: var(--planx-accent);
+    background: var(--planx-accent-glow);
+}
+
+/* Four-stop palette strip: buildings, greens, roads, ground. */
+.look-swatch {
+    display: grid;
+    grid-template-columns: repeat(2, 13px);
+    grid-template-rows: repeat(2, 13px);
+    gap: 2px;
+    flex: 0 0 auto;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.look-swatch i {
+    display: block;
+    width: 13px;
+    height: 13px;
+    border-radius: 2px;
+}
+
+.look-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.look-text strong {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.look-text small {
+    font-size: 0.66rem;
+    line-height: 1.35;
+    color: var(--planx-text-faint);
+}
+
+/* Toast — one at a time, bottom centre, never blocks the canvas. */
+.toast-host {
+    position: fixed;
+    bottom: 124px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 120;
+    pointer-events: none;
+    display: flex;
+    justify-content: center;
+}
+
+.toast {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: min(420px, calc(100vw - 32px));
+    padding: 9px 15px;
+    border-radius: var(--planx-radius-md);
+    background: var(--planx-bg-panel-strong);
+    border: 1px solid var(--planx-border-strong);
+    box-shadow: var(--planx-shadow-md);
+    backdrop-filter: blur(var(--planx-blur));
+    -webkit-backdrop-filter: blur(var(--planx-blur));
+    color: var(--planx-text);
+    text-align: center;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.toast.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast strong {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--planx-accent-ink);
+    letter-spacing: -0.01em;
+}
+
+.toast span {
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--planx-text-muted);
+}
+
+/* Cinematic tour HUD */
+.tour-hud {
+    position: fixed;
+    bottom: 68px;   /* clear of the scale bar and the OSM credit line */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 110;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 8px 12px 8px 14px;
+    border-radius: var(--planx-radius-md);
+    background: var(--planx-bg-toolbar);
+    border: 1px solid var(--planx-border-strong);
+    box-shadow: var(--planx-shadow-md);
+    backdrop-filter: blur(var(--planx-blur));
+    -webkit-backdrop-filter: blur(var(--planx-blur));
+    color: #f6ebe6;
+    font-size: 0.74rem;
+    font-weight: 600;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.tour-hud.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(12px);
+}
+
+.tour-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--planx-accent-soft);
+    box-shadow: 0 0 8px var(--planx-accent-soft);
+    animation: tour-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tour-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.tour-shot {
+    white-space: nowrap;
+}
+
+.tour-clock {
+    font-family: var(--planx-mono);
+    font-variant-numeric: tabular-nums;
+    opacity: 0.78;
+}
+
+.tour-track {
+    width: 130px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(246, 235, 230, 0.24);
+    overflow: hidden;
+}
+
+.tour-progress {
+    height: 100%;
+    width: 0;
+    border-radius: 2px;
+    background: var(--planx-accent-soft);
+}
+
+.tour-stop {
+    border: 1px solid rgba(246, 235, 230, 0.34);
+    background: rgba(246, 235, 230, 0.08);
+    color: #fff;
+    border-radius: var(--planx-radius-xs);
+    padding: 3px 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.tour-stop:hover {
+    background: rgba(246, 235, 230, 0.22);
+}
+
+/* The generic dock action row is a 3-column grid; the gallery has one wide
+   action and would otherwise render it as a cramped, two-line third of a row. */
+.looks-dock .dock-actions {
+    grid-template-columns: 1fr;
+}
+
+@media (max-width: 760px) {
+    .looks-dock { width: auto; }
+    .tour-track { width: 74px; }
+    .toast-host { bottom: 168px; }
+}

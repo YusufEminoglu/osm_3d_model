@@ -1,5 +1,55 @@
 # Changelog
 
+## [1.5.0] - 2026-08-21
+
+### Added
+
+- **Looks: one-click randomize.** A new dice button in the viewer toolbar (or the
+  `L` key) applies one of ten hand-tuned compositions — colour palette, road and
+  ground textures, roof type and massing, time of day, weather and fog, chosen
+  together so each look reads the way it was designed to. It is a curated draw,
+  not a random one: shuffling picks from the ten and never hands back the look
+  already on screen. Layer visibility is deliberately never touched, so a look
+  cannot switch heavy layers back on behind you.
+- **Look gallery.** A new dock lists all ten looks with a four-stop palette
+  swatch and a one-line description, so a look can also be picked deliberately
+  instead of shuffled. The active look stays highlighted and survives a reload.
+  The ten: Editorial Dusk, Nordic Snowfall, Harbor Morning, Golden
+  Mediterranean, Neon Rain, Anime Noon, Violet Dawn, Desert Noon, Cartoon
+  Playground and Vintage Postcard.
+- **Cinematic tour.** The play button (or `T`) flies a five-shot, 35-second
+  choreography — establishing orbit, district sweep, descent, street level and a
+  golden-hour rise — with the sun advancing from morning to dusk along the way.
+  The shots are expressed as fractions of the model's own extent, so the same
+  tour frames a four-hectare courtyard and a 300-hectare district. Point Export
+  Studio's recorder at it for a finished clip. A HUD shows the shot, the clock
+  and a progress bar; the tour hands the camera, the field of view and the time
+  of day back exactly as it found them when it ends, and any click, scroll,
+  `Esc` or second press of `T` stops it early.
+
+### Fixed
+
+- **Unreadable dashboard panel in dark mode.** The v0.8.0 design-token refactor
+  themed the panel surface but never reached the dashboard's contents, which
+  still carried the hardcoded light-mode colours they were written with — dark
+  slate body text on a dark navy panel, white metric cards punched into it, and
+  a light-grey Area Statistics block. Every one of those colours is now a theme
+  token, so the panel is legible in both themes; the six metric tiles moved from
+  a ragged four-column grid to an even three-by-two.
+- **Fog stayed daylight blue after dark.** The scene fog colour was a fixed
+  daytime value, so any night or dusk scene with real fog was washed out by a
+  bright haze that hid the whole city. Fog now tracks the sun through night,
+  dusk and day.
+- **Switching colour theme in the viewer did nothing.** Theme colours were always
+  read from the export manifest first, which is right on load — the theme chosen
+  in QGIS must win — but meant a theme changed at runtime kept the exported
+  theme's roads, base and greens. The manifest now wins only on load.
+- **Per-function building styles could drift from the colour theme.** They persist
+  under their own key, so reopening an export after the theme moved on could
+  leave every building painted in the previous theme's colours and roofs. They
+  are now reseeded when none of them matches the active theme any more, while
+  deliberate per-function edits are kept.
+
 ## [1.2.5] - 2026-08-09
 
 - Add OpenStreetMap, tile-service and Overpass API notices alongside the existing

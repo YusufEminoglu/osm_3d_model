@@ -139,6 +139,39 @@ Pick a **Map & web theme** in the dialog to style both the native QGIS layer gro
 
 The chosen theme travels with the export and is applied automatically when the viewer opens. Re-opening the same export keeps any manual colour edits you made in the Style dock.
 
+### Curated looks and the cinematic tour
+
+A theme is a palette. A **look** is the whole composition — palette, road and
+ground textures, roof type and massing, time of day, weather and fog — tuned
+together so it reads the way it was designed to. The viewer ships ten, and the
+dice button in the toolbar (or `L`) applies one at random. It is a curated
+draw, not a random one: the shuffle picks from the ten and never returns the
+look already on screen, and it never touches which layers are visible, so it
+cannot switch heavy layers back on behind you. The **Looks** dock lists all ten
+with a palette swatch, for picking one deliberately.
+
+| Look | Mood |
+| --- | --- |
+| **Editorial Dusk** | Warm paper palette, low late-afternoon sun, soft civic massing. |
+| **Nordic Snowfall** | Cool grey-teal city under falling snow and flat winter light. |
+| **Harbor Morning** | Teal streets and salmon facades in clean early side-light. |
+| **Golden Mediterranean** | Terracotta and stucco at golden hour — the postcard shot. |
+| **Neon Rain** | Night glass towers, wet asphalt and bloom-lit rain. |
+| **Anime Noon** | Bright cel pastels, hard noon shadows, no haze. |
+| **Violet Dawn** | Lilac blocks against soft black roads in first light and mist. |
+| **Desert Noon** | Sand and slate, dry air, deep contact shadows. |
+| **Cartoon Playground** | Bold primaries under dark pyramid roofs, mid-afternoon light. |
+| **Vintage Postcard** | Sepia stock, cobbled streets, heavy cornices, late sun. |
+
+The play button (or `T`) runs a **cinematic tour**: five shots over 35 seconds —
+establishing orbit, district sweep, descent, street level, golden-hour rise —
+with the sun advancing from morning to dusk. Every shot is expressed as a
+fraction of the model's own extent, so the same choreography frames a
+four-hectare courtyard and a 300-hectare district. Record it straight from
+Export Studio for a finished clip. The tour hands the camera, field of view and
+time of day back exactly as it found them, and any click, scroll or `Esc` stops
+it early.
+
 ### Native OpenStreetMap schema
 
 The export does not translate data into a local-only schema. The viewer maps OSM fields directly:
@@ -178,6 +211,9 @@ The browser viewer is intentionally lean and English-only. The toolbar focuses o
 | Scene & Sun | Time of day, solar animation, weather, fog, theme, shadow quality, bloom, traffic speed, densities, DEM mesh, and bookmarks. |
 | Model Studio | Upload and tune GLB models for trees and street furniture categories. |
 | Basemap & Texture | Drape a QGIS basemap under the city and restyle it live: opacity, blend mode (Multiply, Screen, Add, Difference), brightness, contrast, saturation, tint, and shadow catching. |
+| Looks | Ten curated compositions of palette, textures, massing and light, with palette swatches. |
+| Randomize look | One click (or `L`) applies a curated look at random, never repeating the current one. |
+| Cinematic tour | One click (or `T`) plays a five-shot, 35-second flight; `Esc` or any camera input stops it. |
 | Walk mode | Enter the model at pedestrian eye height with WASD controls. |
 | Export Studio | Export clean PNG/JPEG/WebP renders, PDF pages, embedded SVG, self-contained HTML snapshots, clipboard PNGs, or record the live canvas as WebM/MP4 when supported. Includes viewport, Full HD, QHD, 4K, custom-size, quality, frame-rate, and bitrate controls. |
 | Measure | Pick two ground points and read distance. |
@@ -207,6 +243,7 @@ See [docs/SHOWCASE.md](docs/SHOWCASE.md) for a full media and demo script.
 | `builder.py` | Study-area boundary shapes, clipping, reprojection, GeoJSON export, manifest writing. |
 | `server.py` | Local HTTP server for the viewer. |
 | `web/src/` | Three.js viewer, UI, controls, styling, procedural 3D scene. |
+| `web/src/looks.js` | Curated look catalogue and tour choreography — pure data, unit-tested in Node. |
 | `web/data/` | Bundled sample city and runtime export sink. |
 | `docs/` | GitHub showcase, architecture notes, Pages landing page, visual assets. |
 
