@@ -170,6 +170,15 @@
             <label><span data-i18n="lblSideColor">Base color</span> <input type="color" data-setting="terrainSideColor"></label>
             <label><span data-i18n="lblDemQuality">DEM mesh quality</span> <input type="range" min="48" max="360" step="8" data-setting="demMeshQuality"></label>
         </div>
+        <div class="dock-section">
+            <p class="dock-section-title">Walk mode</p>
+            <label><span>Body height (m)</span> <input type="range" min="1.40" max="2.10" step="0.01" data-setting="walkStature"></label>
+            <label><span>Walking pace</span> <input type="range" min="0.4" max="2.5" step="0.05" data-setting="walkSpeed"></label>
+            <label><input type="checkbox" data-setting="walkCollision"> <span>Solid buildings</span></label>
+            <label><input type="checkbox" data-setting="walkHeadBob"> <span>Head movement</span></label>
+            <p class="dock-note">Eye height follows the body height (93.6% of stature standing, 60% crouched). Pace 1.0 is 1.4 m/s, an average walk.</p>
+        </div>
+
         <div class="dock-subtitle" data-i18n="lblBookmarks">Camera bookmarks</div>
         <div id="bookmark-list" class="bookmark-list"></div>
         <div class="dock-actions">
@@ -338,7 +347,10 @@
         <p class="export-attribution">Map data &copy; OpenStreetMap contributors. Keep attribution with published exports.</p>
     </aside>
 
-    <div id="walk-hud" class="walk-hud hidden" data-i18n="walkHud">WASD move · Shift sprint · C crouch · Esc exit</div>
+    <div id="walk-hud" class="walk-hud hidden">
+        <span class="walk-keys" data-i18n="walkHud">WASD move · Shift run · C crouch · Esc exit</span>
+        <span class="walk-readout" id="walk-readout">1.73 m eye · 0.0 km/h</span>
+    </div>
 
     <div id="fps-chip" class="hud-chip hud-chip-fps" title="Render frames per second">-- fps</div>
 

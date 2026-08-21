@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.6.0] - 2026-08-21
+
+### Changed
+
+- **Walk mode is now a body, not a camera.** Everything vertical derives from one
+  new setting — the walker's stature, 1.85 m by default — using standard
+  anthropometry: the eyes sit at 93.6% of stature (1.73 m), and 60% when
+  crouched. Scene & Sun gains a **Walk mode** section with body height, walking
+  pace, solid buildings and head movement, and the walk HUD shows the live eye
+  height and speed so you can see you are standing in the model rather than
+  flying through it.
+- **Human pace.** The walker used to accelerate to 9.2 m/s — 33 km/h, a car in a
+  city. Pace 1.0 is now 1.4 m/s (5.0 km/h), the mean adult walking speed; Shift
+  is a 3.3 m/s jog and crouching halves it.
+- **Buildings are solid.** You can no longer walk through walls. Each horizontal
+  axis is resolved separately, so a wall is slid along rather than bringing you
+  to a dead stop in a corner. The check can be turned off in the dock.
+- **Gait.** The head rises and falls twice per stride and sways once, both scaled
+  by how fast the body is actually travelling — so standing still is perfectly
+  still. Total travel is 2.2 cm vertical and 1.6 cm lateral: a cue, never a
+  camera shake.
+- **Entering walk mode lands you where you were looking** instead of wherever the
+  orbit camera happened to hover, which from a wide overview was often hundreds
+  of metres outside the model. Walk mode also takes a 72° field of view and hands
+  the orbit one back on exit.
+- **The walker stays on the model.** You could previously walk off the edge of
+  the base into empty space.
+- The plugin icon's artwork is enlarged to fill the tile edge to edge; it was
+  sitting small and low with the whole upper half of the tile empty, which is
+  what you actually saw at toolbar size.
+
+### Fixed
+
+- **Walk speed depended on your frame rate.** Friction was applied as
+  `1 - k·dt`, so the same key press covered noticeably different ground at 30 fps
+  and at 144 fps — invisible on the machine it was written on.
+- **The walker never reached the speed the code intended.** Acceleration was a
+  constant force fighting friction, so velocity settled wherever the two happened
+  to balance (1.077 m/s with the current tuning) and the speed clamp above it
+  never applied once. Velocity now ramps toward the wanted pace and reaches it.
+- Crouching changed the walking speed but not the eye height in the handler that
+  set it on entry, so entering walk mode crouched put the eyes at the standing
+  height.
+
 ## [1.5.0] - 2026-08-21
 
 ### Added

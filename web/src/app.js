@@ -26,6 +26,7 @@ import {
   pickLookId,
   tourStateAt
 } from './looks.js';
+import { WALK, eyeHeight, gaitOffset, gaitStrength, stepWalkVelocity, topSpeed } from './walk.js';
 
 let currentLang = 'EN';
 const urlParams = new URLSearchParams(window.location.search);
@@ -326,7 +327,7 @@ Object.assign(i18n.EN, {
   exportJson: 'Export JSON',
   tourEmpty: 'No keyframes yet.',
   tourLoaded: 'Narrative tour loaded from portable package.',
-  walkHud: 'WASD move · Shift sprint · C crouch · Esc exit',
+  walkHud: 'WASD move · Shift run · C crouch · Esc exit',
   gameHint: 'Left click: throw stone',
   demLoading: 'Loading DEM...',
   demLoaded: 'DEM loaded',
@@ -461,6 +462,41 @@ let sprintWalk = false;
 let crouchWalk = false;
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
+
+let walkBobPhase = 0;
+let walkOrbitFov = null;
+const walkBobOffset = new THREE.Vector3();
+const walkRay = new THREE.Raycaster();
+const _walkAxis = new THREE.Vector3();
+const _walkRight = new THREE.Vector3();
+const _walkOrigin = new THREE.Vector3();
+const _walkFrom = new THREE.Vector3();
+
+function walkEyeHeight() {
+  return eyeHeight(settings.walkStature, crouchWalk);
+}
+
+// Buildings are solid. Two rays — at eye and at chest — so a wall stops the
+// walker whichever way they are looking.
+function walkPathBlocked(from, dir, distance) {
+  if (!settings.walkCollision || !buildingGroup) return false;
+  walkRay.far = distance;
+  for (const dy of [0, -0.85]) {
+    walkRay.set(_walkOrigin.set(from.x, from.y + dy, from.z), dir);
+    if (walkRay.intersectObject(buildingGroup, true).length) return true;
+  }
+  return false;
+}
+
+let walkHudLast = 0;
+function updateWalkHud(speed) {
+  const el = document.getElementById('walk-readout');
+  if (!el) return;
+  const now = performance.now();
+  if (now - walkHudLast < 120) return;
+  walkHudLast = now;
+  el.textContent = `${walkEyeHeight().toFixed(2)} m eye · ${(speed * 3.6).toFixed(1)} km/h`;
+}
 let prevTime = performance.now();
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.62);
@@ -1919,6 +1955,9 @@ const settings = {
   weather: 'Clear',
   fov: 58,
   walkSpeed: 1.0,
+  walkStature: 1.85,
+  walkCollision: true,
+  walkHeadBob: true,
   autoOrbit: false,
   autoOrbitSpeed: 0.3,
   autoTime: false,
@@ -2007,7 +2046,7 @@ const PERSISTED_SETTING_KEYS = [
   'treeRenderMode', 'treeRandomize', 'treeVariantCount', 'treeHeightRandomExpr',
   'showCars', 'showRoads', 'showSidewalks', 'showPedestrianPaths', 'showCrosswalks', 'showPedestrians',
   'showWindPlumes', 'windDirectionDeg', 'windPlumeDistance', 'showUrbanComfort',
-  'demMeshQuality', 'timeOfDay', 'weather', 'fov', 'walkSpeed',
+  'demMeshQuality', 'timeOfDay', 'weather', 'fov', 'walkSpeed', 'walkStature', 'walkCollision', 'walkHeadBob',
   'flattenIslands', 'islandPlateauTransition',
   'dayOfYear', 'latitude',
   'parkColor', 'parkTexture', 'sportColor',
@@ -8773,18 +8812,39 @@ if (walkBtn) {
 walkControls.addEventListener('lock', () => {
   isWalkMode = true;
   controls.enabled = false;
-  if(walkBtn) walkBtn.classList.add('active');
+  if (walkBtn) walkBtn.classList.add('active');
   document.getElementById('walk-hud')?.classList.remove('hidden');
-  const ty = terrainLocalYAt(camera.position.x, camera.position.z);
-  camera.position.y = ty + 1.8;
+  velocity.set(0, 0, 0);
+  walkBobPhase = 0;
+  walkBobOffset.set(0, 0, 0);
+  // Land where the user was looking. Entering walk mode from a wide overview
+  // used to drop the walker wherever the orbit camera happened to hover, which
+  // was often hundreds of metres outside the model.
+  if (camera.position.y - terrainLocalYAt(camera.position.x, camera.position.z) > WALK.dropInHeight) {
+    camera.position.x = controls.target.x;
+    camera.position.z = controls.target.z;
+  }
+  camera.position.y = terrainLocalYAt(camera.position.x, camera.position.z) + walkEyeHeight();
+  walkOrbitFov = camera.fov;
+  camera.fov = WALK.fov;
+  camera.updateProjectionMatrix();
 });
 walkControls.addEventListener('unlock', () => {
   isWalkMode = false;
-  controls.enabled = true;
   moveForward = moveBackward = moveLeft = moveRight = false;
   sprintWalk = false;
   crouchWalk = false;
-  if(walkBtn) walkBtn.classList.remove('active');
+  camera.position.sub(walkBobOffset);
+  walkBobOffset.set(0, 0, 0);
+  // The pointer-lock exit event arrives a frame or two late, so a tour started
+  // from walk mode would otherwise have its camera and FOV yanked mid-shot.
+  controls.enabled = !tourState.active;
+  if (walkOrbitFov != null && !tourState.active) {
+    camera.fov = walkOrbitFov;
+    camera.updateProjectionMatrix();
+  }
+  walkOrbitFov = null;
+  if (walkBtn) walkBtn.classList.remove('active');
   document.getElementById('walk-hud')?.classList.add('hidden');
 });
 
@@ -9104,23 +9164,73 @@ function animate() {
   const dt60 = Math.min(Math.max(delta, 0), 0.1) * 60;
 
   if (isWalkMode) {
-    velocity.x -= velocity.x * 10.0 * delta;
-    velocity.z -= velocity.z * 10.0 * delta;
-    
     direction.z = Number(moveForward) - Number(moveBackward);
     direction.x = Number(moveRight) - Number(moveLeft);
-    direction.normalize(); // consistent speed
-    
-    const wSpd = 92.0 * settings.walkSpeed * (sprintWalk ? 1.85 : 1.0) * (crouchWalk ? 0.45 : 1.0);
-    if (moveForward || moveBackward) velocity.z -= direction.z * wSpd * delta;
-    if (moveLeft || moveRight) velocity.x -= direction.x * wSpd * delta;
-    
+    direction.normalize();
+
+    const stepped = stepWalkVelocity(
+      velocity.x, velocity.z, direction.x, direction.z,
+      topSpeed(settings.walkSpeed, { sprinting: sprintWalk, crouching: crouchWalk }),
+      delta
+    );
+    velocity.x = stepped.x;
+    velocity.z = stepped.z;
+
+    // Take last frame's head movement back off before stepping, so the gait can
+    // never accumulate into a drift.
+    camera.position.sub(walkBobOffset);
+    const fromX = camera.position.x;
+    const fromY = camera.position.y;
+    const fromZ = camera.position.z;
     walkControls.moveRight(-velocity.x * delta);
     walkControls.moveForward(-velocity.z * delta);
-    
-    const ty = terrainLocalYAt(camera.position.x, camera.position.z);
-    const eyeHeight = crouchWalk ? 1.18 : 1.72;
-    camera.position.y += ((ty + eyeHeight) - camera.position.y) * Math.min(1, delta * 12);
+
+    // Resolve the two horizontal axes separately so a wall is slid along rather
+    // than bringing the walker to a dead stop in a corner.
+    const dx = camera.position.x - fromX;
+    const dz = camera.position.z - fromZ;
+    if (Math.abs(dx) > 1e-5
+        && walkPathBlocked(_walkFrom.set(fromX, fromY, fromZ), _walkAxis.set(Math.sign(dx), 0, 0), Math.abs(dx) + WALK.bodyRadius)) {
+      camera.position.x = fromX;
+      velocity.x *= 0.15;
+    }
+    if (Math.abs(dz) > 1e-5
+        && walkPathBlocked(_walkFrom.set(camera.position.x, fromY, fromZ), _walkAxis.set(0, 0, Math.sign(dz)), Math.abs(dz) + WALK.bodyRadius)) {
+      camera.position.z = fromZ;
+      velocity.z *= 0.15;
+    }
+
+    // The model has an edge. Walking off it into empty space breaks the illusion
+    // far more than a wall you cannot pass, so the walker is held on the base.
+    if (bounds) {
+      const halfX = Math.abs(bounds.maxX - bounds.minX) / 2 - 1.5;
+      const halfZ = Math.abs(bounds.maxY - bounds.minY) / 2 - 1.5;
+      if (halfX > 0) camera.position.x = THREE.MathUtils.clamp(camera.position.x, -halfX, halfX);
+      if (halfZ > 0) camera.position.z = THREE.MathUtils.clamp(camera.position.z, -halfZ, halfZ);
+    }
+
+    // Gait. The head rises and falls twice per stride and sways once, both
+    // scaled by how fast the body is actually travelling — so standing still is
+    // perfectly still, and a jog moves more than a stroll.
+    const moved = Math.hypot(camera.position.x - fromX, camera.position.z - fromZ);
+    walkBobPhase += (moved / WALK.stepLength) * Math.PI;
+    const speed = Math.hypot(velocity.x, velocity.z);
+    const gait = settings.walkHeadBob ? gaitStrength(speed) : 0;
+    const bob = gaitOffset(walkBobPhase, gait);
+
+    const ground = terrainLocalYAt(camera.position.x, camera.position.z);
+    camera.position.y += ((ground + walkEyeHeight()) - camera.position.y) * Math.min(1, delta * 12);
+
+    walkBobOffset.set(0, bob.vertical, 0);
+    if (bob.lateral !== 0) {
+      _walkRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+      _walkRight.y = 0;
+      if (_walkRight.lengthSq() > 1e-6) {
+        walkBobOffset.addScaledVector(_walkRight.normalize(), bob.lateral);
+      }
+    }
+    camera.position.add(walkBobOffset);
+    updateWalkHud(speed);
   } else {
     controls.update();
   }
@@ -9975,6 +10085,13 @@ function applyDockSetting(key, value, inputType) {
     if (key === 'weather') updateWeather();
     checkTimeChange();
   } else if (key === 'autoTime' || key === 'autoTimeSpeed' || key === 'trafficSpeed') {
+    updateDockControls();
+  } else if (key.indexOf('walk') === 0) {
+    // Walk settings only affect the camera, never the geometry — rebuilding the
+    // whole scene on every drag of the body-height slider would be absurd.
+    if (isWalkMode) {
+      camera.position.y = terrainLocalYAt(camera.position.x, camera.position.z) + walkEyeHeight();
+    }
     updateDockControls();
   } else if (key === 'showBasemap') {
     if (settings.showBasemap && projectManifest?.basemap?.image && !basemapTexture) requestSceneRebuild(0);

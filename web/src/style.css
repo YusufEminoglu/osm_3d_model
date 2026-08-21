@@ -1909,3 +1909,35 @@ body.measuring #map { cursor: crosshair; }
     .tour-track { width: 74px; }
     .toast-host { bottom: 168px; }
 }
+
+/* ======================================================================= */
+/* v1.6.0 — walk-mode HUD readout.                                          */
+/* The pill now carries a live eye-height and speed readout next to the key */
+/* list, so the walker can see they really are standing 1.73 m off the      */
+/* ground moving at a walking pace, not flying.                             */
+/* ======================================================================= */
+.walk-hud {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    bottom: 68px;   /* clear of the scale bar, same line as the tour HUD */
+}
+
+.walk-hud.hidden {
+    display: none;
+}
+
+.walk-readout {
+    padding-left: 10px;
+    border-left: 1px solid rgba(255, 255, 255, 0.22);
+    font-family: var(--planx-mono);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.86;
+    white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+    .walk-hud { font-size: 0.68rem; padding: 6px 10px; }
+    .walk-readout { padding-left: 7px; }
+}

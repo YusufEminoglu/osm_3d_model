@@ -139,6 +139,28 @@ Pick a **Map & web theme** in the dialog to style both the native QGIS layer gro
 
 The chosen theme travels with the export and is applied automatically when the viewer opens. Re-opening the same export keeps any manual colour edits you made in the Style dock.
 
+### Walk mode, from a real body
+
+Walk mode is lived from inside a body rather than flown as a low camera. Every
+vertical dimension derives from one setting — the walker's stature, **1.85 m** by
+default — using standard anthropometry:
+
+| Quantity | Value at 1.85 m | Source |
+| --- | --- | --- |
+| Standing eye height | 1.73 m | 0.936 × stature |
+| Crouched eye height | 1.11 m | 0.60 × stature |
+| Walking pace | 1.4 m/s · 5.0 km/h | mean adult walking speed |
+| Jog (Shift) | 3.3 m/s · 11.8 km/h | |
+| Stride | one step per 0.78 m | drives the head movement |
+
+Buildings are solid — each horizontal axis is resolved separately, so a wall is
+slid along rather than bringing you to a dead stop in a corner. The head rises
+and falls twice per stride and sways once, scaled by how fast the body is really
+travelling, so standing still is perfectly still. Entering walk mode lands you
+where you were looking, and you cannot step off the edge of the base. Body
+height, walking pace, solid buildings and head movement are all in the
+**Scene & Sun** dock; the HUD shows the live eye height and speed.
+
 ### Curated looks and the cinematic tour
 
 A theme is a palette. A **look** is the whole composition — palette, road and
@@ -214,7 +236,7 @@ The browser viewer is intentionally lean and English-only. The toolbar focuses o
 | Looks | Ten curated compositions of palette, textures, massing and light, with palette swatches. |
 | Randomize look | One click (or `L`) applies a curated look at random, never repeating the current one. |
 | Cinematic tour | One click (or `T`) plays a five-shot, 35-second flight; `Esc` or any camera input stops it. |
-| Walk mode | Enter the model at pedestrian eye height with WASD controls. |
+| Walk mode | Stand in the model as a 1.85 m person: eyes at 1.73 m, a 1.4 m/s walking pace, solid buildings, and a gait you can feel. WASD, Shift to jog, C to crouch. |
 | Export Studio | Export clean PNG/JPEG/WebP renders, PDF pages, embedded SVG, self-contained HTML snapshots, clipboard PNGs, or record the live canvas as WebM/MP4 when supported. Includes viewport, Full HD, QHD, 4K, custom-size, quality, frame-rate, and bitrate controls. |
 | Measure | Pick two ground points and read distance. |
 | Help | See shortcuts without leaving the viewer. |
@@ -244,6 +266,7 @@ See [docs/SHOWCASE.md](docs/SHOWCASE.md) for a full media and demo script.
 | `server.py` | Local HTTP server for the viewer. |
 | `web/src/` | Three.js viewer, UI, controls, styling, procedural 3D scene. |
 | `web/src/looks.js` | Curated look catalogue and tour choreography — pure data, unit-tested in Node. |
+| `web/src/walk.js` | Walk-mode body model: anthropometry, gait and the velocity integrator — unit-tested in Node. |
 | `web/data/` | Bundled sample city and runtime export sink. |
 | `docs/` | GitHub showcase, architecture notes, Pages landing page, visual assets. |
 
