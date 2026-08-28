@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.7.1] - 2026-08-28
+
+- Convert the last 3 legacy PNG facade textures (UrbanB/C/D) to WebP, matching every other texture in the set. 194 KB saved (215 KB to 21 KB) with no visible quality loss (mean pixel difference under 2%).
+
 ## [1.7.0] - 2026-08-21
 
 ### Added
