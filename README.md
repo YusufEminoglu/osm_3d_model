@@ -15,7 +15,7 @@
 <p align="center">
   <a href="metadata.txt"><img alt="QGIS" src="https://img.shields.io/badge/QGIS-3.28%2B-5da85d?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-111827?style=for-the-badge"></a>
-  <a href="https://geophilo.pages.dev/osm_3d_model/"><img alt="Reference manual" src="https://img.shields.io/badge/docs-Reference_Manual-13a0a0?style=for-the-badge"></a>
+  <a href="https://geophilo.com/osm_3d_model/"><img alt="Reference manual" src="https://img.shields.io/badge/docs-Reference_Manual-13a0a0?style=for-the-badge"></a>
   <img alt="OpenStreetMap native" src="https://img.shields.io/badge/data-OpenStreetMap_native-8f6f5b?style=for-the-badge">
   <img alt="Three.js viewer" src="https://img.shields.io/badge/viewer-Three.js-2f4858?style=for-the-badge">
 </p>
@@ -33,7 +33,7 @@
 
 ## 📖 Documentation
 
-**[Comprehensive Academic Reference Manual](https://geophilo.pages.dev/osm_3d_model/)** — complete documentation of every feature, parameter, and workflow. Hosted on Web Documentation.
+**[Comprehensive Academic Reference Manual](https://geophilo.com/osm_3d_model/)** — complete documentation of every feature, parameter, and workflow. Hosted on Web Documentation.
 
 
 ## The Product Promise
