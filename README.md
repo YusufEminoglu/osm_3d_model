@@ -15,7 +15,7 @@
 <p align="center">
   <a href="metadata.txt"><img alt="QGIS" src="https://img.shields.io/badge/QGIS-3.28%2B-5da85d?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-111827?style=for-the-badge"></a>
-  <a href="https://yusufeminoglu.github.io/osm_3d_model/"><img alt="Reference manual" src="https://img.shields.io/badge/docs-Reference_Manual-13a0a0?style=for-the-badge"></a>
+  <a href="https://geophilo.pages.dev/osm_3d_model/"><img alt="Reference manual" src="https://img.shields.io/badge/docs-Reference_Manual-13a0a0?style=for-the-badge"></a>
   <img alt="OpenStreetMap native" src="https://img.shields.io/badge/data-OpenStreetMap_native-8f6f5b?style=for-the-badge">
   <img alt="Three.js viewer" src="https://img.shields.io/badge/viewer-Three.js-2f4858?style=for-the-badge">
 </p>
@@ -26,14 +26,14 @@
   <a href="#viewer-experience">Viewer</a> |
   <a href="docs/SHOWCASE.md">Showcase</a> |
   <a href="docs/ARCHITECTURE.md">Architecture</a> |
-  <a href="docs/index.html">GitHub Pages</a>
+  <a href="docs/index.html">Web Documentation</a>
 </p>
 
 ---
 
 ## 📖 Documentation
 
-**[Comprehensive Academic Reference Manual](https://yusufeminoglu.github.io/osm_3d_model/)** — complete documentation of every feature, parameter, and workflow. Hosted on GitHub Pages.
+**[Comprehensive Academic Reference Manual](https://geophilo.pages.dev/osm_3d_model/)** — complete documentation of every feature, parameter, and workflow. Hosted on Web Documentation.
 
 
 ## The Product Promise
@@ -284,7 +284,7 @@ See [docs/SHOWCASE.md](docs/SHOWCASE.md) for a full media and demo script.
 | `web/data/` | Bundled sample city and runtime export sink. |
 | `docs/` | GitHub showcase, architecture notes, Pages landing page, visual assets. |
 
-## GitHub Pages
+## Web Documentation
 
 This repository includes a polished static landing page at [docs/index.html](docs/index.html). To publish it on GitHub:
 
@@ -301,11 +301,11 @@ This plugin is one of 15 open-source QGIS plugins for urban planning by the same
 
 | Planning & analysis | CAD & production | 3D & visualization |
 |---|---|---|
-| [PlanX](https://github.com/YusufEminoglu/PlanX) — spatial-planning suite | [PlanX CAD Toolset](https://github.com/YusufEminoglu/PlanX-CAD) — drafting-grade CAD | [PlanX 3D City](https://github.com/YusufEminoglu/planx_3d_city) — Three.js city viewer |
-| [GeoStats Lab](https://github.com/YusufEminoglu/planx_geostats) — spatial statistics | [EasyFillet](https://github.com/YusufEminoglu/EasyFillet) — tangent-arc fillet | [3D OSM Model](https://github.com/YusufEminoglu/osm_3d_model) — OSM → 3D city in browser |
-| [Suitability Lab](https://github.com/YusufEminoglu/planx_suitability_lab) — raster MCDA | [Settlement Toolset](https://github.com/YusufEminoglu/PlanX-Settlement) — 9-stage settlement plans | [OSM Quick 3D](https://github.com/YusufEminoglu/osm_quick_3d) — OSM → native QGIS 3D |
-| [DataCube Lab](https://github.com/YusufEminoglu/planx_datacube) — spatiotemporal cubes | [UIP Toolset](https://github.com/YusufEminoglu/PlanX-UIP) — Turkish master-plan automation | [Urban Procedural 3D](https://github.com/YusufEminoglu/planx_urban_procedural_3d) — parametric zoning lab |
-| [Urban Resilience](https://github.com/YusufEminoglu/planx_urban_resilience) — 28 resilience tools | [ParcelFlux](https://github.com/YusufEminoglu/parcelflux) — parcel subdivision | [CartoLab](https://github.com/YusufEminoglu/planx_cartolab) — publication cartography |
+| [PlanX](https://gitlab.com/geospacephilo/EasyFillet) — spatial-planning suite | [PlanX CAD Toolset](https://gitlab.com/geospacephilo/EasyFillet) — drafting-grade CAD | [PlanX 3D City](https://gitlab.com/geospacephilo/EasyFillet) — Three.js city viewer |
+| [GeoStats Lab](https://gitlab.com/geospacephilo/EasyFillet) — spatial statistics | [EasyFillet](https://gitlab.com/geospacephilo/EasyFillet) — tangent-arc fillet | [3D OSM Model](https://gitlab.com/geospacephilo/EasyFillet) — OSM → 3D city in browser |
+| [Suitability Lab](https://gitlab.com/geospacephilo/EasyFillet) — raster MCDA | [Settlement Toolset](https://gitlab.com/geospacephilo/EasyFillet) — 9-stage settlement plans | [OSM Quick 3D](https://gitlab.com/geospacephilo/EasyFillet) — OSM → native QGIS 3D |
+| [DataCube Lab](https://gitlab.com/geospacephilo/EasyFillet) — spatiotemporal cubes | [UIP Toolset](https://gitlab.com/geospacephilo/EasyFillet) — Turkish master-plan automation | [Urban Procedural 3D](https://gitlab.com/geospacephilo/EasyFillet) — parametric zoning lab |
+| [Urban Resilience](https://gitlab.com/geospacephilo/EasyFillet) — 28 resilience tools | [ParcelFlux](https://gitlab.com/geospacephilo/EasyFillet) — parcel subdivision | [CartoLab](https://gitlab.com/geospacephilo/EasyFillet) — publication cartography |
 
 ## Data, Credits, and License
 
