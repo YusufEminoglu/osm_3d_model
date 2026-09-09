@@ -4,77 +4,66 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OSM 3D Model &mdash; Reference Manual</title>
+<link rel="stylesheet" href="assets/manual-chrome.css">
+
 <style>
-:root {--bg:#fafaf8;--sidebar-bg:#f3f3f0;--text:#1a1a1a;--muted:#5a5a55;--accent:#2a6e5e;--border:#d8d5ce;--card-bg:#fff;--link:#1a6e5e;--code-bg:#edf4f2;--search-bg:#fff}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;display:flex;min-height:100vh}
-#sidebar{width:270px;min-width:270px;background:var(--sidebar-bg);border-right:1px solid var(--border);padding:24px 20px;position:sticky;top:0;height:100vh;overflow-y:auto}
-#sidebar h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}
-#search{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--search-bg);margin-bottom:20px}
-#sidebar nav a{display:block;padding:5px 0;font-size:13px;color:var(--link);text-decoration:none}
-#sidebar nav a:hover{text-decoration:underline}
-#sidebar nav a.sub{padding-left:14px;font-size:12px}
-#main{flex:1;padding:40px 48px;max-width:860px}
-h1{font-size:28px;font-weight:700;color:var(--accent);margin-bottom:4px}
-h1+p{color:var(--muted);margin-bottom:32px}
-h2{font-size:20px;font-weight:600;color:var(--accent);margin:36px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--border)}
-h3{font-size:16px;font-weight:600;color:var(--text);margin:20px 0 8px}
-p,li{font-size:14px;color:var(--text)}
-p{margin-bottom:10px}
-.card{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:14px}
-.card h4{font-size:14px;font-weight:600;color:var(--accent);margin-bottom:6px}
-ul{margin:4px 0 10px 20px}
-li{margin-bottom:3px}
-code{font-family:Consolas,'Courier New',monospace;background:var(--code-bg);padding:1px 6px;border-radius:3px;font-size:13px}
-table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
-th,td{border:1px solid var(--border);padding:8px 12px;text-align:left}
-th{background:var(--code-bg);font-weight:600}
-.refs{font-size:12px;color:var(--muted)}
-.refs a{color:var(--link)}
-.formula{background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:10px 16px;margin:8px 0;font-family:Cambria,'Times New Roman',serif;font-size:15px;text-align:center}
-@media(max-width:760px){body{flex-direction:column}#sidebar{width:100%;min-width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border)}#main{padding:24px}}
-.hidden{display:none}
-.video-embed { position: relative; width: 100%; padding-top: 56.25%; margin: 4px 0 28px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #000; }
+:root {
+  --chrome-bg: #fafaf8;
+  --chrome-panel-bg: #f3f3f0;
+  --chrome-text: #1a1a1a;
+  --chrome-muted: #5a5a55;
+  --chrome-accent: #b5651d;
+  --chrome-accent-hover: #8f4f16;
+  --chrome-border: #d8d5ce;
+  --chrome-code-bg: #edf4f2;
+}
+.video-embed { position: relative; width: 100%; padding-top: 56.25%; margin: 4px 0 28px; border-radius: 8px; overflow: hidden; border: 1px solid var(--chrome-border); background: #000; }
 .video-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.refs { font-size: 12px; color: var(--chrome-muted); }
+.refs a { color: var(--chrome-accent); }
 </style>
 </head>
 <body>
-<aside id="sidebar">
-  <input type="text" id="search" placeholder="Search manual&hellip;" autocomplete="off">
+<div class="chrome-layout">
+<aside id="chrome-sidebar">
+  <input type="text" id="chrome-search" placeholder="Search manual&hellip;" autocomplete="off">
   <h2>Contents</h2>
-  <nav id="toc">
-    <a href="#overview">1. Overview</a>
-    <a href="#theory" class="sub">2. Theoretical Foundations</a>
-    <a href="#pipeline" class="sub">3. Data Pipeline</a>
-    <a href="#area" class="sub">4. Study Area Definition</a>
-    <a href="#download" class="sub">5. OSM Data Download</a>
-    <a href="#layers" class="sub">6. Data Layers</a>
-    <a href="#heights" class="sub">7. Building Height Logic</a>
-    <a href="#viewer" class="sub">8. Three.js Viewer</a>
-    <a href="#panels" class="sub">9. Viewer Panel System</a>
-    <a href="#themes" class="sub">10. Color Themes (11)</a>
-    <a href="#facades" class="sub">11. Procedural Buildings</a>
-    <a href="#roads" class="sub">12. Roads and Traffic</a>
-    <a href="#terrain" class="sub">13. Terrain and Basemap</a>
-    <a href="#exportstudio" class="sub">14. Export Studio</a>
-    <a href="#cache" class="sub">15. Caching and Server</a>
-    <a href="#params" class="sub">16. Parameters</a>
-    <a href="#workflow" class="sub">17. Workflow</a>
-    <a href="#technical" class="sub">18. Technical Notes</a>
-    <a href="#literature" class="sub">19. Literature</a>
-  </nav>
+  <ul id="chrome-toc">
+    <li><a href="#overview">1. Overview</a></li>
+    <li><a href="#theory">2. Theoretical Foundations</a></li>
+    <li><a href="#pipeline">3. Data Pipeline</a></li>
+    <li><a href="#area">4. Study Area Definition</a></li>
+    <li><a href="#download">5. OSM Data Download</a></li>
+    <li><a href="#layers">6. Data Layers</a></li>
+    <li><a href="#heights">7. Building Height Logic</a></li>
+    <li><a href="#viewer">8. Three.js Viewer</a></li>
+    <li><a href="#panels">9. Viewer Panel System</a></li>
+    <li><a href="#themes">10. Color Themes (11)</a></li>
+    <li><a href="#facades">11. Procedural Buildings</a></li>
+    <li><a href="#roads">12. Roads and Traffic</a></li>
+    <li><a href="#terrain">13. Terrain and Basemap</a></li>
+    <li><a href="#exportstudio">14. Export Studio</a></li>
+    <li><a href="#cache">15. Caching and Server</a></li>
+    <li><a href="#params">16. Parameters</a></li>
+    <li><a href="#workflow">17. Workflow</a></li>
+    <li><a href="#technical">18. Technical Notes</a></li>
+    <li><a href="#literature">19. Literature</a></li>
+    <li class="chrome-no-results">No matches</li>
+  </ul>
 </aside>
-<main id="main">
+<main class="chrome-content">
 <h1>OSM 3D Model</h1>
-<p>One-click OpenStreetMap to interactive Three.js 3D city viewer &bull; v1.2.0</p>
-
+<p>One-click OpenStreetMap to interactive Three.js 3D city viewer &bull; v1.7.1</p>
 <div class="video-embed">
   <iframe src="https://www.youtube-nocookie.com/embed/WkLwYUxPidA" title="OSM 3D Model &mdash; video walkthrough" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 </div>
 
+<section id="overview">
 <h2 id="overview">1. Overview</h2>
 <p>OSM 3D Model is a single-click QGIS-to-browser pipeline that downloads live OpenStreetMap data for a user-defined study area and opens an interactive Three.js 3D city viewer. The plugin handles the entire data pipeline&mdash;Overpass API download with multi-mirror fallback and 7-day disk cache, OSM tag parsing into 11 memory layers, GeoJSON export with a manifest, and a local HTTP server that launches the browser-based PlanX 3D City engine. The viewer renders procedural buildings with roof styles, roads with lane markings and animated traffic, sidewalks with pedestrians, trees, street furniture, water features, and optional DEM terrain and basemap underlay.</p>
+</section>
 
+<section id="theory">
 <h2 id="theory">2. Theoretical Foundations</h2>
 
 <h3>2.1 OSM Data Quality for 3D Urban Modelling</h3>
@@ -85,9 +74,11 @@ th{background:var(--code-bg);font-weight:600}
 
 <h3>2.3 Web-Based 3D GIS Visualisation</h3>
 <p>The viewer uses WebGL via Three.js for browser-based rendering, following the trend identified by Resch et al. (2014) toward web-based 3D GIS platforms. The architecture separates data preparation (Python/QGIS) from visualisation (JavaScript/WebGL), communicating through a local HTTP server with GeoJSON as the interchange format. This separation enables offline operation while maintaining browser-based interactivity and cross-platform compatibility.</p>
+</section>
 
+<section id="pipeline">
 <h2 id="pipeline">3. Data Pipeline</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Ten-Step Export Pipeline</h4>
   <ol>
     <li><strong>Area resolution:</strong> User selects canvas extent or polygon features. Returns (QgsGeometry, QgsCoordinateReferenceSystem).</li>
@@ -102,23 +93,29 @@ th{background:var(--code-bg);font-weight:600}
     <li><strong>Viewer launch:</strong> HTTP server starts on a free port (8120&ndash;8139), browser opens <code>http://127.0.0.1:{port}/src/</code>.</li>
   </ol>
 </div>
+</section>
 
+<section id="area">
 <h2 id="area">4. Study Area Definition</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Area Sources and Boundary Shapes</h4>
   <p>Two area sources: <strong>Current map extent</strong> (canvas) or <strong>Selected polygon features</strong> (active layer, dissolved via <code>unaryUnion()</code>). Four boundary shapes: <strong>Circle</strong> (pole of inaccessibility algorithm, largest inscribed circle, clamped to max area, default), <strong>Rounded rectangle</strong> (corners at ~16% of short side via double-buffer technique), <strong>Extent</strong> (plain bounding box), and <strong>Polygon</strong> (exact selected geometry). Area is auto-reprojected to local UTM zone: \(\mathrm{zone} = \lfloor(\lambda + 180)/6\rfloor + 1\), EPSG = 32600 + zone (north) or 32700 + zone (south). Clamped to a configurable maximum (1&ndash;300 ha, default 150 ha). Study area inherits a 5 m presentation platform extending beyond the clip boundary with rounded corners.</p>
 </div>
+</section>
 
+<section id="download">
 <h2 id="download">5. OSM Data Download</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Overpass API Pipeline with Multi-Mirror and Cache</h4>
   <p>Queries Overpass API for buildings, highways (including cycleway deduplication), waterways, water areas, green spaces (parks, forests, pitches, cemeteries, parking lots, pedestrian squares), trees, bus stops, benches, street lamps, and waste baskets within the WGS84 bounding box. Uses <code>out body geom;</code> suffix for full geometry with 60-second timeout.</p>
   <p><strong>Multi-mirror:</strong> Three endpoints tried in order: <code>overpass-api.de</code>, <code>overpass.kumi.systems</code>, <code>overpass.private.coffee</code>. HTTP 429 triggers next mirror. First valid non-empty JSON wins.</p>
   <p><strong>Cache:</strong> SHA-256 of query string, first 40 chars, stored in <code>%TEMP%/osm_3d_model_cache/</code>. TTL: 7 days (604800 s). Cache validation checks payload structure for corrupt files.</p>
 </div>
+</section>
 
+<section id="layers">
 <h2 id="layers">6. Data Layers (11)</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Exported GeoJSON Layers</h4>
   <table>
     <tr><th>Layer</th><th>Geometry</th><th>Key Attributes</th></tr>
@@ -136,9 +133,11 @@ th{background:var(--code-bg);font-weight:600}
   </table>
   <p>Export uses <code>QgsVectorFileWriter.writeAsVectorFormatV3()</code> with GeoJSON driver and UTF-8. Atomic publish: staging directory &rarr; target via <code>Path.replace()</code> with backup on failure. Each GeoJSON validated as a non-empty FeatureCollection.</p>
 </div>
+</section>
 
+<section id="heights">
 <h2 id="heights">7. Building Height Logic</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Three-Tier Fallback with 57 Type-Specific Defaults</h4>
   <ol>
     <li>Parse <code>building:levels</code> or <code>levels</code> tag, rounded to integer, clamped to &ge;1.</li>
@@ -148,18 +147,22 @@ th{background:var(--code-bg);font-weight:600}
   </ol>
   <p>Additional columns: <code>height</code> (OSM height tag, float metres), <code>roof_height</code> (OSM roof:height tag), <code>footprint_m2</code> (computed), <code>gfa_m2</code> (computed = footprint &times; building_levels).</p>
 </div>
+</section>
 
+<section id="viewer">
 <h2 id="viewer">8. Three.js Viewer</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Scene Composition and Rendering</h4>
   <p>The viewer (<code>web/src/app.js</code>, ~9500+ lines) is a single-page Three.js application. Core rendering: <code>WebGLRenderer</code> with antialiasing, <code>PCFSoftShadowMap</code> shadows, ACES filmic tone mapping (exposure 1.32). Post-processing: <code>EffectComposer</code> chain: <code>RenderPass</code> &rarr; <code>SSAOPass</code> (optional) &rarr; <code>UnrealBloomPass</code> (optional, strength 0.3, radius 0.4, threshold 0.85) &rarr; <code>OutputPass</code>. <code>CSS2DRenderer</code> for 2D labels overlaid on 3D.</p>
   <p><strong>Lighting:</strong> <code>DirectionalLight</code> (intensity 1.38, shadow map 2048x2048, position 200,450,150) + <code>AmbientLight</code> (intensity 1.18). Procedural sky dome with <code>ShaderMaterial</code> (horizon #f6fbff to zenith #9ed8ff), star field (pseudo-random hash) at night.</p>
   <p><strong>Camera:</strong> <code>PerspectiveCamera</code> (45&deg; FOV, near 1, far 10000). <code>OrbitControls</code> (damping 0.05, max polar angle ~90&deg;). Also supports <code>PointerLockControls</code> for first-person walk mode (WASD, Shift sprint, C crouch). Fit algorithm: distance = max(220, min(maxDim &times; 2.4, 320, 1800)).</p>
   <p><strong>Boot sequence:</strong> loadManifest &rarr; applyManifestDefaults &rarr; loadGeoJson (all layers) &rarr; loadProjectDem &rarr; loadBaseMapTexture &rarr; buildTerrain &rarr; buildIslandLayer &rarr; building/road/sidewalk/waterline/fences/trees/furniture/traffic layers all rebuilt based on settings &rarr; loading screen fades out.</p>
 </div>
+</section>
 
+<section id="panels">
 <h2 id="panels">9. Viewer Panel System</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Eight Dockable Panels with Toolbar Tray</h4>
   <table>
     <tr><th>Panel</th><th>Controls</th></tr>
@@ -174,9 +177,11 @@ th{background:var(--code-bg);font-weight:600}
   </table>
   <p>All settings are persisted to localStorage under the key <code>planx_3d_city_settings</code> (schema v13) with migration logic. Scene rebuild tokens abort stale rebuilds when settings change rapidly.</p>
 </div>
+</section>
 
+<section id="themes">
 <h2 id="themes">10. Color Themes (11)</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Coordinated Palettes for Island, Terrain, Roads, Parks, Water, Roofs</h4>
   <table>
     <tr><th>Theme</th><th>Character</th><th>Island Base</th></tr>
@@ -194,45 +199,57 @@ th{background:var(--code-bg);font-weight:600}
   </table>
   <p>QGIS parallel styling: <code>qgis_styling.py</code> applies a categorised symbol renderer to buildings (6 function categories), roads (8 hierarchy levels with metric width expressions), and greens (8 categories including water, parking, pedestrian squares). Point layers receive single-symbol renderers. Theme palette is mirrored in both the QGIS project layers and the viewer manifest, ensuring visual consistency across environments.</p>
 </div>
+</section>
 
+<section id="facades">
 <h2 id="facades">11. Procedural Buildings and Facades</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Canvas-Drawn Textures and Parametric Roofs</h4>
   <p><strong>Facade textures:</strong> Canvas-drawn at runtime using <code>FACADE_RECIPES</code> with a storey-based window grid. Ground floor: shopfronts for Commercial/Mixed-Use (light blue glazing), entrance doors for Residential/Civic. Upper floors: coloured window rectangles, ~48% randomly lit (warm gold, amber/orange, cool blue, soft teal). A separate emissive map texture enables night glow when the day/night cycle enters night mode. 17 procedural roof texture variants (tile patterns, standing seam, shingle, solar, ceramic).</p>
   <p><strong>Roof geometry:</strong> Flat (with penthouse, HVAC, helipad/solar panels), Pyramid (concave-footprint-aware), Hip (ridge line at mid-height), Gable (ridge along OBB long axis), Shed (single slope).</p>
   <p><strong>Building setback:</strong> <code>offsetRing()</code> performs iterative vertex offset with hole detection, producing the footprint available for building generation. <code>perBuildingColorVariation</code> adds HSL lightness variation seeded by OSM ID for visual distinction.</p>
   <p><strong>Procedural ground textures:</strong> Asphalt, water, island block, and fence materials all generated via canvas drawing routines with configurable colours from the active theme.</p>
 </div>
+</section>
 
+<section id="roads">
 <h2 id="roads">12. Roads and Traffic</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Road Surfaces, Sidewalks, Bike Lanes, and Animated Traffic</h4>
   <p><strong>Roads:</strong> <code>buildRoadLayer()</code> constructs ribbon meshes along OSM way linestrings, extruded with configurable width per road class (motorway, trunk, primary, secondary, tertiary, residential, service, footway, cycleway). Lane markings: procedural dashed centre/side lines.</p>
   <p><strong>Sidewalks:</strong> Kerbed sidewalk ribbons on both sides, width scaled by road class. Placed via offset from road centrelines. Streetlights and trees alternate along sidewalks.</p>
   <p><strong>Bike lanes:</strong> Green ribbon strips offset to road-relative sides, using the OSM cycleway side tag when available.</p>
   <p><strong>Traffic:</strong> Instanced meshes for cars, vans, buses, and trucks with wheels and lights. Spawned on car-capable roads (excludes footways, cycleways). Frame-rate independent motion controlled by <code>settings.trafficSpeed</code>. Pedestrians keep to sidewalks with sidewalk-relative positioning. Cyclists ride on bike lanes when present. Night mode activates vehicle headlights/taillights and streetlight bulbs.</p>
 </div>
+</section>
 
+<section id="terrain">
 <h2 id="terrain">13. Terrain and Basemap</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Optional DEM and Raster Underlay</h4>
   <p><strong>DEM:</strong> Warped via <code>gdal:warpreproject</code> to the model base extent, bounded to ~512 px maximum dimension to keep file size manageable. The viewer loads GeoTIFF via the <code>geotiff.js</code> library and constructs a height-mapped terrain mesh. Terrain resolution is configurable.</p>
   <p><strong>Basemap:</strong> Rendered via <code>QgsMapRendererCustomPainterJob</code> at max 2048 px to transparent PNG. In the viewer, it appears as a flat underlay beneath the city with configurable opacity, blend mode (Normal/Multiply/Screen/Add/Difference), brightness, contrast, saturation, and tint. Shadow catching can be enabled to project building shadows onto the basemap surface. Drape height controls the vertical offset between basemap and city features.</p>
 </div>
+</section>
 
+<section id="exportstudio">
 <h2 id="exportstudio">14. Export Studio</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Stills, Video Recording, and Clipboard</h4>
   <p>Still formats: PNG, JPEG (quality slider), WebP, PDF (raw PDF 1.4 from JPEG with proper cross-reference table), SVG (embeds JPEG as href), HTML (self-contained page). Size options: viewport, Full HD (1920x1080), QHD (2560x1440), 4K (3840x2160), custom. Video recording: WebM or MP4, 30 or 60 fps, standard/high/ultra bitrate. Filename sanitisation and timestamped generation. Clipboard copy via <code>navigator.clipboard.write()</code>.</p>
 </div>
+</section>
 
+<section id="cache">
 <h2 id="cache">15. Caching and HTTP Server</h2>
-<div class="card">
+<div class="chrome-card">
   <h4>Atomic Data Publish with Security Headers</h4>
   <p><strong>Cache:</strong> SHA-256 of Overpass query (first 40 chars), stored as JSON in <code>%TEMP%/osm_3d_model_cache/</code>. TTL: 7 days. On-hit validation: corrupt files are discarded and re-fetched. Cache management UI exposes clear-cache button with count and byte-freed report.</p>
   <p><strong>HTTP server:</strong> <code>ThreadingTCPServer</code> on <code>127.0.0.1</code>, ports 8120&ndash;8139, daemon threads. <code>QuietHandler</code> adds security headers: <code>Cache-Control: no-store</code>, <code>Cross-Origin-Resource-Policy: same-origin</code>, <code>Referrer-Policy: no-referrer</code>, <code>X-Content-Type-Options: nosniff</code>, <code>X-Frame-Options: DENY</code>. Custom MIME types: <code>application/json</code> (.geojson), <code>image/tiff</code> (.tif), <code>image/webp</code> (.webp), <code>application/javascript</code> (.js).</p>
 </div>
+</section>
 
+<section id="params">
 <h2 id="params">16. Parameters and Controls</h2>
 <table>
   <tr><th>Parameter</th><th>Type</th><th>Range</th><th>Default</th></tr>
@@ -245,7 +262,9 @@ th{background:var(--code-bg);font-weight:600}
   <tr><td>Open viewer automatically</td><td>QCheckBox</td><td>On / Off</td><td>On</td></tr>
   <tr><td>Clear OSM cache</td><td>QPushButton</td><td>&mdash;</td><td>Reports files + bytes freed</td></tr>
 </table>
+</section>
 
+<section id="workflow">
 <h2 id="workflow">17. Workflow Guide</h2>
 <ol>
   <li>Pan and zoom the QGIS canvas to the desired study area, or select polygon features.</li>
@@ -259,7 +278,9 @@ th{background:var(--code-bg);font-weight:600}
   <li>The export result is also added as a styled QGIS layer group ("3D OSM Model") for inspection and analysis.</li>
   <li>Use Export Studio for stills, video, or clipboard output. Use Walk Mode for first-person exploration.</li>
 </ol>
+</section>
 
+<section id="technical">
 <h2 id="technical">18. Technical Notes</h2>
 <ul>
   <li><strong>CRS handling:</strong> Study area centroid &rarr; local UTM EPSG code. All geometry processing uses metric coordinates.</li>
@@ -270,7 +291,9 @@ th{background:var(--code-bg);font-weight:600}
   <li><strong>Viewer:</strong> ~9500-line Three.js app. ES module imports. WebGLRenderer with shadow maps + EffectComposer (SSAO/Bloom). Settings persist in IndexedDB (v13 schema). Scene rebuild tokens abort stale rebuilds.</li>
   <li><strong>QGIS compatibility:</strong> 3.28&ndash;4.99. Pure qgis.core/gui/PyQt. No external Python dependencies.</li>
 </ul>
+</section>
 
+<section id="literature">
 <h2 id="literature">19. Literature</h2>
 <ol class="refs">
   <li>Haklay, M. &amp; Weber, P. (2008). OpenStreetMap: User-generated street maps. <em>IEEE Pervasive Computing</em>, 7(4), 12&ndash;18. <a href="https://doi.org/10.1109/MPRV.2008.80">DOI: 10.1109/MPRV.2008.80</a></li>
@@ -284,34 +307,11 @@ th{background:var(--code-bg);font-weight:600}
   <li>Dirksen, C. (2014). <em>Three.js Essentials</em>. Packt Publishing.</li>
   <li>Muller, P., Wonka, P., Haegler, S., Ulmer, A., &amp; Van Gool, L. (2006). Procedural modeling of buildings. <em>ACM Transactions on Graphics</em>, 25(3), 614&ndash;623. <a href="https://doi.org/10.1145/1141911.1141931">DOI: 10.1145/1141911.1141931</a></li>
 </ol>
+</section>
 </main>
-<script>
-(function(){
-  var inp=document.getElementById('search');
-  var main=document.getElementById('main');
-  if(!inp||!main)return;
-  var all=main.querySelectorAll('h2,h3,p,li,td');
-  inp.addEventListener('input',function(){
-    var q=inp.value.trim().toLowerCase();
-    all.forEach(function(el){el.classList.remove('hidden');});
-    if(!q)return;
-    var sections=main.querySelectorAll('h2');
-    sections.forEach(function(h){
-      var next=h.nextElementSibling;
-      var keep=h.textContent.toLowerCase().indexOf(q)!==-1;
-      while(next && next.tagName!=='H2'){
-        if(next.textContent.toLowerCase().indexOf(q)!==-1)keep=true;
-        next=next.nextElementSibling;
-      }
-      if(!keep){
-        next=h.nextElementSibling;
-        while(next && next.tagName!=='H2'){next.classList.add('hidden');next=next.nextElementSibling;}
-        h.classList.add('hidden');
-      }
-    });
-  });
-})();
-</script>
+</div>
+
+<script src="assets/manual-chrome.js"></script>
 
 <!-- PDF PRINT BUTTON -->
 <style>
@@ -326,7 +326,7 @@ th{background:var(--code-bg);font-weight:600}
 @media print { #print-pdf-btn { display: none !important; } }
 @media (max-width: 768px) { #print-pdf-btn { bottom: 12px; right: 12px; padding: 8px 14px; font-size: 12px; } }
 </style>
-<button id="print-pdf-btn" onclick="window.print()" title="Save as PDF / Print">&#x1F5A8;&#xFE0F; Save as PDF</button>
+<button id="print-pdf-btn" onclick="window.print()" title="Save as PDF / Print">🖨️ Save as PDF</button>
 
 </body>
 </html>

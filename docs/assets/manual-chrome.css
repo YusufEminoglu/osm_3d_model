@@ -1,0 +1,295 @@
+/*
+ * Shared reference-manual "chrome" for QGIS plugin docs.
+ *
+ * This file owns layout and interaction mechanics ONLY (sidebar, table of
+ * contents accordion, search box, scroll-spy highlight, responsive collapse,
+ * readable typography rhythm). It does NOT own colour identity -- every
+ * plugin keeps its own palette so each manual still reads as belonging to
+ * its own category, not a reskinned clone.
+ *
+ * How a plugin adopts this file:
+ *   1. Link it after the plugin's own <style> block (or before, doesn't
+ *      matter -- see step 2) so the plugin's own rules can still override
+ *      anything chrome-specific if truly needed.
+ *   2. Define these custom properties once, in the plugin's own <style>
+ *      block, aliased to whatever palette variables the plugin already has
+ *      (fallbacks below keep an unmigrated plugin visually reasonable even
+ *      before that step):
+ *
+ *        --chrome-bg           page background
+ *        --chrome-panel-bg     sidebar / card background
+ *        --chrome-text         primary text colour
+ *        --chrome-muted        secondary / label text colour
+ *        --chrome-accent       the plugin's one identity colour
+ *        --chrome-accent-hover accent, hovered/active state
+ *        --chrome-border       hairline border colour
+ *        --chrome-code-bg      inline <code> background
+ *
+ *      Example (a plugin that already defines --kinetic-cyan / --primary-dark):
+ *        :root {
+ *          --chrome-bg: var(--primary-dark);
+ *          --chrome-accent: var(--kinetic-cyan);
+ *          --chrome-accent-hover: var(--kinetic-cyan-light);
+ *          ...
+ *        }
+ *   3. Use the markup contract below (#chrome-sidebar / #chrome-toc /
+ *      #chrome-search / .chrome-toc-group / .chrome-content section[id]),
+ *      matched by manual-chrome.js for the accordion, search and scroll-spy.
+ */
+
+:root {
+  --chrome-bg: #fafaf8;
+  --chrome-panel-bg: #f3f3f0;
+  --chrome-text: #1a1a1a;
+  --chrome-muted: #5a5a55;
+  --chrome-accent: #2a6e5e;
+  --chrome-accent-hover: #1a5e4e;
+  --chrome-border: #d8d5ce;
+  --chrome-code-bg: #edf4f2;
+}
+
+.chrome-layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.65;
+}
+
+/* ---------- Sidebar / TOC ---------- */
+
+#chrome-sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: var(--chrome-panel-bg);
+  border-right: 1px solid var(--chrome-border);
+  padding: 24px 20px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+#chrome-sidebar h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--chrome-muted);
+  margin-bottom: 12px;
+}
+
+#chrome-search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  margin-bottom: 18px;
+}
+
+#chrome-toc {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chrome-toc-group > .chrome-toc-group-btn {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--chrome-text);
+  padding: 8px 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chrome-toc-group > .chrome-toc-group-btn::after {
+  content: "\25BE"; /* ▾ */
+  font-size: 10px;
+  color: var(--chrome-muted);
+  transition: transform 0.15s ease;
+}
+
+.chrome-toc-group.collapsed > .chrome-toc-group-btn::after {
+  transform: rotate(-90deg);
+}
+
+.chrome-toc-group ul {
+  list-style: none;
+  margin: 0 0 6px 0;
+  padding-left: 6px;
+}
+
+.chrome-toc-group.collapsed ul {
+  display: none;
+}
+
+#chrome-toc a {
+  display: block;
+  padding: 5px 6px;
+  font-size: 13px;
+  color: var(--chrome-accent);
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+#chrome-toc a:hover {
+  text-decoration: underline;
+}
+
+#chrome-toc a.chrome-active {
+  background: var(--chrome-code-bg);
+  color: var(--chrome-accent-hover);
+  font-weight: 600;
+}
+
+#chrome-toc .chrome-no-results {
+  font-size: 12px;
+  color: var(--chrome-muted);
+  padding: 6px;
+  display: none;
+}
+
+/* ---------- Main content ---------- */
+
+.chrome-content {
+  flex: 1;
+  min-width: 0;
+  padding: 40px 48px 96px;
+  max-width: 900px;
+}
+
+.chrome-content h1 {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--chrome-accent);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.chrome-content h1 + p {
+  color: var(--chrome-muted);
+  margin-bottom: 32px;
+  font-size: 15px;
+}
+
+.chrome-content section {
+  margin-bottom: 3rem;
+  scroll-margin-top: 24px; /* keeps a jumped-to heading clear of the top edge */
+}
+
+.chrome-content h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--chrome-accent);
+  margin: 8px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--chrome-border);
+}
+
+.chrome-content h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--chrome-text);
+  margin: 22px 0 8px;
+}
+
+.chrome-content p,
+.chrome-content li {
+  font-size: 14.5px;
+  color: var(--chrome-text);
+  max-width: 68ch; /* readable line length regardless of viewport width */
+}
+
+.chrome-content p {
+  margin-bottom: 12px;
+}
+
+.chrome-content ul,
+.chrome-content ol {
+  margin: 6px 0 14px 22px;
+}
+
+.chrome-content li {
+  margin-bottom: 4px;
+}
+
+.chrome-card {
+  background: var(--chrome-bg);
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.chrome-card h4 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--chrome-accent);
+  margin-bottom: 6px;
+}
+
+.chrome-content code {
+  font-family: Consolas, "Courier New", monospace;
+  background: var(--chrome-code-bg);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.chrome-content table {
+  width: 100%;
+  max-width: none;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 13.5px;
+  overflow-x: auto;
+  display: block;
+}
+
+.chrome-content th,
+.chrome-content td {
+  border: 1px solid var(--chrome-border);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.chrome-content th {
+  background: var(--chrome-code-bg);
+  font-weight: 700;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 860px) {
+  .chrome-layout {
+    flex-direction: column;
+  }
+  #chrome-sidebar {
+    width: 100%;
+    min-width: auto;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--chrome-border);
+  }
+  .chrome-content {
+    padding: 24px 20px 64px;
+  }
+}
+
+.chrome-hidden {
+  display: none !important;
+}
