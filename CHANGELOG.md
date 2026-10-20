@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.0] - 2026-10-20
+
+- Volumetric 3D building massing modes: added `Auto Smart Massing` (default), `Podium + tower`, `Stepped tower`, `Courtyard block`, `Cantilever / pilotis`, and `Penthouse crown` modes selectable globally and per building function in the Style dock.
+- Expanded architectural facade and roof catalogue: added `UrbanF`, `CurtainWall`, `NordicTimber`, `HeritageStone`, `AnatolianBrick`, `IndustrialLoft`, and `BrutalistConcrete` procedural facades plus `CopperPatina`, `GravelBallast`, and `LeadMansard` roof textures.
+
 ## [1.7.2] - 2026-09-16
 
 - Redesign plugin icon to high-end 3D tactile brand design with circular teal pedestal, zero margin, and refreshed documentation links.

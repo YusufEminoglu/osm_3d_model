@@ -581,7 +581,7 @@ const LAYER = {
   carExtra:  0.08
 };
 const FACADE_TEXTURE_SCALE_MULTIPLIER = 4.85;
-const SETTINGS_SCHEMA_VERSION = 13;
+const SETTINGS_SCHEMA_VERSION = 14;
 
 // Match the viewer's local X axis to the QGIS map orientation.
 const LOCAL_X_SIGN = -1;
@@ -1010,6 +1010,17 @@ const blockCategoryColorState = {};
 const blockCategoryTextureState = {};
 const BLOCK_STYLE_STORAGE_KEY = 'planx_3d_city_block_styles';
 const ROOF_SHAPE_OPTIONS = ['Flat', 'Pyramid', 'Hip', 'Gable', 'Shed'];
+const BUILDING_MODE_OPTIONS = [
+  'Auto Smart Massing',
+  'Extruded + roof',
+  'Podium + tower',
+  'Stepped tower',
+  'Courtyard block',
+  'Cantilever / pilotis',
+  'Penthouse crown',
+  'Extruded',
+  'Footprint only'
+];
 
 const textureSets = {
   pavement: {
@@ -1060,12 +1071,19 @@ const textureSets = {
     UrbanC: 'assets/facade3.webp',
     UrbanD: 'assets/facade4.webp',
     UrbanE: 'UrbanE',
+    UrbanF: 'UrbanF',
     CampusGlass: 'CampusGlass',
+    CurtainWall: 'CurtainWall',
     EcoTimber: 'EcoTimber',
+    NordicTimber: 'NordicTimber',
     CivicStone: 'CivicStone',
+    HeritageStone: 'HeritageStone',
     DenseBrick: 'DenseBrick',
+    AnatolianBrick: 'AnatolianBrick',
     CoastalWhite: 'CoastalWhite',
-    MediterraneanStucco: 'MediterraneanStucco'
+    MediterraneanStucco: 'MediterraneanStucco',
+    IndustrialLoft: 'IndustrialLoft',
+    BrutalistConcrete: 'BrutalistConcrete'
   },
   roof: {
     RoofA: 'assets/roof.webp',
@@ -1078,7 +1096,10 @@ const textureSets = {
     StandingSeam: 'StandingSeam',
     GreenRoof: 'GreenRoof',
     SolarRoof: 'SolarRoof',
-    CeramicLight: 'CeramicLight'
+    CeramicLight: 'CeramicLight',
+    CopperPatina: 'CopperPatina',
+    GravelBallast: 'GravelBallast',
+    LeadMansard: 'LeadMansard'
   }
 };
 
@@ -1098,6 +1119,9 @@ const ROOF_TEXTURE_LABELS = {
   GreenRoof: 'Green roof',
   SolarRoof: 'Solar panel',
   CeramicLight: 'Light ceramic',
+  CopperPatina: 'Copper patina',
+  GravelBallast: 'Gravel ballast',
+  LeadMansard: 'Lead mansard',
 };
 function roofTextureLabel(key) {
   return ROOF_TEXTURE_LABELS[key] || key;
@@ -1194,8 +1218,8 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Curved Metal', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Dual Recycle', 'Cylinder', 'Compact', 'Solar Compactor'],
     busstops: ['Glass Shelter', 'Minimal Canopy', 'Steel Canopy', 'Wood Cabin', 'Compact Marker'],
-    facades: ['ResidentialA', 'ResidentialB', 'ResidentialC', 'ResidentialD', 'ResidentialE', 'ResidentialF'],
-    roofs: ['USShingle', 'StandingSeam', 'GermanTile', 'RoofD', 'RoofB'],
+    facades: ['ResidentialA', 'ResidentialB', 'ResidentialC', 'ResidentialD', 'ResidentialE', 'ResidentialF', 'UrbanE', 'UrbanF', 'CurtainWall'],
+    roofs: ['USShingle', 'StandingSeam', 'GermanTile', 'GravelBallast', 'RoofD', 'RoofB'],
     paving: ['Asphalt', 'StoneA', 'Cobble', 'Concrete', 'PlazaGranite']
   },
   'Modern Turkish': {
@@ -1206,8 +1230,8 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Dual Recycle', 'Cylinder', 'Compact'],
     busstops: ['Glass Shelter', 'Steel Canopy', 'Minimal Canopy', 'Compact Marker'],
-    facades: ['MediterraneanStucco', 'CoastalWhite', 'UrbanB', 'UrbanD'],
-    roofs: ['TurkishTile', 'CeramicLight', 'StandingSeam', 'RoofA'],
+    facades: ['ResidentialA', 'ResidentialB', 'ResidentialC', 'AnatolianBrick', 'MediterraneanStucco', 'CoastalWhite', 'UrbanB', 'UrbanD', 'UrbanF'],
+    roofs: ['TurkishTile', 'CeramicLight', 'StandingSeam', 'RoofA', 'CopperPatina'],
     paving: ['Concrete', 'StoneA', 'WarmStone', 'Asphalt', 'PlazaGranite']
   },
   Mediterranean: {
@@ -1218,7 +1242,7 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Curved Metal', 'Stone Seat', 'Classic Iron'],
     bins: ['Cylinder', 'Square Box', 'Dual Recycle', 'Compact'],
     busstops: ['Minimal Canopy', 'Wood Cabin', 'Glass Shelter', 'Compact Marker'],
-    facades: ['MediterraneanStucco', 'UrbanB', 'UrbanD', 'CoastalWhite'],
+    facades: ['MediterraneanStucco', 'AnatolianBrick', 'HeritageStone', 'UrbanB', 'UrbanD', 'CoastalWhite'],
     roofs: ['TurkishTile', 'CeramicLight', 'GermanTile', 'RoofA'],
     paving: ['StoneA', 'WarmStone', 'Cobble', 'Concrete']
   },
@@ -1230,8 +1254,8 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Slim Urban', 'Eco Timber'],
     bins: ['Dual Recycle', 'Square Box', 'Compact', 'Solar Compactor'],
     busstops: ['Glass Shelter', 'Minimal Canopy', 'Steel Canopy'],
-    facades: ['CampusGlass', 'UrbanC', 'UrbanA', 'UrbanB'],
-    roofs: ['RoofA', 'RoofC', 'USShingle', 'SolarRoof'],
+    facades: ['CampusGlass', 'CurtainWall', 'NordicTimber', 'UrbanC', 'UrbanA', 'UrbanB'],
+    roofs: ['RoofA', 'RoofC', 'USShingle', 'SolarRoof', 'GreenRoof'],
     paving: ['Concrete', 'CampusPaver', 'StoneA', 'Asphalt']
   },
   Eco: {
@@ -1242,7 +1266,7 @@ const assetThemePresets = {
     benches: ['Eco Timber', 'Wood Plank', 'Stone Seat', 'Concrete Slab'],
     bins: ['Dual Recycle', 'Compact', 'Cylinder', 'Solar Compactor'],
     busstops: ['Wood Cabin', 'Minimal Canopy', 'Glass Shelter'],
-    facades: ['EcoTimber', 'UrbanD', 'UrbanB', 'UrbanA'],
+    facades: ['EcoTimber', 'NordicTimber', 'UrbanD', 'UrbanB', 'UrbanA'],
     roofs: ['GreenRoof', 'SolarRoof', 'RoofA', 'TurkishTile'],
     paving: ['Permeable', 'Cobble', 'StoneA', 'Concrete']
   },
@@ -1254,8 +1278,8 @@ const assetThemePresets = {
     benches: ['Concrete Slab', 'Curved Metal', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Compact', 'Dual Recycle', 'Solar Compactor'],
     busstops: ['Glass Shelter', 'Steel Canopy', 'Minimal Canopy', 'Compact Marker'],
-    facades: ['DenseBrick', 'UrbanA', 'UrbanC', 'UrbanD'],
-    roofs: ['StandingSeam', 'RoofA', 'RoofB', 'USShingle'],
+    facades: ['DenseBrick', 'IndustrialLoft', 'BrutalistConcrete', 'CurtainWall', 'UrbanA', 'UrbanC', 'UrbanD', 'UrbanF'],
+    roofs: ['StandingSeam', 'GravelBallast', 'LeadMansard', 'RoofA', 'RoofB', 'USShingle'],
     paving: ['Asphalt', 'Concrete', 'Grid', 'PlazaGranite']
   },
   'Civic Heritage': {
@@ -1266,8 +1290,8 @@ const assetThemePresets = {
     benches: ['Classic Iron', 'Stone Seat', 'Wood Plank', 'Concrete Slab'],
     bins: ['Cylinder', 'Square Box', 'Dual Recycle', 'Compact'],
     busstops: ['Steel Canopy', 'Glass Shelter', 'Minimal Canopy'],
-    facades: ['CivicStone', 'MediterraneanStucco', 'UrbanB', 'UrbanC'],
-    roofs: ['GermanTile', 'CeramicLight', 'TurkishTile', 'StandingSeam'],
+    facades: ['CivicStone', 'HeritageStone', 'MediterraneanStucco', 'UrbanB', 'UrbanC'],
+    roofs: ['GermanTile', 'CopperPatina', 'LeadMansard', 'CeramicLight', 'TurkishTile', 'StandingSeam'],
     paving: ['WarmStone', 'StoneA', 'Cobble', 'PlazaGranite']
   },
   'Coastal Light': {
@@ -1278,7 +1302,7 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Eco Timber', 'Stone Seat', 'Slim Urban'],
     bins: ['Cylinder', 'Dual Recycle', 'Compact', 'Square Box'],
     busstops: ['Minimal Canopy', 'Glass Shelter', 'Wood Cabin'],
-    facades: ['CoastalWhite', 'MediterraneanStucco', 'UrbanD', 'CampusGlass'],
+    facades: ['CoastalWhite', 'MediterraneanStucco', 'NordicTimber', 'UrbanD', 'CampusGlass'],
     roofs: ['CeramicLight', 'RoofA', 'SolarRoof', 'TurkishTile'],
     paving: ['WarmStone', 'Permeable', 'StoneA', 'Concrete']
   }
@@ -1542,6 +1566,63 @@ function drawWindowedFacade(ctx, size, palette, opts) {
       ctx.fillStyle = grad;
       ctx.fillRect(x, 0, pilW, size);
     }
+  } else if (columnPattern === 'curtain') {
+    const mullionStep = size / (cols * 2);
+    for (let x = 0; x <= size; x += mullionStep) {
+      ctx.strokeStyle = `${frame}cc`;
+      ctx.lineWidth = (Math.round(x / mullionStep) % 2 === 0) ? 2.2 : 1.0;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, size);
+      ctx.stroke();
+    }
+  } else if (columnPattern === 'slats') {
+    const slatW = 6;
+    for (let x = 0; x < size; x += slatW) {
+      ctx.fillStyle = ((x / slatW) % 2 === 0) ? palette[0] : palette[2];
+      ctx.fillRect(x, 0, slatW - 1, size);
+      ctx.fillStyle = `${accent}77`;
+      ctx.fillRect(x + slatW - 1, 0, 1, size);
+    }
+  } else if (columnPattern === 'ashlar') {
+    const rowH = 18;
+    const blockW = 36;
+    for (let y = 0; y < size; y += rowH) {
+      const offset = ((y / rowH) % 2) * (blockW * 0.5);
+      for (let x = -blockW; x < size + blockW; x += blockW) {
+        ctx.fillStyle = ((x + y) % 3 === 0) ? palette[2] : palette[0];
+        ctx.fillRect(x + offset + 1, y + 1, blockW - 2, rowH - 2);
+        ctx.strokeStyle = `${accent}88`;
+        ctx.lineWidth = 1.0;
+        ctx.strokeRect(x + offset + 0.5, y + 0.5, blockW - 1, rowH - 1);
+      }
+    }
+  } else if (columnPattern === 'industrial') {
+    const brickH = 7;
+    const brickW = 20;
+    for (let y = 0; y < size; y += brickH) {
+      const offset = ((y / brickH) % 2) * (brickW * 0.5);
+      for (let x = -brickW; x < size + brickW; x += brickW) {
+        ctx.fillStyle = ((x + y) % 5 === 0) ? palette[2] : palette[0];
+        ctx.fillRect(x + offset, y, brickW - 1, brickH - 1);
+      }
+    }
+    const pierW = (size / cols) * 0.16;
+    for (let c = 0; c <= cols; c++) {
+      ctx.fillStyle = accent;
+      ctx.fillRect(c * (size / cols) - pierW * 0.5, 0, pierW, size);
+    }
+  } else if (columnPattern === 'waffle') {
+    const cellW = size / cols;
+    const cellH = size / floors;
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 3.2;
+    for (let c = 0; c <= cols; c++) {
+      ctx.beginPath(); ctx.moveTo(c * cellW, 0); ctx.lineTo(c * cellW, size); ctx.stroke();
+    }
+    for (let r = 0; r <= floors; r++) {
+      ctx.beginPath(); ctx.moveTo(0, r * cellH); ctx.lineTo(size, r * cellH); ctx.stroke();
+    }
   }
 
   const groundH = groundShop ? (size / (floors + 1)) * 1.6 : 0;
@@ -1579,6 +1660,61 @@ function drawWindowedFacade(ctx, size, palette, opts) {
         grad.addColorStop(1, accent);
         ctx.fillStyle = grad;
         ctx.fillRect(wx, wy, ww, wh);
+      } else if (glassPattern === 'balcony-bands') {
+        const grad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+        grad.addColorStop(0, palette[2]);
+        grad.addColorStop(0.62, accent);
+        grad.addColorStop(1, '#1e293b');
+        ctx.fillStyle = grad;
+        ctx.fillRect(wx, wy, ww, wh);
+        const railY = wy + wh * 0.62;
+        ctx.fillStyle = 'rgba(226,232,240,0.72)';
+        ctx.fillRect(wx - 1, railY, ww + 2, wh * 0.36);
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 1.0;
+        ctx.strokeRect(wx - 1, railY, ww + 2, wh * 0.36);
+      } else if (glassPattern === 'spandrel') {
+        const spandrelH = wh * 0.26;
+        ctx.fillStyle = accent;
+        ctx.fillRect(wx, wy, ww, spandrelH);
+        const grad = ctx.createLinearGradient(wx, wy + spandrelH, wx + ww, wy + wh);
+        grad.addColorStop(0, palette[2]);
+        grad.addColorStop(0.5, '#6495b8');
+        grad.addColorStop(1, accent);
+        ctx.fillStyle = grad;
+        ctx.fillRect(wx, wy + spandrelH, ww, wh - spandrelH);
+      } else if (glassPattern === 'mullion-grid') {
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(wx, wy, ww, wh);
+        const subC = 3;
+        const subR = 2;
+        ctx.strokeStyle = frame;
+        ctx.lineWidth = 1.1;
+        for (let sc = 1; sc < subC; sc++) {
+          const sx = wx + (ww / subC) * sc;
+          ctx.beginPath(); ctx.moveTo(sx, wy); ctx.lineTo(sx, wy + wh); ctx.stroke();
+        }
+        for (let sr = 1; sr < subR; sr++) {
+          const sy = wy + (wh / subR) * sr;
+          ctx.beginPath(); ctx.moveTo(wx, sy); ctx.lineTo(wx + ww, sy); ctx.stroke();
+        }
+      } else if (glassPattern === 'french-arch') {
+        ctx.fillStyle = accent;
+        ctx.fillRect(wx, wy, ww, wh);
+        ctx.fillStyle = palette[2];
+        ctx.beginPath();
+        const r = ww * 0.48;
+        ctx.arc(wx + ww * 0.5, wy + r, r, Math.PI, 0, false);
+        ctx.lineTo(wx + ww, wy + wh);
+        ctx.lineTo(wx, wy + wh);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = frame;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(wx + ww * 0.5, wy);
+        ctx.lineTo(wx + ww * 0.5, wy + wh);
+        ctx.stroke();
       } else if (glassPattern === 'striped') {
         const grad = ctx.createLinearGradient(wx, wy, wx + ww, wy);
         grad.addColorStop(0, palette[2]);
@@ -1651,13 +1787,20 @@ function drawWindowedFacade(ctx, size, palette, opts) {
 }
 
 const FACADE_RECIPES = {
-  CampusGlass:         { floorRows: 14, windowCols: 5, groundShop: true,  windowAspect: 0.82, glassPattern: 'horizontal-bands', columnPattern: 'flat',     accent: '#3d6b85' },
-  EcoTimber:           { floorRows: 10, windowCols: 4, groundShop: true,  windowAspect: 0.55, glassPattern: 'uniform',          columnPattern: 'timber',   accent: '#6b4a2a' },
-  CivicStone:          { floorRows: 12, windowCols: 5, groundShop: false, windowAspect: 0.35, glassPattern: 'shutters',         columnPattern: 'pilaster', accent: '#8a7a62' },
-  DenseBrick:          { floorRows: 11, windowCols: 6, groundShop: true,  windowAspect: 0.62, glassPattern: 'uniform',          columnPattern: 'brick',    accent: '#4a1f15' },
-  CoastalWhite:        { floorRows:  9, windowCols: 3, groundShop: true,  windowAspect: 0.95, glassPattern: 'striped',          columnPattern: 'flat',     accent: '#bcd1dc' },
-  MediterraneanStucco: { floorRows: 10, windowCols: 4, groundShop: true,  windowAspect: 0.50, glassPattern: 'shutters',         columnPattern: 'flat',     accent: '#a05a3c' },
-  UrbanE:              { floorRows: 13, windowCols: 6, groundShop: true,  windowAspect: 0.78, glassPattern: 'horizontal-bands', columnPattern: 'flat',     accent: '#2f3e52' }
+  CampusGlass:         { floorRows: 14, windowCols: 5, groundShop: true,  windowAspect: 0.82, glassPattern: 'horizontal-bands', columnPattern: 'flat',       accent: '#3d6b85' },
+  EcoTimber:           { floorRows: 10, windowCols: 4, groundShop: true,  windowAspect: 0.55, glassPattern: 'uniform',          columnPattern: 'timber',     accent: '#6b4a2a' },
+  CivicStone:          { floorRows: 12, windowCols: 5, groundShop: false, windowAspect: 0.35, glassPattern: 'shutters',         columnPattern: 'pilaster',   accent: '#8a7a62' },
+  DenseBrick:          { floorRows: 11, windowCols: 6, groundShop: true,  windowAspect: 0.62, glassPattern: 'uniform',          columnPattern: 'brick',      accent: '#4a1f15' },
+  CoastalWhite:        { floorRows:  9, windowCols: 3, groundShop: true,  windowAspect: 0.95, glassPattern: 'striped',          columnPattern: 'flat',       accent: '#bcd1dc' },
+  MediterraneanStucco: { floorRows: 10, windowCols: 4, groundShop: true,  windowAspect: 0.50, glassPattern: 'shutters',         columnPattern: 'flat',       accent: '#a05a3c' },
+  UrbanE:              { floorRows: 13, windowCols: 6, groundShop: true,  windowAspect: 0.78, glassPattern: 'horizontal-bands', columnPattern: 'flat',       accent: '#2f3e52' },
+  UrbanF:              { floorRows: 12, windowCols: 5, groundShop: true,  windowAspect: 0.72, glassPattern: 'balcony-bands',    columnPattern: 'pilaster',   accent: '#4b5563' },
+  CurtainWall:         { floorRows: 16, windowCols: 8, groundShop: true,  windowAspect: 0.90, glassPattern: 'spandrel',         columnPattern: 'curtain',    accent: '#1e3a5f', windowFrameColor: '#94a3b8' },
+  NordicTimber:        { floorRows: 10, windowCols: 4, groundShop: true,  windowAspect: 0.58, glassPattern: 'striped',          columnPattern: 'slats',      accent: '#5c4028' },
+  HeritageStone:       { floorRows: 11, windowCols: 5, groundShop: true,  windowAspect: 0.42, glassPattern: 'french-arch',      columnPattern: 'ashlar',     accent: '#786b59' },
+  AnatolianBrick:      { floorRows: 10, windowCols: 5, groundShop: true,  windowAspect: 0.56, glassPattern: 'balcony-bands',    columnPattern: 'brick',      accent: '#6b2d1f' },
+  IndustrialLoft:      { floorRows:  9, windowCols: 4, groundShop: true,  windowAspect: 0.80, glassPattern: 'mullion-grid',     columnPattern: 'industrial', accent: '#27272a', windowFrameColor: '#18181b' },
+  BrutalistConcrete:   { floorRows: 12, windowCols: 6, groundShop: false, windowAspect: 0.48, glassPattern: 'spandrel',         columnPattern: 'waffle',     accent: '#52525b' }
 };
 
 function proceduralTextureCanvas(name, size = 256) {
@@ -1677,12 +1820,19 @@ function proceduralTextureCanvas(name, size = 256) {
     Grid: ['#dbeafe', '#64748b', '#f8fafc'],
     SharedStreet: ['#3a3f44', '#6b7280', '#eef2f7'],
     UrbanE: ['#d8dee7', '#536171', '#f3f6f9'],
+    UrbanF: ['#e2e5ea', '#4b5563', '#f8fafc'],
     CampusGlass: ['#a9d6e8', '#2f5f73', '#e8f6fb'],
+    CurtainWall: ['#b8d4e8', '#1e3a5f', '#e6f3fb'],
     EcoTimber: ['#9a6b3a', '#4f3824', '#d5b07c'],
+    NordicTimber: ['#b8895a', '#5c4028', '#e3c39a'],
     CivicStone: ['#c8c2b6', '#7c7468', '#eee8dd'],
+    HeritageStone: ['#dcd3c2', '#786b59', '#f3ede2'],
     DenseBrick: ['#8f3f2d', '#55261d', '#c2694f'],
+    AnatolianBrick: ['#a84a32', '#6b2d1f', '#d97f62'],
     CoastalWhite: ['#f5f1e8', '#92a7b4', '#ffffff'],
-    MediterraneanStucco: ['#ead8bd', '#b78b64', '#fff4df']
+    MediterraneanStucco: ['#ead8bd', '#b78b64', '#fff4df'],
+    IndustrialLoft: ['#8c3b2b', '#27272a', '#cbd5e1'],
+    BrutalistConcrete: ['#b4b8bf', '#52525b', '#d4d8de']
   }[name] || ['#cbd5e1', '#94a3b8', '#f8fafc'];
 
   ctx.fillStyle = palette[0];
@@ -1898,7 +2048,7 @@ const settings = {
   parcelBoundaryOpacity: 0.35,
   hardscapeStyle: 'Cobble',
   hardscapeHeight: 0.30,
-  buildingMode: 'Extruded + roof',
+  buildingMode: 'Auto Smart Massing',
   terrainAnalysisMode: 'Texture',
   assetTheme: 'Modern Urban',
   colorTheme: DEFAULT_COLOR_THEME,
@@ -2111,6 +2261,9 @@ function loadPersistedSettings() {
         // Reset it once so returning users do not see an idle-triggered dark scene.
         settings.enableSSAO = false;
       }
+      if (schemaVersion < 14 && !settings.activeLook) {
+        settings.buildingMode = 'Auto Smart Massing';
+      }
     }
     settings.roofShape = roofShapeValue(settings.roofShape, 'Pyramid');
     settings.roofTexture = presetValue(settings.roofTexture, textureSets.roof, 'RoofA');
@@ -2133,7 +2286,7 @@ function loadPersistedSettings() {
  * fallback when a photo texture is missing — they simply no longer win a reseed.
  */
 const RESIDENTIAL_FACADES = ['ResidentialA', 'ResidentialB', 'ResidentialC', 'ResidentialD', 'ResidentialE', 'ResidentialF'];
-const URBAN_FACADES = ['UrbanA', 'UrbanB', 'UrbanC', 'UrbanD', 'UrbanE'];
+const URBAN_FACADES = ['UrbanA', 'UrbanB', 'UrbanC', 'UrbanD', 'UrbanE', 'UrbanF', 'CurtainWall', 'NordicTimber', 'HeritageStone', 'AnatolianBrick', 'IndustrialLoft', 'BrutalistConcrete'];
 const FACADE_RESIDENTIAL_SHARE = 3;   // residential walls per urban wall
 
 function facadeSeedPool(fallback = []) {
@@ -2165,7 +2318,8 @@ function defaultFunctionBuildingStyle(fn, index = 0) {
     floorHeight: settings.floorHeight,
     roofShape: roofShapeValue(settings.roofShape, 'Pyramid'),
     roofHeight: settings.roofHeight,
-    roofTexture: presetValue(settings.roofTexture, textureSets.roof, 'RoofA')
+    roofTexture: presetValue(settings.roofTexture, textureSets.roof, 'RoofA'),
+    massing: BUILDING_MODE_OPTIONS.includes(settings.buildingMode) ? settings.buildingMode : 'Auto Smart Massing'
   };
 }
 
@@ -2178,7 +2332,8 @@ function sanitizeFunctionBuildingStyle(style, fallback) {
     floorHeight: Math.max(2.4, Math.min(6, Number(base.floorHeight) || fallback.floorHeight)),
     roofShape: roofShapeValue(base.roofShape, fallback.roofShape),
     roofHeight: Math.max(0, Math.min(8, Number(base.roofHeight) || fallback.roofHeight)),
-    roofTexture: presetValue(base.roofTexture, textureSets.roof, fallback.roofTexture)
+    roofTexture: presetValue(base.roofTexture, textureSets.roof, fallback.roofTexture),
+    massing: BUILDING_MODE_OPTIONS.includes(base.massing) ? base.massing : (fallback.massing || 'Auto Smart Massing')
   };
 }
 
@@ -5768,6 +5923,45 @@ function createRoofPresetTexture(name) {
         ctx.stroke();
       }
     }
+  } else if (name === 'CopperPatina') {
+    ctx.fillStyle = '#4e8c7b';
+    ctx.fillRect(0, 0, 256, 256);
+    for (let x = 0; x < 256; x += 20) {
+      const grad = ctx.createLinearGradient(x, 0, x + 18, 0);
+      grad.addColorStop(0, '#3b6e60');
+      grad.addColorStop(0.5, '#68b09b');
+      grad.addColorStop(1, '#2f594d');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, 0, 18, 256);
+      ctx.strokeStyle = 'rgba(210,245,235,0.32)';
+      ctx.beginPath(); ctx.moveTo(x + 18, 0); ctx.lineTo(x + 18, 256); ctx.stroke();
+    }
+  } else if (name === 'GravelBallast') {
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2200; i++) {
+      const x = (i * 73) % 256;
+      const y = (i * 137) % 256;
+      const v = 115 + (i % 70);
+      ctx.fillStyle = `rgba(${v},${v},${Math.min(255, v + 6)},0.55)`;
+      ctx.fillRect(x, y, 2.5, 2.5);
+    }
+  } else if (name === 'LeadMansard') {
+    ctx.fillStyle = '#3f4752';
+    ctx.fillRect(0, 0, 256, 256);
+    const sw = 24, sh = 20;
+    for (let row = 0; row * sh < 256; row++) {
+      const y = row * sh;
+      const offset = (row % 2) * (sw * 0.5);
+      for (let col = -1; col * sw < 256 + sw; col++) {
+        const x = col * sw + offset;
+        const v = 54 + ((row * 5 + col * 9) & 15);
+        ctx.fillStyle = `rgb(${v},${v + 5},${v + 12})`;
+        ctx.fillRect(x + 1, y + 1, sw - 2, sh - 2);
+        ctx.strokeStyle = 'rgba(200,212,226,0.22)';
+        ctx.strokeRect(x + 1, y + 1, sw - 2, sh - 2);
+      }
+    }
   } else {
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
     for (let y = 0; y < 256; y += 14) {
@@ -6877,6 +7071,74 @@ function jitterBuildingColor(hex, seedKey) {
   return '#' + col.getHexString();
 }
 
+const MASSING_MODE_MAP = {
+  'auto smart massing': 'auto',
+  'auto': 'auto',
+  'footprint only': 'footprint',
+  'footprint': 'footprint',
+  'extruded': 'extrude',
+  'extruded + roof': 'extrude+roof',
+  'podium + tower': 'podium',
+  'stepped tower': 'stepped',
+  'courtyard block': 'courtyard',
+  'cantilever / pilotis': 'cantilever',
+  'penthouse crown': 'penthouse'
+};
+
+function resolveBuildingMassing(requestedMode, levels, footprintArea, fn, seed = 0) {
+  const norm = MASSING_MODE_MAP[String(requestedMode || '').trim().toLowerCase()] || 'auto';
+  if (norm !== 'auto') return norm;
+  const fnUpper = String(fn || '').toUpperCase();
+  if (levels <= 2) return 'extrude+roof';
+  if (levels >= 9 && footprintArea >= 180) {
+    return (seed % 2 === 0) ? 'stepped' : 'podium';
+  }
+  if (footprintArea >= 420 && levels >= 3 && levels <= 8) {
+    return (seed % 3 === 0) ? 'courtyard' : 'podium';
+  }
+  if ((fnUpper.includes('COMMERC') || fnUpper.includes('OFFICE') || fnUpper.includes('CIVIC') || fnUpper.includes('TICARET')) && levels >= 4) {
+    return (seed % 2 === 0) ? 'podium' : 'cantilever';
+  }
+  if (levels >= 5) {
+    const pick = seed % 4;
+    if (pick === 0) return 'penthouse';
+    if (pick === 1) return 'podium';
+    if (pick === 2) return 'cantilever';
+  }
+  return 'extrude+roof';
+}
+
+function insetTierForPolygon(poly, baseShape, baseFootprint, distance) {
+  if (!poly || !poly.length || Math.abs(distance) < 0.05) {
+    return { shape: baseShape, footprint: baseFootprint, applied: false };
+  }
+  const outerLocal = offsetRing(poly[0], distance, false);
+  if (!outerLocal || outerLocal.length < 3) {
+    return { shape: baseShape, footprint: baseFootprint, applied: false };
+  }
+  if (outerLocal.some((pt) => !Number.isFinite(pt.x) || !Number.isFinite(pt.y))) {
+    return { shape: baseShape, footprint: baseFootprint, applied: false };
+  }
+  let area = 0;
+  for (let i = 0; i < outerLocal.length; i++) {
+    const p1 = outerLocal[i];
+    const p2 = outerLocal[(i + 1) % outerLocal.length];
+    area += (p1.x * p2.y - p2.x * p1.y);
+  }
+  if (Math.abs(area) < 10.0) {
+    return { shape: baseShape, footprint: baseFootprint, applied: false };
+  }
+  const shape = new THREE.Shape();
+  outerLocal.forEach((pt, i) => {
+    if (i === 0) shape.moveTo(pt.x, pt.y); else shape.lineTo(pt.x, pt.y);
+  });
+  return {
+    shape,
+    footprint: outerLocal.map((pt) => new THREE.Vector3(pt.x, 0, pt.y)),
+    applied: true
+  };
+}
+
 async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
   clearGroup(buildingGroup);
   if (!yapilar?.features?.length) return;
@@ -6918,18 +7180,18 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
     const featureFacade = resolveFacadeForLevels(selectedFacade, levels);
     const featureFacadeScale = Math.max(1, Math.min(8, parseNumberProp(props, ['planx_facade_scale', 'facade_scale', 'cephe_olcegi'], fnStyle.facadeScale)));
     const featureRoofTexture = presetValue(propFirst(props, ['planx_roof_texture', 'roof_texture', 'cati_doku', 'cati_texture']), textureSets.roof, fnStyle.roofTexture);
-    // An explicit OSM/PlanX roof tag wins; otherwise use the active per-function
-    // style. The previous smart Flat/Gable substitution made the global Pyramid
-    // choice impossible to apply, even though the UI showed it as selected.
     const explicitRoof = propFirst(props, ['planx_roof_shape', 'roof_shape', 'cati_tipi']);
     const featureRoofShape = roofShapeValue(explicitRoof || fnStyle.roofShape, settings.roofShape);
     const featureRoofHeight = parseNumberProp(props, ['planx_roof_height', 'roof_height', 'cati_yuksekligi', 'çatı_yüksekliği'], fnStyle.roofHeight);
     const featureRoofColor = normalizeHexColor(propFirst(props, ['planx_roof_color', 'roof_color', 'cati_renk']), '#ffffff');
+    const explicitMassing = propFirst(props, ['planx_massing', 'massing', 'bina_modeli', 'building_mode']);
+    const requestedMassing = explicitMassing
+      || (settings.buildingMode !== 'Auto Smart Massing' ? settings.buildingMode : (fnStyle.massing || settings.buildingMode));
 
     for (const poly of getPolygonRings(f.geometry)) {
       const outer = poly[0];
       if (!outer || outer.length < 3) continue;
-      const shape = shapeFromLocalPolygon(poly);
+      let shape = shapeFromLocalPolygon(poly);
       if (!shape) continue;
       const footprint = [];
       let sx = 0;
@@ -6947,8 +7209,10 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
       const dwellings = parseNumberProp(props, namesWithMapping('building_dwelling_field', ['daire', 'daire_sayisi', 'dwelling', 'dwellings']), Math.max(1, Math.round(floorArea / 115)));
       const population = parseNumberProp(props, ['nufus', 'nüfus', 'population', 'pop'], Math.round(dwellings * 3.1));
       const vehicles = parseNumberProp(props, ['arac', 'araç', 'vehicle', 'cars'], Math.round(dwellings * 0.7));
+      const seedInt = Math.abs(Math.round(sx + sy)) % 97;
+      const massingKind = resolveBuildingMassing(requestedMassing, levels, footprintArea, fn, seedInt);
 
-      if (settings.buildingMode === 'Footprint only') {
+      if (massingKind === 'footprint') {
         const fpGeo = new THREE.ShapeGeometry(shape);
         fpGeo.rotateX(Math.PI / 2);
         const fpMat = new THREE.MeshStandardMaterial({
@@ -6966,24 +7230,48 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
         continue;
       }
 
+      if (massingKind === 'courtyard' && poly.length === 1 && (!shape.holes || !shape.holes.length)) {
+        const courtyardInset = Math.max(2.6, Math.min(6.5, Math.sqrt(footprintArea) * 0.22));
+        const innerRing = offsetRing(poly[0], courtyardInset, false);
+        if (innerRing && innerRing.length >= 3 && !innerRing.some((pt) => !Number.isFinite(pt.x) || !Number.isFinite(pt.y))) {
+          let innerArea = 0;
+          for (let i = 0; i < innerRing.length; i++) {
+            const p1 = innerRing[i];
+            const p2 = innerRing[(i + 1) % innerRing.length];
+            innerArea += (p1.x * p2.y - p2.x * p1.y);
+          }
+          if (Math.abs(innerArea) >= 16.0) {
+            const holePath = new THREE.Path();
+            innerRing.forEach((pt, idx) => {
+              if (idx === 0) holePath.moveTo(pt.x, pt.y);
+              else holePath.lineTo(pt.x, pt.y);
+            });
+            shape.holes.push(holePath);
+          }
+        }
+      }
+
       if (!facadeCache[featureFacade]) {
         facadeCache[featureFacade] = await textureFromSet('facade', featureFacade, 0.5 / featureFacadeScale, 0.5 / featureFacadeScale);
         if (isSceneBuildStale(buildToken)) return;
       }
-      const texKey = `${featureFacade}_${levels}_${height.toFixed(2)}_${featureFacadeScale.toFixed(2)}`;
-      if (!facadeScaleCache[texKey]) {
-        const base = facadeCache[featureFacade];
-        if (base) {
-          const recipe = (typeof FACADE_RECIPES !== 'undefined') ? FACADE_RECIPES[featureFacade] : null;
-          const textureFloorRows = facadeTextureFloorRows(featureFacade, recipe?.floorRows || 10);
-          const repeatV = Math.max(0.025, Math.min(3.0, levels / textureFloorRows / featureFacadeScale));
-          const t = base.clone();
-          t.repeat.set(0.5 / featureFacadeScale, repeatV);
-          t.needsUpdate = true;
-          facadeScaleCache[texKey] = t;
+      const getTierFacadeTex = (tierLevels, tierHeight) => {
+        const texKey = `${featureFacade}_${tierLevels}_${tierHeight.toFixed(2)}_${featureFacadeScale.toFixed(2)}`;
+        if (!facadeScaleCache[texKey]) {
+          const base = facadeCache[featureFacade];
+          if (base) {
+            const recipe = (typeof FACADE_RECIPES !== 'undefined') ? FACADE_RECIPES[featureFacade] : null;
+            const textureFloorRows = facadeTextureFloorRows(featureFacade, recipe?.floorRows || 10);
+            const repeatV = Math.max(0.025, Math.min(3.0, tierLevels / textureFloorRows / featureFacadeScale));
+            const t = base.clone();
+            t.repeat.set(0.5 / featureFacadeScale, repeatV);
+            t.needsUpdate = true;
+            facadeScaleCache[texKey] = t;
+          }
         }
-      }
-      const facadeTex = facadeScaleCache[texKey] || facadeCache[featureFacade];
+        return facadeScaleCache[texKey] || facadeCache[featureFacade];
+      };
+      const facadeTex = getTierFacadeTex(levels, height);
       if (!roofTextureCache[featureRoofTexture]) {
         roofTextureCache[featureRoofTexture] = createRoofPresetTexture(featureRoofTexture);
       }
@@ -6991,23 +7279,18 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
       const isNight = (_solarCache.elevationDeg ?? 30) < -3;
       const matRoof = new THREE.MeshStandardMaterial({ map: featureRoofTex, color: new THREE.Color(featureRoofColor), roughness: 0.85, side: THREE.DoubleSide });
       const matHiddenCap = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
-      // Vary each building's wall shade a touch (deterministic, seeded by its
-      // footprint centroid) so same-function blocks aren't all identical.
       const wallColor = jitterBuildingColor(featureColor, `${Math.round(sx)}_${Math.round(sy)}`);
-      const matWall = new THREE.MeshStandardMaterial({
-        map: facadeTex,
-        color: new THREE.Color(wallColor),
+      const makeWallMat = (tex, colHex = wallColor) => new THREE.MeshStandardMaterial({
+        map: tex,
+        color: new THREE.Color(colHex),
         roughness: 0.72,
         side: THREE.DoubleSide,
         emissive: isNight ? new THREE.Color(0x333322) : new THREE.Color(0x000000),
         emissiveIntensity: isNight ? (Math.random() * 0.8 + 0.2) : 0
       });
+      const matWall = makeWallMat(facadeTex, wallColor);
 
-      const useSeparateRoofMesh = settings.buildingMode === 'Extruded + roof';
-      
-      const podiumHeight = (levels > 2 && settings.buildingSetback > 0) ? featureFloorHeight : 0;
-      let finalTowerShape = shape;
-      let finalTowerFootprint = footprint;
+      const useSeparateRoofMesh = massingKind !== 'extrude';
       const buildingData = {
         ...(f.properties || {}),
         planx_calc_footprint_area: footprintArea,
@@ -7017,92 +7300,89 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
         planx_calc_vehicles: vehicles
       };
 
-      if (podiumHeight > 0) {
-        // 1. Podium (Ground floor)
-        const podiumExtrude = new THREE.ExtrudeGeometry(shape, { depth: podiumHeight, bevelEnabled: false });
-        podiumExtrude.rotateX(Math.PI / 2);
-        podiumExtrude.computeBoundingBox();
-        const minPodY = podiumExtrude.boundingBox ? podiumExtrude.boundingBox.min.y : 0;
-        if (minPodY !== 0) podiumExtrude.translate(0, -minPodY, 0);
+      const addTierExtrusion = (tierShape, yOffset, tierHeight, tierLevels, capWithRoofMat) => {
+        if (!tierShape || tierHeight <= 0.05) return;
+        const extrude = new THREE.ExtrudeGeometry(tierShape, { depth: tierHeight, bevelEnabled: false });
+        extrude.rotateX(Math.PI / 2);
+        extrude.computeBoundingBox();
+        const minY = extrude.boundingBox ? extrude.boundingBox.min.y : 0;
+        if (minY !== 0) extrude.translate(0, -minY, 0);
+        const tierWallMat = makeWallMat(getTierFacadeTex(Math.max(1, tierLevels), tierHeight), wallColor);
+        const mesh = new THREE.Mesh(extrude, capWithRoofMat ? [matRoof, tierWallMat] : [matHiddenCap, tierWallMat]);
+        mesh.position.y = yOffset;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = buildingData;
+        buildingGroup.add(mesh);
+      };
 
-        let podiumFacadeTex = facadeTex;
-        if (settings.showStorefronts) {
-          const storefrontFacade = resolveFacadeForLevels(selectedFacade, 1);
-          if (!facadeCache[storefrontFacade]) {
-            facadeCache[storefrontFacade] = await textureFromSet('facade', storefrontFacade, 0.5 / featureFacadeScale, 0.5 / featureFacadeScale);
-          }
-          podiumFacadeTex = facadeCache[storefrontFacade] || facadeTex;
-        }
+      let finalTowerShape = shape;
+      let finalTowerFootprint = footprint;
+      let roofBaseY = baseY;
+      let roofTowerHeight = height;
 
-        const matPodiumWall = new THREE.MeshStandardMaterial({
-          map: podiumFacadeTex,
-          color: new THREE.Color(featureColor),
-          roughness: 0.72,
-          side: THREE.DoubleSide,
-          emissive: isNight ? new THREE.Color(0x333322) : new THREE.Color(0x000000),
-          emissiveIntensity: isNight ? (Math.random() * 0.8 + 0.2) : 0
-        });
-
-        const podMesh = new THREE.Mesh(podiumExtrude, [matHiddenCap, matPodiumWall]);
-        podMesh.position.y = baseY;
-        podMesh.castShadow = true;
-        podMesh.receiveShadow = true;
-        podMesh.userData = buildingData;
-        if (isSceneBuildStale(buildToken)) return;
-        buildingGroup.add(podMesh);
-
-        // 2. Setback Tower
-        const inset = shapeFromInsetPolygon(poly, settings.buildingSetback);
-        if (inset) {
-          finalTowerShape = inset;
-          const outerInset = offsetRing(poly[0], settings.buildingSetback, false);
-          if (outerInset && outerInset.length >= 3) {
-            finalTowerFootprint = outerInset.map(pt => new THREE.Vector3(pt.x, 0, pt.y));
-          }
-        }
-
-        const towerHeight = height - podiumHeight;
-        const towerExtrude = new THREE.ExtrudeGeometry(finalTowerShape, { depth: towerHeight, bevelEnabled: false });
-        towerExtrude.rotateX(Math.PI / 2);
-        towerExtrude.computeBoundingBox();
-        const minTowY = towerExtrude.boundingBox ? towerExtrude.boundingBox.min.y : 0;
-        if (minTowY !== 0) towerExtrude.translate(0, -minTowY, 0);
-
-        const towerLevels = Math.max(1, levels - 1);
-        const towTexKey = `${featureFacade}_${towerLevels}_${towerHeight.toFixed(2)}_${featureFacadeScale.toFixed(2)}`;
-        if (!facadeScaleCache[towTexKey]) {
-          const base = facadeCache[featureFacade];
-          if (base) {
-            const recipe = (typeof FACADE_RECIPES !== 'undefined') ? FACADE_RECIPES[featureFacade] : null;
-            const textureFloorRows = facadeTextureFloorRows(featureFacade, recipe?.floorRows || 10);
-            const repeatV = Math.max(0.025, Math.min(3.0, towerLevels / textureFloorRows / featureFacadeScale));
-            const t = base.clone();
-            t.repeat.set(0.5 / featureFacadeScale, repeatV);
-            t.needsUpdate = true;
-            facadeScaleCache[towTexKey] = t;
-          }
-        }
-        const towerFacadeTex = facadeScaleCache[towTexKey] || facadeTex;
-
-        const matTowerWall = new THREE.MeshStandardMaterial({
-          map: towerFacadeTex,
-          color: new THREE.Color(featureColor),
-          roughness: 0.72,
-          side: THREE.DoubleSide,
-          emissive: isNight ? new THREE.Color(0x333322) : new THREE.Color(0x000000),
-          emissiveIntensity: isNight ? (Math.random() * 0.8 + 0.2) : 0
-        });
-
-        const b = new THREE.Mesh(towerExtrude, useSeparateRoofMesh ? [matHiddenCap, matTowerWall] : [matRoof, matTowerWall]);
-        b.position.y = baseY + podiumHeight;
-        b.castShadow = true;
-        b.receiveShadow = true;
-        b.userData = buildingData;
-        if (isSceneBuildStale(buildToken)) return;
-        buildingGroup.add(b);
-
+      if (massingKind === 'stepped' && levels >= 5) {
+        const l1 = Math.max(1, Math.round(levels * 0.35));
+        const l2 = Math.max(1, Math.round(levels * 0.35));
+        const l3 = Math.max(1, levels - l1 - l2);
+        const h1 = l1 * featureFloorHeight;
+        const h2 = l2 * featureFloorHeight;
+        const h3 = Math.max(featureFloorHeight, height - h1 - h2);
+        const tier2 = insetTierForPolygon(poly, shape, footprint, 1.4);
+        const tier3 = insetTierForPolygon(poly, tier2.shape, tier2.footprint, 2.8);
+        addTierExtrusion(shape, baseY, h1, l1, tier2.applied);
+        addTierExtrusion(tier2.shape, baseY + h1, h2, l2, tier3.applied);
+        addTierExtrusion(tier3.shape, baseY + h1 + h2, h3, l3, !useSeparateRoofMesh);
+        finalTowerShape = tier3.shape;
+        finalTowerFootprint = tier3.footprint;
+        roofBaseY = baseY + h1 + h2;
+        roofTowerHeight = h3;
+      } else if (massingKind === 'podium' && levels >= 3) {
+        const podLevels = levels >= 6 ? 2 : 1;
+        const podH = podLevels * featureFloorHeight;
+        const towH = Math.max(featureFloorHeight, height - podH);
+        const setbackDist = settings.buildingSetback > 0 ? settings.buildingSetback : 1.8;
+        const towTier = insetTierForPolygon(poly, shape, footprint, setbackDist);
+        addTierExtrusion(shape, baseY, podH, podLevels, towTier.applied);
+        addTierExtrusion(towTier.shape, baseY + podH, towH, Math.max(1, levels - podLevels), !useSeparateRoofMesh);
+        finalTowerShape = towTier.shape;
+        finalTowerFootprint = towTier.footprint;
+        roofBaseY = baseY + podH;
+        roofTowerHeight = towH;
+      } else if (massingKind === 'cantilever' && levels >= 3) {
+        const baseLevels = 1;
+        const baseH = baseLevels * featureFloorHeight;
+        const upperH = Math.max(featureFloorHeight, height - baseH);
+        const baseTier = insetTierForPolygon(poly, shape, footprint, 1.1);
+        addTierExtrusion(baseTier.shape, baseY, baseH, baseLevels, false);
+        addTierExtrusion(shape, baseY + baseH, upperH, Math.max(1, levels - baseLevels), !useSeparateRoofMesh);
+        finalTowerShape = shape;
+        finalTowerFootprint = footprint;
+        roofBaseY = baseY + baseH;
+        roofTowerHeight = upperH;
+      } else if (massingKind === 'penthouse' && levels >= 3) {
+        const crownLevels = 1;
+        const mainLevels = Math.max(1, levels - crownLevels);
+        const mainH = mainLevels * featureFloorHeight;
+        const crownH = Math.max(featureFloorHeight * 0.85, height - mainH);
+        const crownTier = insetTierForPolygon(poly, shape, footprint, 1.5);
+        addTierExtrusion(shape, baseY, mainH, mainLevels, crownTier.applied);
+        addTierExtrusion(crownTier.shape, baseY + mainH, crownH, crownLevels, !useSeparateRoofMesh);
+        finalTowerShape = crownTier.shape;
+        finalTowerFootprint = crownTier.footprint;
+        roofBaseY = baseY + mainH;
+        roofTowerHeight = crownH;
+      } else if (levels > 2 && settings.buildingSetback > 0) {
+        const podiumHeight = featureFloorHeight;
+        const towTier = insetTierForPolygon(poly, shape, footprint, settings.buildingSetback);
+        addTierExtrusion(shape, baseY, podiumHeight, 1, towTier.applied);
+        addTierExtrusion(towTier.shape, baseY + podiumHeight, height - podiumHeight, Math.max(1, levels - 1), !useSeparateRoofMesh);
+        finalTowerShape = towTier.shape;
+        finalTowerFootprint = towTier.footprint;
+        roofBaseY = baseY + podiumHeight;
+        roofTowerHeight = height - podiumHeight;
       } else {
-        // Normal Extrusion (Single volume)
+        // Normal Extrusion (Single volume or Courtyard block)
         const extrude = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
         extrude.rotateX(Math.PI / 2);
         extrude.computeBoundingBox();
@@ -7129,7 +7409,7 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
 
         for (let i = 1; i < levels; i++) {
           const slabY = baseY + i * featureFloorHeight;
-          const slabSetback = ((i === 1 && podiumHeight > 0) ? 0 : (podiumHeight > 0 ? settings.buildingSetback : 0)) - settings.ledgeProjection;
+          const slabSetback = -settings.ledgeProjection;
           const outsetShape = shapeFromInsetPolygon(poly, slabSetback);
           if (outsetShape) {
             const slabGeom = new THREE.ExtrudeGeometry(outsetShape, { depth: slabThickness, bevelEnabled: false });
@@ -7150,7 +7430,10 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
 
       // 4. Roof Geometry
       if (useSeparateRoofMesh) {
-        const roof = roofMeshFor(finalTowerShape, finalTowerFootprint, baseY + podiumHeight, height - podiumHeight, featureRoofShape, featureRoofHeight);
+        const roofShapeForMassing = (massingKind === 'stepped' || massingKind === 'penthouse') && !explicitRoof
+          ? 'Flat'
+          : featureRoofShape;
+        const roof = roofMeshFor(finalTowerShape, finalTowerFootprint, roofBaseY, roofTowerHeight, roofShapeForMassing, featureRoofHeight);
         roof.material.map = featureRoofTex;
         roof.material.color = new THREE.Color(featureRoofColor);
         roof.material.needsUpdate = true;
@@ -9889,7 +10172,7 @@ function populateDockSelects() {
     roofTexture: Object.keys(textureSets.roof),
     pavementStyle: Object.keys(textureSets.pavement),
     terrainAnalysisMode: ['Texture', 'Elevation tint', 'Slope tint'],
-    buildingMode: ['Footprint only', 'Extruded', 'Extruded + roof'],
+    buildingMode: ['Auto Smart Massing', 'Footprint only', 'Extruded', 'Extruded + roof', 'Podium + tower', 'Stepped tower', 'Courtyard block', 'Cantilever / pilotis', 'Penthouse crown'],
     hardscapeStyle: Object.keys(textureSets.hardscape),
     roadStyle: Object.keys(textureSets.road),
     roadColorMode: ['Default', 'Amenity distance', 'Access / traffic'],
@@ -9935,9 +10218,9 @@ function renderFunctionStyleDock() {
     return;
   }
   host.innerHTML = '';
-  const facadeOptions = uniqueAssetVariants('facades', Object.keys(textureSets.facade))
-    .filter((value) => Object.prototype.hasOwnProperty.call(textureSets.facade, value));
+  const facadeOptions = Object.keys(textureSets.facade);
   const roofOptions = Object.keys(textureSets.roof);
+  const massingOptions = BUILDING_MODE_OPTIONS;
   const makeSelect = (options, value, labelFn) => {
     const select = document.createElement('select');
     options.forEach((item) => {
@@ -10005,6 +10288,13 @@ function renderFunctionStyleDock() {
       rebuildScene();
     });
 
+    const massing = makeSelect(massingOptions, style.massing || 'Auto Smart Massing');
+    massing.addEventListener('change', () => {
+      style.massing = BUILDING_MODE_OPTIONS.includes(massing.value) ? massing.value : 'Auto Smart Massing';
+      saveFunctionBuildingStyles();
+      rebuildScene();
+    });
+
     const roofShape = makeSelect(ROOF_SHAPE_OPTIONS, style.roofShape);
     roofShape.addEventListener('change', () => {
       style.roofShape = roofShapeValue(roofShape.value, 'Pyramid');
@@ -10045,6 +10335,7 @@ function renderFunctionStyleDock() {
 
     grid.append(
       makeField('Facade', facade),
+      makeField('Massing', massing),
       makeField('Roof shape', roofShape),
       makeField('Roof texture', roofTexture),
       makeField('Roof height', roofHeight.wrap),
