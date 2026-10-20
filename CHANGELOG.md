@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.1] - 2026-10-20
+
+- Scoped all 19 QGIS and Qt enum references (`QgsWkbTypes.GeometryType`, `QgsMapLayerProxyModel.Filter`, `QgsUnitTypes.RenderUnit`, `QgsTask.Flag`, `Qgis.MessageLevel`, `QgsBlockingNetworkRequest.ErrorCode`, `QgsVectorFileWriter.WriterError`) so the QGIS Hub static Qt6 checker reports zero warnings while preserving identical QGIS 3 and QGIS 4 runtime performance and behavior.
+- Normalized ZIP archive entry permissions to `0644` (non-executable) for all shipped files.
+
 ## [1.8.0] - 2026-10-20
 
 - Volumetric 3D building massing modes: added `Auto Smart Massing` (default), `Podium + tower`, `Stepped tower`, `Courtyard block`, `Cantilever / pilotis`, and `Penthouse crown` modes selectable globally and per building function in the Style dock.

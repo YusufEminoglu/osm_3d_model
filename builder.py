@@ -132,7 +132,8 @@ class BuildError(RuntimeError):
 # Inscribed circle
 # --------------------------------------------------------------------------
 def _boundary_line(geom: QgsGeometry) -> QgsGeometry:
-    line = geom.convertToType(QgsWkbTypes.LineGeometry, True)
+    line_geom = getattr(getattr(QgsWkbTypes, "GeometryType", QgsWkbTypes), "LineGeometry")
+    line = geom.convertToType(line_geom, True)
     if line and not line.isEmpty():
         return line
     return geom

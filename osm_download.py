@@ -36,6 +36,23 @@ from qgis.core import (
 
 from . import PLUGIN_VERSION
 
+_NO_NETWORK_ERROR = getattr(
+    getattr(QgsBlockingNetworkRequest, "ErrorCode", QgsBlockingNetworkRequest),
+    "NoError",
+)
+_NO_WRITER_ERROR = getattr(
+    getattr(QgsVectorFileWriter, "WriterError", QgsVectorFileWriter),
+    "NoError",
+)
+_POLYGON_GEOMETRY = getattr(
+    getattr(QgsWkbTypes, "GeometryType", QgsWkbTypes),
+    "PolygonGeometry",
+)
+_LINE_GEOMETRY = getattr(
+    getattr(QgsWkbTypes, "GeometryType", QgsWkbTypes),
+    "LineGeometry",
+)
+
 # Public Overpass mirrors, tried in order. The main instance is frequently rate
 # limited (HTTP 429) or slow; falling back to mirrors makes the one-button flow
 # far more reliable. The first endpoint that answers with valid JSON wins.
@@ -240,7 +257,7 @@ def _fetch_one(endpoint: str, query: str, timeout_s: int):
         code = client.post(request, body, False, None)
     except Exception as exc:  # noqa: BLE001 - any Qt failure is a network failure here
         return None, str(exc).strip() or "network request exception", True
-    if code != QgsBlockingNetworkRequest.NoError:
+    if code != _NO_NETWORK_ERROR:
         detail = "network request failed"
         error_message = getattr(client, "errorMessage", None)
         if callable(error_message):
@@ -715,9 +732,9 @@ def _polygon_from_ring(points: list) -> QgsGeometry | None:
         polygon = polygon.makeValid()
     if polygon is None or polygon.isEmpty():
         return None
-    if QgsWkbTypes.geometryType(polygon.wkbType()) != QgsWkbTypes.PolygonGeometry:
+    if QgsWkbTypes.geometryType(polygon.wkbType()) != _POLYGON_GEOMETRY:
         converted = QgsGeometry(polygon)
-        if not converted.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry):
+        if not converted.convertGeometryCollectionToSubclass(_POLYGON_GEOMETRY):
             return None
         polygon = converted
     return polygon if not polygon.isEmpty() and polygon.area() > 0 else None
@@ -761,8 +778,8 @@ def _relation_multipolygon(element) -> QgsGeometry | None:
         poly = poly.makeValid()
     if poly is None or poly.isEmpty():
         return None
-    if QgsWkbTypes.geometryType(poly.wkbType()) != QgsWkbTypes.PolygonGeometry:
-        if not poly.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry):
+    if QgsWkbTypes.geometryType(poly.wkbType()) != _POLYGON_GEOMETRY:
+        if not poly.convertGeometryCollectionToSubclass(_POLYGON_GEOMETRY):
             return None
     return poly
 
@@ -830,7 +847,7 @@ def save_layer_to_geojson(layer: QgsVectorLayer, path) -> None:
         message = str(result[1]) if len(result) > 1 else ""
     else:
         error, message = result, ""
-    if error != QgsVectorFileWriter.NoError:
+    if error != _NO_WRITER_ERROR:
         try:
             os.remove(path)
         except OSError:
@@ -1031,7 +1048,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
+            clipped = clip_to_area(base, _POLYGON_GEOMETRY)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -1061,7 +1078,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
+            clipped = clip_to_area(base, _POLYGON_GEOMETRY)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -1079,7 +1096,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
+            clipped = clip_to_area(base, _POLYGON_GEOMETRY)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -1098,7 +1115,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
+            clipped = clip_to_area(base, _POLYGON_GEOMETRY)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -1113,7 +1130,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _way_polyline(element)
             if not base:
                 continue
-            clipped = clip_to_area(base, QgsWkbTypes.LineGeometry)
+            clipped = clip_to_area(base, _LINE_GEOMETRY)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -1156,7 +1173,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _way_polyline(element)
             if not base:
                 continue
-            clipped = clip_to_area(base, QgsWkbTypes.LineGeometry)
+            clipped = clip_to_area(base, _LINE_GEOMETRY)
             if clipped is None:
                 counts["skipped"] += 1
                 continue
@@ -1176,7 +1193,7 @@ def download_osm_for_area(area_utm: QgsGeometry, epsg_dest: int, feedback=None,
             base = _element_polygon(element)
             if not base:
                 continue
-            clipped = clip_to_area(base, QgsWkbTypes.PolygonGeometry)
+            clipped = clip_to_area(base, _POLYGON_GEOMETRY)
             if clipped is None:
                 counts["skipped"] += 1
                 continue

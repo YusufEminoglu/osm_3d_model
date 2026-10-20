@@ -343,7 +343,9 @@ class Osm3dModelDialog(QDialog):
         dem_row = QHBoxLayout()
         dem_row.addWidget(QLabel("DEM (optional)"))
         self.dem_combo = QgsMapLayerComboBox()
-        self.dem_combo.setFilters(QgsMapLayerProxyModel.RasterLayer)
+        self.dem_combo.setFilters(
+            getattr(getattr(QgsMapLayerProxyModel, "Filter", QgsMapLayerProxyModel), "RasterLayer")
+        )
         self.dem_combo.setAllowEmptyLayer(True)
         self.dem_combo.setCurrentIndex(0)
         dem_row.addWidget(self.dem_combo, 1)

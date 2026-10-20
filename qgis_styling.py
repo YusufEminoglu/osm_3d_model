@@ -151,7 +151,7 @@ def _render_map_units():
     try:
         return QgsUnitTypes.RenderUnit.RenderMapUnits
     except AttributeError:
-        return QgsUnitTypes.RenderMapUnits
+        return getattr(QgsUnitTypes, "RenderMapUnits")
 
 
 def _fill(color_hex: str, outline: str, outline_width: float = 0.16):

@@ -37,7 +37,8 @@ class _OverpassFetchTask(QgsTask):
     """Network-only task; QGIS geometry and layer work stays on the UI thread."""
 
     def __init__(self, bbox, use_cache, callback):
-        super().__init__("3D OSM Model: download OpenStreetMap", QgsTask.CanCancel)
+        can_cancel = getattr(getattr(QgsTask, "Flag", QgsTask), "CanCancel")
+        super().__init__("3D OSM Model: download OpenStreetMap", can_cancel)
         self.bbox = tuple(float(value) for value in bbox)
         self.use_cache = bool(use_cache)
         self.callback = callback
@@ -170,7 +171,8 @@ class Osm3dModelPlugin:
         """Return (QgsGeometry, QgsCoordinateReferenceSystem) for the chosen source."""
         if source == "selection":
             layer = self.iface.activeLayer()
-            if not isinstance(layer, QgsVectorLayer) or layer.geometryType() != QgsWkbTypes.PolygonGeometry:
+            poly_geom = getattr(getattr(QgsWkbTypes, "GeometryType", QgsWkbTypes), "PolygonGeometry")
+            if not isinstance(layer, QgsVectorLayer) or layer.geometryType() != poly_geom:
                 raise ValueError("Select a polygon layer as the active layer, then select feature(s).")
             feats = [f.geometry() for f in layer.selectedFeatures() if f.hasGeometry() and not f.geometry().isEmpty()]
             if not feats:
@@ -431,8 +433,9 @@ class Osm3dModelPlugin:
             # The dialog's C++ object is gone; drop the connection.
             self._disconnect_canvas_probe()
         except Exception as exc:  # a readout must never break the canvas
+            warn_lvl = getattr(getattr(Qgis, "MessageLevel", Qgis), "Warning")
             QgsMessageLog.logMessage(
-                f"Area readout refresh failed: {exc}", "3D OSM Model", Qgis.Warning
+                f"Area readout refresh failed: {exc}", "3D OSM Model", warn_lvl
             )
 
     def _area_summary(self, source: str) -> str:
