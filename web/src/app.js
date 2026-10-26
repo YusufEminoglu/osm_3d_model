@@ -27,42 +27,20 @@ import {
   tourStateAt
 } from './looks.js';
 import { WALK, eyeHeight, gaitOffset, gaitStrength, stepWalkVelocity, topSpeed } from './walk.js';
+import {
+  DYNAMIC_FACADE_STYLES,
+  FACADE_MODE_OPTIONS,
+  autoFacadeName,
+  createDynamicFacadeMaterial,
+  dynamicStyleOfToken,
+  prismGeometry,
+  setDynamicFacadeNight
+} from './facade_dynamic.js';
+import { FACADES, FACADE_TEXTURE_GRID, ROOFS, ROOF_LABELS, catalogueName, surfacesFor } from './material_catalogue.js';
 
-let currentLang = 'EN';
 const urlParams = new URLSearchParams(window.location.search);
 const isPortableMode = urlParams.has('portable') || urlParams.get('portable') === '1';
 const i18n = {
-  TR: {
-    guiTitle: 'Kentsel Kontroller',
-    env: 'Çevre', fog: 'Sis', sunDir: 'Güneş Yönü', sunElev: 'Güneş Yük.',
-    terrain: 'Zemin & Yüzey', pavement: 'Yol Kaplaması', showHardscape: 'Sert Zemin Göster',
-    hardTex: 'Sert Zemin Dokusu', hardH: 'Sert Zemin Yüksekliği', islCol: 'Ada Rengi', islTex: 'Ada Dokusu',
-    parkCol: 'Park Rengi', parkTex: 'Park Dokusu', sportCol: 'Spor Alani Rengi',
-    parcels: 'Parseller', showParcels: 'Parselleri Göster', boundCol: 'Sınır Rengi', boundOp: 'Sınır Opaklığı',
-    bld: 'Binalar', floorH: 'Kat Yüksekliği (m)', roofShape: 'Çatı Tipi', roofTex: 'Çatı Dokusu', roofH: 'Çatı Yüksekliği (m)',
-    roads: 'Yollar & Trafik', showCars: 'Arabaları Göster', showRoads: 'Yolları Göster', roadCol: 'Yol Rengi',
-    roadW: 'Yol Genişliği', trafficSpd: 'Trafik Hızı',
-    funcCol: 'Kullanım Renkleri', funcFac: 'Kullanım Cepheleri',
-    demWait: 'DEM bekleniyor...', demFail: 'DEM yüklenemedi. Düz zeminle devam.',
-    loadingData: 'Veri yükleniyor...', processing: 'Katmanlar işleniyor...',
-    clickDesc: 'Fonksiyon: {f} <br> Kat: {k} <br> Nizam: {n}',
-    htmlTitle: '🏙️ 3D OSM Model',
-    htmlDesc: 'Gerçekçi kentsel görselleştirme. DEM yükselti, bina, yol ve ağaç katmanları.',
-    help1: 'Sol tık + sürükle: Döndür', help2: 'Scroll: Yakınlaştır / Uzaklaştır',
-    help3: 'Sağ tık + sürükle: Kaydır', help4: 'Binaya tıkla: Bilgi göster',
-    statsTitle: 'Alan İstatistikleri',
-    statBld: 'Toplam Bina:', statBlock: 'Ada:', statParcel: 'Parsel:', statFlr: 'Ort. Kat:',
-    carDensity: 'Araç Yoğunluğu', 
-    sfFolder: 'Sokak Elemanları', sfLights: 'Aydınlatma', sfBenches: 'Banklar', sfBins: 'Çöp Kutuları', sfStops: 'Duraklar',
-    fxFolder: 'Zaman & Efektler', timeOfDay: 'Zaman (Saat)', sSsa: 'SSAO (Gölgeler)', sBloom: 'Bloom (Parlama)',
-    pedDensity: 'Yaya Yoğunluğu',
-    weather: 'Hava Durumu',
-    showSidewalks: 'Kaldırımlar', showCrosswalks: 'Yaya Geçitleri', showPedestrianPaths: 'Ada İçi Patikalar',
-    binaInfo: 'Bina Bilgisi', biFonk: 'Fonksiyon', biKat: 'Kat Sayısı', biNiz: 'Nizam', biAlan: 'Alan',
-    sapanMode: 'Sapan Modu', sapanHit: 'Vuruş! +1', sapanScoreLbl: 'Skor',
-    autoTime: '⏱ Güneş Animasyonu', autoTimeSpd: 'Hız (sa/s)',
-    minimap: 'Mini Harita'
-  },
   EN: {
     guiTitle: 'Urban Controls',
     env: 'Environment', fog: 'Fog', sunDir: 'Sun Direction', sunElev: 'Sun Elevation',
@@ -89,13 +67,13 @@ const i18n = {
     pedDensity: 'Pedestrian Density',
     weather: 'Weather',
     showSidewalks: 'Sidewalks', showCrosswalks: 'Crosswalks', showPedestrianPaths: 'Block Paths',
-    binaInfo: 'Building Info', biFonk: 'Function', biKat: 'Floors', biNiz: 'Type', biAlan: 'Area',
-    sapanMode: 'Slingshot Mode', sapanHit: 'Hit! +1', sapanScoreLbl: 'Score',
+    buildingInfo: 'Building Info', biFunction: 'Function', biFloors: 'Floors', biArea: 'Area',
+    slingshotMode: 'Slingshot Mode', slingshotHit: 'Hit! +1', slingshotScoreLbl: 'Score',
     autoTime: '⏱ Solar Animation', autoTimeSpd: 'Speed (h/s)',
     minimap: 'Minimap'
   }
 };
-function t(key) { return i18n[currentLang]?.[key] ?? i18n.EN?.[key] ?? key; }
+function t(key) { return i18n.EN?.[key] ?? key; }
 
 // GeoJSON attributes, manifest metadata and uploaded file names are external
 // inputs. Keep the few template-based UI renderers safe by escaping every value
@@ -106,86 +84,6 @@ function escapeHtml(value) {
   })[char]);
 }
 
-Object.assign(i18n.TR, {
-  dockLayers: 'Katmanlar', dockScene: 'Sahne & Güneş', dockStyle: 'Stil', dockMobility: 'Hareketlilik',
-  dockFurniture: 'Kent Mobilyalari', dockAnalysis: 'Analiz',
-  lblRoads: 'Yollar', lblSidewalks: 'Kaldirimlar', lblCrosswalks: 'Yaya gecitleri', lblPedestrianPaths: 'Ada ici patikalar',
-  lblBlocks: 'Yeşiller / parklar', lblParcels: 'Parseller', lblHardscape: 'Sert zemin', lblBuildings: 'Binalar',
-  lblFences: 'Çitler / Sınırlar', lblWaterlines: 'Su Hatları / Akarsular', lblWaterlineWidth: 'Akarsu genişliği',
-  dockFences: 'Çitler & Sınırlar', lblShowFences: 'Çitleri Göster', lblFenceHeight: 'Çit Yüksekliği',
-  lblFenceThickness: 'Çit Kalınlığı', lblFenceTexture: 'Çit Dokusu', lblFenceColor: 'Çit Rengi',
-  fenceWall: 'Beton Duvar', fenceSteel: 'Metal Çit', fencePipeline: 'Sanayi Borusu', fenceWood: 'Ahşap Çit / Koruma Alanı',
-  lblBlockStyles: 'Ada Kategorileri', dockTitleFences: 'Çit paneli',
-  lblTrees: 'Agaclar', lblFurniture: 'Kent mobilyalari', lblCars: 'Araclar', lblPedestrians: 'Yayalar',
-  lblPlanTexture: 'Plan texture', lblOutsideRoiTerrain: 'ROI disi zemin', lblTextureOpacity: 'Texture opakligi',
-  lblTextureBrightness: 'Texture parlakligi', lblTextureContrast: 'Texture kontrasti',
-  lblModelBase: 'ROI model altligi', lblSideDrop: 'Altlik dususu', lblSideColor: 'Altlik rengi',
-  lblDemQuality: 'DEM mesh kalitesi', lblFog: 'Sis', lblTime: 'Zaman',
-  flattenIslands: 'Ada alti duzlestirme', islandPlateauTransition: 'Plato kenar rampi (m)',
-  dayOfYear: 'Yilin gunu (1-365)', latitude: 'Enlem (derece)',
-  shadowStudyTitle: 'Golge analizi',
-  shadowStudyNote: 'Gundonum ve ekinokslara atla, sonra günü oynat ki golgelerin nasil hareket ettigini gor.',
-  shadowWinter: 'Kıs gundonumu', shadowSpring: 'Bahar ekinoksu',
-  shadowSummer: 'Yaz gundonumu', shadowAutumn: 'Güz ekinoksu',
-  shadowPlayDay: 'Günü oynat (gündogumu-günbatimi)', shadowStop: 'Durdur',
-  shadowPlaySpeed: 'Gün-oynat hizi',
-  shadowCompute: 'Gunluk golge haritasi hesapla', shadowClear: 'Haritayi temizle',
-  timeDawn: 'Şafak 6', timeNoon: 'Öğle 12', timeSunset: 'Günbatımı 19', timeGolden: 'Altın 17', timeNight: 'Gece 22',
-  secModelBase: 'Model altlığı', secLifeTraffic: 'Hareket & trafik',
-  lblThemeMode: 'Tema', themeAuto: 'Otomatik (sistem)', themeLight: 'Aydınlık', themeDark: 'Karanlık',
-  lblTerrainTileMeters: 'Doku karo boyutu (m)',
-  lblBookmarks: 'Kamera yer imleri', bookmarkSave: 'Bu görünümü kaydet',
-  bookmarkEmpty: 'Henüz kaydedilmiş görünüm yok.',
-  bookmarkPrompt: 'Görünüm için bir isim verin:',
-  bookmarkGotoTitle: 'Bu görünüme uç', bookmarkDeleteTitle: 'Yer imini sil',
-  lblAutoTime: 'Gunes animasyonu', lblAutoTimeSpeed: 'Animasyon hizi',
-  lblWeather: 'Hava', lblSSAO: 'Golge kalitesi', lblBloom: 'Bloom/parlama',
-  lblIslandColor: 'Ada rengi', lblIslandTexture: 'Ada dokusu', lblIslandTransparency: 'Ada transparanligi',
-  lblParcelColor: 'Parsel sinir rengi', lblParcelOpacity: 'Parsel sinir opakligi',
-  lblRoadColor: 'Yol rengi', lblRoadStyle: 'Yol dokusu', lblPavementStyle: 'Zemin dokusu',
-  lblHardscapeStyle: 'Sert zemin dokusu', lblHardscapeHeight: 'Sert zemin yuksekligi',
-  lblBuildingMode: 'Bina modu', lblFacadeTextureScale: 'Cephe olcegi', lblTerrainAnalysis: 'Topoğrafya görünümü', lblAssetTheme: 'Asset theme',
-  lblTreeRenderMode: 'Agac render modu',
-  lblTreeRandomize: 'Agaclari rastgele dagit', lblTreeVariantCount: 'Agac cesit sayisi', lblTreeHeightRandom: 'Agac yukseklik ifadesi',
-  lblXyzTiles: 'QGIS basemap altligi', lblXyzUrl: 'XYZ URL sablonu',
-  lblFloorHeight: 'Kat yuksekligi', lblRoofShape: 'Cati tipi', lblRoofHeight: 'Cati yuksekligi',
-  lblRoofTexture: 'Cati dokusu', lblFunctionStyles: 'Kullanim renkleri ve cepheleri',
-  lblRoadAnalysis: 'Yol analizi', lblRoadWidth: 'Yol genisligi',
-  lblTrafficSpeed: 'Trafik hizi', lblCarDensity: 'Arac yogunlugu', lblPedDensity: 'Yaya yogunlugu',
-  lblLights: 'Aydinlatmalar', lblLightStyle: 'Aydinlatma tipi', lblBenches: 'Banklar',
-  lblBenchStyle: 'Bank tipi', lblBins: 'Cop kutulari', lblBinStyle: 'Cop kutusu tipi',
-  lblStops: 'Duraklar', lblStopStyle: 'Durak tipi', lblWindPlumes: 'Ruzgar etki zonu',
-  lblWindDirection: 'Ruzgar yonu', lblPlumeDistance: 'Etki mesafesi',
-  lblSolarReview: 'Solar inceleme', lblUrbanComfort: 'Kentsel konfor taramasi',
-  analysisNote: 'Planlama taramasi / tasarim kontrolu. Bu katmanlar muhendislik simulasyonu degildir.',
-  dockTitleModelStudio: 'Model Laboratuvarı',
-  modelUploadTitle: 'Özel Model Yükle (.glb)',
-  lblModelCategory: 'Kategori',
-  catTree: 'Ağaç',
-  catLight: 'Sokak Lambası',
-  catBench: 'Bank',
-  catBin: 'Çöp Kutusu',
-  catBusStop: 'Otobüs Durağı',
-  modelTransformTitle: 'Model Dönüşümü (Yükseklik & Ölçek)',
-  lblTransformCategory: 'Kategori',
-  treePoolTitle: 'Ağaç Model Havuzu (rastgele)',
-  treePoolNote: '2-3 ağaç modeli ekleyin; ağaçlar bunlar arasından rastgele seçilir. Havuz boşsa varsayılan stilize ağaçlar kullanılır.',
-  btnInPool: '✓ Havuzda',
-  btnAddPool: '+ Havuza ekle',
-  lblElevation: 'Yükseklik',
-  uploadedModelsTitle: 'Model Kütüphanesi',
-  lblScaleX: 'Ölçek X',
-  lblScaleY: 'Ölçek Y',
-  lblScaleZ: 'Ölçek Z',
-  lblRotation: 'Döndürme',
-  noModelsUploaded: 'Henüz model yüklenmedi.',
-  btnUse: 'Kullan',
-  btnReset: 'Sıfırla',
-  confirmDeleteModel: 'Bu modeli silmek istediğinize emin misiniz?',
-  statusParsing: 'GLB model ayrıştırılıyor...',
-  statusSuccess: 'Başarıyla yüklendi!',
-  statusError: 'Hata: '
-});
 
 Object.assign(i18n.EN, {
   dockLayers: 'Layers', dockScene: 'Scene & Sun', dockStyle: 'Style', dockMobility: 'Mobility',
@@ -303,7 +201,6 @@ Object.assign(i18n.EN, {
   record: 'Record',
   stop: 'Stop',
   togglePanel: 'Toggle dashboard',
-  toggleLanguage: 'Switch to Turkish',
   dockTitleScene: 'Scene dock',
   dockTitleLayers: 'Layer dock',
   dockTitleStyle: 'Style dock',
@@ -337,74 +234,6 @@ Object.assign(i18n.EN, {
   minimap: 'Minimap'
 });
 
-Object.assign(i18n.TR, {
-  title: '3D OSM Model',
-  desc: 'OpenStreetMap\'ten anlik 3B sehir: alani sec, bina/yol/yesil/agac verisini indir ve canli gez.',
-  htmlTitle: '3D OSM Model',
-  loadingData: 'Proje verisi yukleniyor...',
-  processing: 'Kent katmanlari isleniyor...',
-  scenePreparing: 'Hazirlaniyor',
-  sceneLoading: 'Veri yukleniyor',
-  sceneGeojson: 'GeoJSON yukleniyor',
-  sceneDem: 'DEM okunuyor',
-  scenePlanTexture: 'Plan texture',
-  sceneBasemap: 'Basemap',
-  sceneTerrain: 'Terrain',
-  sceneLayers: 'Katmanlar',
-  sceneReady: 'Hazir',
-  metricBuildings: 'Bina',
-  metricBlocks: 'Ada',
-  metricParcels: 'Parsel',
-  metricFloors: 'Ort. kat',
-  metricPopulation: 'Nufus',
-  metricDwellings: 'Daire',
-  metricVehicles: 'Arac',
-  projectWaiting: 'Proje bilgisi bekleniyor',
-  manifestMissing: 'Manifest yok: bu eski bir export olabilir, viewer yine de yuklemeyi dener.',
-  crsUnknown: 'CRS bilgisi yok',
-  emptyExport: 'bos export',
-  notAvailable: 'yok',
-  statsLoading: 'Yukleniyor...',
-  cameraPanel: 'Kamera paneli',
-  screenshot: 'Fotograf',
-  orbit: 'Orbit',
-  walkSpeedShort: 'Yurume hizi',
-  record: 'Kayit',
-  stop: 'Dur',
-  togglePanel: 'Dashboard panelini ac/kapat',
-  toggleLanguage: 'Ingilizceye gec',
-  dockTitleScene: 'Sahne paneli',
-  dockTitleLayers: 'Katman paneli',
-  dockTitleStyle: 'Stil paneli',
-  dockTitleMobility: 'Hareketlilik paneli',
-  dockTitleFurniture: 'Kent mobilyalari paneli',
-  dockTitleAnalysis: 'Analiz paneli',
-  dockTitleNarrative: 'Narrative Studio',
-  dockTitleAdvanced: 'Gelistirilmis kontroller',
-  dockTitleWalk: 'Walk mode',
-  dockTitleGame: 'Sapan modu',
-  narrativeNote1: 'Kamera, katman, gunes ve analiz durumlarini keyframe olarak kaydedin; turu kamera panelinden kaydedin.',
-  narrativeNote2: 'Tour JSON yalniz rota ve durumlari saklar. Goruntu, DEM, GeoJSON veya tam viewer paketini icine gommez.',
-  tourDuration: 'Tur suresi',
-  loopTour: 'Turu donguye al',
-  tourCaptionPlaceholder: 'Baslik / sahne notu',
-  addKeyframe: 'Keyframe ekle',
-  updateKeyframe: 'Guncelle',
-  deleteKeyframe: 'Sil',
-  playTour: 'Oynat',
-  pauseTour: 'Duraklat',
-  exportJson: 'JSON export',
-  tourEmpty: 'Henuz keyframe yok.',
-  tourLoaded: 'Narrative tur portable paketten yuklendi.',
-  walkHud: 'WASD hareket · Shift hizli · C alcak · Esc cikis',
-  gameHint: 'Sol tik: tas at',
-  demLoading: 'DEM yukleniyor...',
-  demLoaded: 'DEM yuklendi',
-  planTextureFail: 'Plan texture yuklenemedi; varsayilan zeminle devam ediliyor.',
-  basemapFail: 'QGIS basemap texture yuklenemedi; varsayilan zeminle devam ediliyor.',
-  funcStylesPending: 'Fonksiyon stilleri veri yuklendikten sonra gorunur.',
-  minimap: 'Mini Harita'
-});
 
 
 const scene = new THREE.Scene();
@@ -868,11 +697,11 @@ function rebuildMinimapBg() {
   }
 
   // Island blocks
-  for (const f of layerDataCache.adalar?.features || []) {
+  for (const f of layerDataCache.blocksGeo?.features || []) {
     for (const poly of getPolygonRings(f.geometry)) {
       const ring = poly[0]; if (!ring) continue;
       const fn = buildingFunctionValue(f.properties || {}).toString().toUpperCase();
-      ctx.fillStyle = fn.includes('PARK') || fn.includes('YEŞİL') ? 'rgba(30,90,45,0.65)' : 'rgba(155,155,150,0.45)';
+      ctx.fillStyle = fn.includes('PARK') ? 'rgba(30,90,45,0.65)' : 'rgba(155,155,150,0.45)';
       ctx.beginPath();
       ring.forEach(([cx, cy], i) => {
         const [lx, lz] = metersToLocal(cx, cy); const [mx, my] = _mmPx(lx, lz);
@@ -884,7 +713,7 @@ function rebuildMinimapBg() {
 
   // Roads
   ctx.strokeStyle = '#222a38'; ctx.lineWidth = 1.2;
-  for (const f of layerDataCache.yollar?.features || []) {
+  for (const f of layerDataCache.roadsGeo?.features || []) {
     if (f.geometry?.type !== 'LineString') continue;
     ctx.beginPath();
     f.geometry.coordinates.forEach(([cx, cy], i) => {
@@ -907,7 +736,7 @@ function rebuildMinimapBg() {
   }
 
   // Buildings (colored by function)
-  for (const f of layerDataCache.yapilar?.features || []) {
+  for (const f of layerDataCache.buildingsGeo?.features || []) {
     const fn = buildingFunctionValue(f.properties || {}).toString();
     ctx.fillStyle = functionColorState[fn] || '#94a3b8';
     for (const poly of getPolygonRings(f.geometry)) {
@@ -923,7 +752,7 @@ function rebuildMinimapBg() {
 
   // Trees
   ctx.fillStyle = '#4ade80';
-  for (const f of layerDataCache.agaclar?.features || []) {
+  for (const f of layerDataCache.treesGeo?.features || []) {
     if (f.geometry?.type !== 'Point') continue;
     const [lx, lz] = metersToLocal(f.geometry.coordinates[0], f.geometry.coordinates[1]);
     const [mx, my] = _mmPx(lx, lz);
@@ -1022,115 +851,22 @@ const BUILDING_MODE_OPTIONS = [
   'Footprint only'
 ];
 
+// Facades, roofs and surfaces: the material catalogue shared with PlanX 3D
+// City (material_catalogue.js). Surfaces are offered where they fit: roads,
+// walks (ground, sidewalks and plazas) and block grounds.
 const textureSets = {
-  pavement: {
-    Asphalt: null,
-    StoneA: 'assets/pavement.webp',
-    StoneB: 'StoneB',
-    Concrete: 'Concrete',
-    Cobble: 'Cobble',
-    WarmStone: 'WarmStone',
-    CampusPaver: 'CampusPaver',
-    Permeable: 'Permeable',
-    Grid: 'Grid'
-  },
-  road: {
-    Plain: null,
-    Asphalt: 'Asphalt',
-    Cobblestone: 'assets/pavement.webp',
-    SharedStreet: 'SharedStreet'
-  },
-  island: {
-    None: null,
-    SoftNoise: 'SoftNoise',
-    FineGrid: 'FineGrid',
-    ParkGreen: 'ParkGreen',
-    ResidentialBeige: 'ResidentialBeige',
-    CivicGravel: 'CivicGravel',
-    CoastalSand: 'CoastalSand',
-    Water: 'Water'
-  },
-  hardscape: {
-    Cobble: 'assets/pavement.webp',
-    Concrete: 'Concrete',
-    Tile: 'Tile',
-    WarmStone: 'WarmStone',
-    CampusPaver: 'CampusPaver',
-    Permeable: 'Permeable',
-    PlazaGranite: 'PlazaGranite'
-  },
-  facade: {
-    ResidentialA: 'assets/facade_resid_a.webp',
-    ResidentialB: 'assets/facade_resid_b.webp',
-    ResidentialC: 'assets/facade_resid_c.webp',
-    ResidentialD: 'assets/facade_resid_d.webp',
-    ResidentialE: 'assets/facade_resid_e.webp',
-    ResidentialF: 'assets/facade_resid_f.webp',
-    UrbanA: 'assets/facade.webp',
-    UrbanB: 'assets/facade2.webp',
-    UrbanC: 'assets/facade3.webp',
-    UrbanD: 'assets/facade4.webp',
-    UrbanE: 'UrbanE',
-    UrbanF: 'UrbanF',
-    CampusGlass: 'CampusGlass',
-    CurtainWall: 'CurtainWall',
-    EcoTimber: 'EcoTimber',
-    NordicTimber: 'NordicTimber',
-    CivicStone: 'CivicStone',
-    HeritageStone: 'HeritageStone',
-    DenseBrick: 'DenseBrick',
-    AnatolianBrick: 'AnatolianBrick',
-    CoastalWhite: 'CoastalWhite',
-    MediterraneanStucco: 'MediterraneanStucco',
-    IndustrialLoft: 'IndustrialLoft',
-    BrutalistConcrete: 'BrutalistConcrete'
-  },
-  roof: {
-    RoofA: 'assets/roof.webp',
-    RoofB: 'RoofB',
-    RoofC: 'RoofC',
-    RoofD: 'RoofD',
-    GermanTile: 'GermanTile',
-    TurkishTile: 'TurkishTile',
-    USShingle: 'USShingle',
-    StandingSeam: 'StandingSeam',
-    GreenRoof: 'GreenRoof',
-    SolarRoof: 'SolarRoof',
-    CeramicLight: 'CeramicLight',
-    CopperPatina: 'CopperPatina',
-    GravelBallast: 'GravelBallast',
-    LeadMansard: 'LeadMansard'
-  }
+  pavement: surfacesFor('walk'),
+  road: surfacesFor('road'),
+  island: { None: null, ...surfacesFor('ground') },
+  hardscape: surfacesFor('walk'),
+  facade: { ...FACADES },
+  roof: { ...ROOFS }
 };
 
-// Human-readable, systematic labels for the otherwise opaque roof texture keys
-// (RoofA/RoofB/… read as amateur). Keys stay stable for persistence + presets;
-// only the displayed option text changes. Names match each preset's appearance
-// in createRoofPresetTexture().
-const ROOF_TEXTURE_LABELS = {
-  RoofA: 'Clay tile (tan)',
-  RoofB: 'Corrugated metal',
-  RoofC: 'Mission tile (red)',
-  RoofD: 'Flat concrete',
-  GermanTile: 'Slate tile',
-  TurkishTile: 'Terracotta tile',
-  USShingle: 'Asphalt shingle',
-  StandingSeam: 'Standing-seam metal',
-  GreenRoof: 'Green roof',
-  SolarRoof: 'Solar panel',
-  CeramicLight: 'Light ceramic',
-  CopperPatina: 'Copper patina',
-  GravelBallast: 'Gravel ballast',
-  LeadMansard: 'Lead mansard',
-};
+const ROOF_TEXTURE_LABELS = ROOF_LABELS;
 function roofTextureLabel(key) {
   return ROOF_TEXTURE_LABELS[key] || key;
 }
-
-// The region-specific Turkish facade textures (facade_tr_*.png, ~5 MB) were
-// removed in v0.7.0: this is a global OSM tool, so buildings use the generic
-// facade set below. turkishFacadeMatch()/normalizeFacadeKey() stay generic and
-// simply fall back to a standard facade for any stale Urban_TR_* keys.
 
 // Easy colour themes for the exported city. These recolour the 3D CONTENT only
 // (buildings, roads, base/island, greens, roofs) — never the toolbar/panel chrome.
@@ -1142,37 +878,37 @@ const COLOR_THEMES = {
   'Editorial Paper': {
     label: 'Editorial paper — warm & elegant',
     buildings: { resid: '#ebd4c0', educ: '#cfdcd5', worship: '#e8dfeb', commerc: '#c4d1db', health: '#cfdcd5', sport: '#d6d1b7', green: '#c2c5aa', civic: '#cfdcd5', industr: '#dbcfb8', default: '#dcd8d3' },
-    facades: ['MediterraneanStucco', 'CivicStone', 'CoastalWhite', 'UrbanE'],
-    roadColor: '#7c5c43', islandColor: '#e6dfd3', terrainSideColor: '#b9aa96', terrainOutsideColor: '#fdfbf7', parkColor: '#c2c5aa', sportColor: '#aeb89a', roofTexture: 'RoofA', assetTheme: 'Civic Heritage'
+    facades: ['Apartment', 'Civic', 'Villa', 'MixedUse'],
+    roadColor: '#7c5c43', islandColor: '#e6dfd3', terrainSideColor: '#b9aa96', terrainOutsideColor: '#fdfbf7', parkColor: '#c2c5aa', sportColor: '#aeb89a', roofTexture: 'ClayTile', assetTheme: 'Civic Heritage'
   },
   'Plugin Tones': {
     label: 'Plugin tones — salmon & grey',
     buildings: { resid: '#c3c7cc', educ: '#a9b6c4', worship: '#bcc7bf', commerc: '#aab0b7', health: '#c7bfc6', sport: '#aeb6c2', green: '#bbf7d0', civic: '#b3afbd', industr: '#9aa0a6', default: '#b6bbc1' },
-    roadColor: '#9a8c84', islandColor: '#dcc7bd', terrainSideColor: '#b8978a', terrainOutsideColor: '#e7d7d0', parkColor: '#9fae8a', sportColor: '#8fa07c', roofTexture: 'USShingle', assetTheme: 'Modern Urban'
+    roadColor: '#9a8c84', islandColor: '#dcc7bd', terrainSideColor: '#b8978a', terrainOutsideColor: '#e7d7d0', parkColor: '#9fae8a', sportColor: '#8fa07c', roofTexture: 'Shingle', assetTheme: 'Modern Urban'
   },
   'Tinted Gray Teal': {
     label: 'Tinted gray + teal',
     buildings: { resid: '#b9c7c5', educ: '#a3b8b6', worship: '#b0c6bf', commerc: '#9fb5b2', health: '#b6c5c2', sport: '#a3b8b4', green: '#bbf7d0', civic: '#abbdb9', industr: '#8fa6a2', default: '#aabfbb' },
-    facades: ['UrbanE', 'CampusGlass', 'CivicStone', 'CoastalWhite'],
-    roadColor: '#36433f', islandColor: '#dde6e3', terrainSideColor: '#7fb0a8', terrainOutsideColor: '#e6efec', parkColor: '#6fa589', sportColor: '#5f9579', roofTexture: 'StandingSeam', assetTheme: 'Modern Urban'
+    facades: ['MixedUse', 'Office', 'Civic', 'Villa'],
+    roadColor: '#36433f', islandColor: '#dde6e3', terrainSideColor: '#7fb0a8', terrainOutsideColor: '#e6efec', parkColor: '#6fa589', sportColor: '#5f9579', roofTexture: 'MetalSeam', assetTheme: 'Modern Urban'
   },
   'Teal & Salmon': {
     label: 'Teal + salmon',
     buildings: { resid: '#e3c3b5', educ: '#d8b6ab', worship: '#dcc0b2', commerc: '#d6b8ab', health: '#e0bdb4', sport: '#d3b3a8', green: '#bbf7d0', civic: '#d8bfb6', industr: '#c4a597', default: '#dabdb0' },
-    facades: ['MediterraneanStucco', 'CivicStone', 'CampusGlass', 'CoastalWhite'],
-    roadColor: '#2f4a46', islandColor: '#e7d7d0', terrainSideColor: '#4f8c84', terrainOutsideColor: '#dfeae7', parkColor: '#5e9e7e', sportColor: '#4f8e70', roofTexture: 'StandingSeam', assetTheme: 'Modern Urban'
+    facades: ['Apartment', 'Civic', 'Office', 'Villa'],
+    roadColor: '#2f4a46', islandColor: '#e7d7d0', terrainSideColor: '#4f8c84', terrainOutsideColor: '#dfeae7', parkColor: '#5e9e7e', sportColor: '#4f8e70', roofTexture: 'MetalSeam', assetTheme: 'Modern Urban'
   },
   'Light Purple & Black': {
     label: 'Light purple + soft black',
     buildings: { resid: '#d2c9e4', educ: '#c4b8db', worship: '#cdc2e0', commerc: '#c2b6d8', health: '#cfbfdc', sport: '#c0b6d8', green: '#c7e8d0', civic: '#c6b6de', industr: '#aa9cc2', default: '#c6bcdc' },
-    facades: ['CoastalWhite', 'UrbanE', 'CivicStone', 'CampusGlass'],
-    roadColor: '#2a2a30', islandColor: '#e7e2f0', terrainSideColor: '#9b8fb0', terrainOutsideColor: '#efecf6', parkColor: '#8a9e6e', sportColor: '#7a8e60', roofTexture: 'USShingle', assetTheme: 'Modern Urban'
+    facades: ['Villa', 'MixedUse', 'Civic', 'Office'],
+    roadColor: '#2a2a30', islandColor: '#e7e2f0', terrainSideColor: '#9b8fb0', terrainOutsideColor: '#efecf6', parkColor: '#8a9e6e', sportColor: '#7a8e60', roofTexture: 'Shingle', assetTheme: 'Modern Urban'
   },
   'Warm Sand & Slate': {
     label: 'Warm sand + slate',
     buildings: { resid: '#e3d6b6', educ: '#d8caa2', worship: '#dccfae', commerc: '#d6c9a2', health: '#e0d2b2', sport: '#d3c5a0', green: '#bbf7d0', civic: '#d8cca0', industr: '#c2b48c', default: '#d8cba8' },
-    facades: ['MediterraneanStucco', 'CivicStone', 'CoastalWhite', 'UrbanE'],
-    roadColor: '#46413a', islandColor: '#e8ddc7', terrainSideColor: '#c2a878', terrainOutsideColor: '#efe7d4', parkColor: '#8aa05e', sportColor: '#7a9050', roofTexture: 'GermanTile', assetTheme: 'Modern Urban'
+    facades: ['Apartment', 'Civic', 'Villa', 'MixedUse'],
+    roadColor: '#46413a', islandColor: '#e8ddc7', terrainSideColor: '#c2a878', terrainOutsideColor: '#efe7d4', parkColor: '#8aa05e', sportColor: '#7a9050', roofTexture: 'Slate', assetTheme: 'Modern Urban'
   },
   // Stylised "look" themes (v0.18.0). Like the palettes above they recolour only
   // the 3D content; each leans on light, tintable procedural facades so the bright
@@ -1180,32 +916,32 @@ const COLOR_THEMES = {
   'Anime': {
     label: 'Anime — bright cel pastels',
     buildings: { resid: '#bfe3f0', educ: '#f3c9d6', worship: '#d8cdee', commerc: '#c4ebd6', health: '#f6d9c0', sport: '#c6d4f2', green: '#b6f2c6', civic: '#e6dcef', industr: '#bcccd6', default: '#d3e3ec' },
-    facades: ['CoastalWhite', 'CampusGlass', 'UrbanE', 'MediterraneanStucco'],
-    roadColor: '#7d8a96', islandColor: '#e9f1e4', terrainSideColor: '#b9d0c0', terrainOutsideColor: '#eef5ec', parkColor: '#7fc785', sportColor: '#6fb8a0', roofTexture: 'CeramicLight', assetTheme: 'Coastal Light'
+    facades: ['Villa', 'Office', 'MixedUse', 'Apartment'],
+    roadColor: '#7d8a96', islandColor: '#e9f1e4', terrainSideColor: '#b9d0c0', terrainOutsideColor: '#eef5ec', parkColor: '#7fc785', sportColor: '#6fb8a0', roofTexture: 'ClayTile', assetTheme: 'Coastal Light'
   },
   'Cartoon': {
     label: 'Cartoon — bold primaries',
     buildings: { resid: '#f2b8b0', educ: '#b9d6f5', worship: '#f4e2a8', commerc: '#f6c98f', health: '#f3b9cf', sport: '#aee0c4', green: '#aef0bf', civic: '#d8c2ee', industr: '#c2cad2', default: '#f0cfa0' },
-    facades: ['CoastalWhite', 'MediterraneanStucco', 'UrbanE', 'CampusGlass'],
-    roadColor: '#4a4540', islandColor: '#fbe7c6', terrainSideColor: '#d9b98a', terrainOutsideColor: '#fdf1da', parkColor: '#5fbf57', sportColor: '#4fae87', roofTexture: 'TurkishTile', assetTheme: 'Modern Urban'
+    facades: ['Villa', 'Apartment', 'MixedUse', 'Office'],
+    roadColor: '#4a4540', islandColor: '#fbe7c6', terrainSideColor: '#d9b98a', terrainOutsideColor: '#fdf1da', parkColor: '#5fbf57', sportColor: '#4fae87', roofTexture: 'ClayTile', assetTheme: 'Modern Urban'
   },
   'Pixar': {
     label: 'Pixar — warm & friendly',
     buildings: { resid: '#f0d9bf', educ: '#cdd9e8', worship: '#e3d3c0', commerc: '#f2c7a0', health: '#ecd0d2', sport: '#bcd6cf', green: '#c9ecc4', civic: '#ddd0c6', industr: '#c2b9ab', default: '#ead8c0' },
-    facades: ['MediterraneanStucco', 'CoastalWhite', 'CivicStone', 'UrbanE'],
-    roadColor: '#6f655c', islandColor: '#ecdcc2', terrainSideColor: '#c9a981', terrainOutsideColor: '#f4ead6', parkColor: '#7bb069', sportColor: '#6aa085', roofTexture: 'RoofA', assetTheme: 'Mediterranean'
+    facades: ['Apartment', 'Villa', 'Civic', 'MixedUse'],
+    roadColor: '#6f655c', islandColor: '#ecdcc2', terrainSideColor: '#c9a981', terrainOutsideColor: '#f4ead6', parkColor: '#7bb069', sportColor: '#6aa085', roofTexture: 'ClayTile', assetTheme: 'Mediterranean'
   },
   'Futuristic City': {
     label: 'Futuristic — neon & glass',
     buildings: { resid: '#9fc7d6', educ: '#a6b8e0', worship: '#b6a6e0', commerc: '#8fd6cf', health: '#c0a6d6', sport: '#8fb0e0', green: '#9fe0c4', civic: '#aab6e0', industr: '#8a96a8', default: '#9fc0d6' },
-    facades: ['CampusGlass', 'UrbanE', 'CoastalWhite', 'CivicStone'],
-    roadColor: '#1a1d24', islandColor: '#2b3038', terrainSideColor: '#1f2730', terrainOutsideColor: '#2a3340', parkColor: '#2f9e7e', sportColor: '#2f8eae', roofTexture: 'SolarRoof', assetTheme: 'Dense Urban'
+    facades: ['Office', 'MixedUse', 'Villa', 'Civic'],
+    roadColor: '#1a1d24', islandColor: '#2b3038', terrainSideColor: '#1f2730', terrainOutsideColor: '#2a3340', parkColor: '#2f9e7e', sportColor: '#2f8eae', roofTexture: 'Solar', assetTheme: 'Dense Urban'
   },
   'Classic Era': {
     label: 'Classic era — vintage sepia',
     buildings: { resid: '#cdb89a', educ: '#c3b194', worship: '#d2c0a0', commerc: '#c0ac8c', health: '#cdbca0', sport: '#b8a888', green: '#b9c79a', civic: '#c8b694', industr: '#ab9c80', default: '#c4b292' },
-    facades: ['CivicStone', 'MediterraneanStucco', 'CoastalWhite', 'UrbanE'],
-    roadColor: '#6b6052', islandColor: '#d8c8a8', terrainSideColor: '#b89c72', terrainOutsideColor: '#e4d6b8', parkColor: '#8a9560', sportColor: '#7a8550', roofTexture: 'TurkishTile', assetTheme: 'Civic Heritage'
+    facades: ['Civic', 'Apartment', 'Villa', 'MixedUse'],
+    roadColor: '#6b6052', islandColor: '#d8c8a8', terrainSideColor: '#b89c72', terrainOutsideColor: '#e4d6b8', parkColor: '#8a9560', sportColor: '#7a8550', roofTexture: 'ClayTile', assetTheme: 'Civic Heritage'
   }
 };
 
@@ -1218,9 +954,9 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Curved Metal', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Dual Recycle', 'Cylinder', 'Compact', 'Solar Compactor'],
     busstops: ['Glass Shelter', 'Minimal Canopy', 'Steel Canopy', 'Wood Cabin', 'Compact Marker'],
-    facades: ['ResidentialA', 'ResidentialB', 'ResidentialC', 'ResidentialD', 'ResidentialE', 'ResidentialF', 'UrbanE', 'UrbanF', 'CurtainWall'],
-    roofs: ['USShingle', 'StandingSeam', 'GermanTile', 'GravelBallast', 'RoofD', 'RoofB'],
-    paving: ['Asphalt', 'StoneA', 'Cobble', 'Concrete', 'PlazaGranite']
+    facades: ['ApartmentTextureA', 'ApartmentTextureB', 'ApartmentTextureC', 'ApartmentTextureD', 'ApartmentTextureE', 'ApartmentTextureF', 'MixedUse', 'Modern', 'Office'],
+    roofs: ['Shingle', 'MetalSeam', 'Slate', 'Gravel'],
+    paving: ['Asphalt', 'GraniteSlab', 'Cobblestone', 'ConcreteSlab']
   },
   'Modern Turkish': {
     pedestrians: ['Commuter', 'Urban Casual', 'Office', 'Student', 'Visitor'],
@@ -1230,9 +966,9 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Dual Recycle', 'Cylinder', 'Compact'],
     busstops: ['Glass Shelter', 'Steel Canopy', 'Minimal Canopy', 'Compact Marker'],
-    facades: ['ResidentialA', 'ResidentialB', 'ResidentialC', 'AnatolianBrick', 'MediterraneanStucco', 'CoastalWhite', 'UrbanB', 'UrbanD', 'UrbanF'],
-    roofs: ['TurkishTile', 'CeramicLight', 'StandingSeam', 'RoofA', 'CopperPatina'],
-    paving: ['Concrete', 'StoneA', 'WarmStone', 'Asphalt', 'PlazaGranite']
+    facades: ['ApartmentTextureA', 'ApartmentTextureB', 'ApartmentTextureC', 'Brick', 'Apartment', 'Villa', 'ModernTextureB', 'Modern'],
+    roofs: ['ClayTile', 'MetalSeam', 'Copper'],
+    paving: ['ConcreteSlab', 'GraniteSlab', 'Asphalt']
   },
   Mediterranean: {
     pedestrians: ['Casual Linen', 'Warm Neutral', 'Student', 'Visitor'],
@@ -1242,9 +978,9 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Curved Metal', 'Stone Seat', 'Classic Iron'],
     bins: ['Cylinder', 'Square Box', 'Dual Recycle', 'Compact'],
     busstops: ['Minimal Canopy', 'Wood Cabin', 'Glass Shelter', 'Compact Marker'],
-    facades: ['MediterraneanStucco', 'AnatolianBrick', 'HeritageStone', 'UrbanB', 'UrbanD', 'CoastalWhite'],
-    roofs: ['TurkishTile', 'CeramicLight', 'GermanTile', 'RoofA'],
-    paving: ['StoneA', 'WarmStone', 'Cobble', 'Concrete']
+    facades: ['Apartment', 'Brick', 'Heritage', 'ModernTextureB', 'Villa'],
+    roofs: ['ClayTile', 'Slate'],
+    paving: ['GraniteSlab', 'Cobblestone', 'ConcreteSlab']
   },
   Campus: {
     pedestrians: ['Student', 'Academic', 'Sport', 'Visitor'],
@@ -1254,9 +990,9 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Concrete Slab', 'Slim Urban', 'Eco Timber'],
     bins: ['Dual Recycle', 'Square Box', 'Compact', 'Solar Compactor'],
     busstops: ['Glass Shelter', 'Minimal Canopy', 'Steel Canopy'],
-    facades: ['CampusGlass', 'CurtainWall', 'NordicTimber', 'UrbanC', 'UrbanA', 'UrbanB'],
-    roofs: ['RoofA', 'RoofC', 'USShingle', 'SolarRoof', 'GreenRoof'],
-    paving: ['Concrete', 'CampusPaver', 'StoneA', 'Asphalt']
+    facades: ['Office', 'Modern', 'ModernTextureA', 'Apartment', 'Brick'],
+    roofs: ['ClayTile', 'Shingle', 'Solar', 'Green'],
+    paving: ['ConcreteSlab', 'ConcretePaver', 'GraniteSlab', 'Asphalt']
   },
   Eco: {
     pedestrians: ['Outdoor', 'Casual Green', 'Student', 'Visitor'],
@@ -1266,9 +1002,9 @@ const assetThemePresets = {
     benches: ['Eco Timber', 'Wood Plank', 'Stone Seat', 'Concrete Slab'],
     bins: ['Dual Recycle', 'Compact', 'Cylinder', 'Solar Compactor'],
     busstops: ['Wood Cabin', 'Minimal Canopy', 'Glass Shelter'],
-    facades: ['EcoTimber', 'NordicTimber', 'UrbanD', 'UrbanB', 'UrbanA'],
-    roofs: ['GreenRoof', 'SolarRoof', 'RoofA', 'TurkishTile'],
-    paving: ['Permeable', 'Cobble', 'StoneA', 'Concrete']
+    facades: ['Modern', 'ModernTextureB', 'Brick', 'Apartment'],
+    roofs: ['Green', 'Solar', 'ClayTile'],
+    paving: ['GrassPaver', 'Cobblestone', 'GraniteSlab', 'ConcreteSlab']
   },
   'Dense Urban': {
     pedestrians: ['Commuter', 'Office', 'Evening', 'Urban Casual', 'Visitor'],
@@ -1278,9 +1014,9 @@ const assetThemePresets = {
     benches: ['Concrete Slab', 'Curved Metal', 'Slim Urban', 'Stone Seat'],
     bins: ['Square Box', 'Compact', 'Dual Recycle', 'Solar Compactor'],
     busstops: ['Glass Shelter', 'Steel Canopy', 'Minimal Canopy', 'Compact Marker'],
-    facades: ['DenseBrick', 'IndustrialLoft', 'BrutalistConcrete', 'CurtainWall', 'UrbanA', 'UrbanC', 'UrbanD', 'UrbanF'],
-    roofs: ['StandingSeam', 'GravelBallast', 'LeadMansard', 'RoofA', 'RoofB', 'USShingle'],
-    paving: ['Asphalt', 'Concrete', 'Grid', 'PlazaGranite']
+    facades: ['Brick', 'Industrial', 'Office', 'Apartment', 'ModernTextureA', 'ModernTextureB', 'Modern'],
+    roofs: ['MetalSeam', 'Gravel', 'Lead', 'ClayTile', 'Slate', 'Shingle'],
+    paving: ['Asphalt', 'ConcreteSlab', 'ConcretePaver', 'GraniteSlab']
   },
   'Civic Heritage': {
     pedestrians: ['Visitor', 'Academic', 'Warm Neutral', 'Commuter'],
@@ -1290,9 +1026,9 @@ const assetThemePresets = {
     benches: ['Classic Iron', 'Stone Seat', 'Wood Plank', 'Concrete Slab'],
     bins: ['Cylinder', 'Square Box', 'Dual Recycle', 'Compact'],
     busstops: ['Steel Canopy', 'Glass Shelter', 'Minimal Canopy'],
-    facades: ['CivicStone', 'HeritageStone', 'MediterraneanStucco', 'UrbanB', 'UrbanC'],
-    roofs: ['GermanTile', 'CopperPatina', 'LeadMansard', 'CeramicLight', 'TurkishTile', 'StandingSeam'],
-    paving: ['WarmStone', 'StoneA', 'Cobble', 'PlazaGranite']
+    facades: ['Civic', 'Heritage', 'Apartment', 'Brick', 'ModernTextureA'],
+    roofs: ['Slate', 'Copper', 'Lead', 'ClayTile', 'MetalSeam'],
+    paving: ['GraniteSlab', 'Cobblestone']
   },
   'Coastal Light': {
     pedestrians: ['Casual Linen', 'Visitor', 'Student', 'Outdoor'],
@@ -1302,9 +1038,9 @@ const assetThemePresets = {
     benches: ['Wood Plank', 'Eco Timber', 'Stone Seat', 'Slim Urban'],
     bins: ['Cylinder', 'Dual Recycle', 'Compact', 'Square Box'],
     busstops: ['Minimal Canopy', 'Glass Shelter', 'Wood Cabin'],
-    facades: ['CoastalWhite', 'MediterraneanStucco', 'NordicTimber', 'UrbanD', 'CampusGlass'],
-    roofs: ['CeramicLight', 'RoofA', 'SolarRoof', 'TurkishTile'],
-    paving: ['WarmStone', 'Permeable', 'StoneA', 'Concrete']
+    facades: ['Villa', 'Apartment', 'Modern', 'ModernTextureB', 'Office'],
+    roofs: ['ClayTile', 'Solar'],
+    paving: ['GraniteSlab', 'GrassPaver', 'ConcreteSlab']
   }
 };
 
@@ -1479,367 +1215,29 @@ function uniqueAssetVariants(category, fallback = []) {
   return values;
 }
 
-function turkishFacadeMatch(key) {
-  return /^Urban_TR_([A-F])(?:_(\d{1,2}))?$/i.exec(String(key || ''));
-}
-
 function normalizeFacadeKey(key) {
-  const raw = String(key || '').trim();
-  if (!raw) return 'UrbanA';
-  const exact = Object.keys(textureSets.facade).find((name) => name.toLowerCase() === raw.toLowerCase());
-  if (exact) return exact;
-  const tr = turkishFacadeMatch(raw);
-  if (tr) {
-    const normalized = `Urban_TR_${tr[1].toUpperCase()}`;
-    if (Object.prototype.hasOwnProperty.call(textureSets.facade, normalized)) return normalized;
-  }
-  // Legacy fallback: keep the scene drawable even when stored facade keys are stale.
-  return 'UrbanA';
+  // A catalogue name, or the entry a legacy name maps to; anything else falls
+  // back to a standard facade so stale keys keep the scene drawable.
+  return catalogueName('facade', key, textureSets.facade) || 'Apartment';
 }
-
-function resolveFacadeForLevels(key) {
-  const normalized = normalizeFacadeKey(key);
-  const match = turkishFacadeMatch(normalized);
-  if (!match) return normalized;
-  const type = match[1].toUpperCase();
-  return `Urban_TR_${type}`;
-}
-
-function isTurkishFacadeFamily(key) {
-  return !!turkishFacadeMatch(key);
-}
-
-function facadeTextureFloorRows(_key, fallback = 10) {
-  return fallback;
-}
-
-function drawWindowedFacade(ctx, size, palette, opts) {
-  const floors = Math.max(3, opts.floorRows | 0);
-  const cols = Math.max(2, opts.windowCols | 0);
-  const groundShop = !!opts.groundShop;
-  const aspect = Math.max(0.2, Math.min(1, opts.windowAspect || 0.6));
-  const accent = opts.accent || palette[1];
-  const frame = opts.windowFrameColor || palette[1];
-  const glassPattern = opts.glassPattern || 'uniform';
-  const columnPattern = opts.columnPattern || 'flat';
-
-  ctx.fillStyle = palette[0];
-  ctx.fillRect(0, 0, size, size);
-
-  if (columnPattern === 'brick') {
-    const brickH = 8;
-    const brickW = 22;
-    for (let y = 0; y < size; y += brickH) {
-      const offset = ((y / brickH) % 2) * (brickW * 0.5);
-      for (let x = -brickW; x < size + brickW; x += brickW) {
-        ctx.fillStyle = ((x + y) % 7 === 0) ? palette[2] : palette[0];
-        ctx.fillRect(x + offset, y, brickW - 1, brickH - 1);
-        ctx.strokeStyle = `${accent}aa`;
-        ctx.lineWidth = 0.6;
-        ctx.strokeRect(x + offset + 0.5, y + 0.5, brickW - 1, brickH - 1);
-      }
-    }
-  } else if (columnPattern === 'timber') {
-    const plankW = size / cols;
-    for (let c = 0; c < cols; c++) {
-      const grad = ctx.createLinearGradient(c * plankW, 0, c * plankW + plankW, 0);
-      grad.addColorStop(0, palette[0]);
-      grad.addColorStop(0.5, palette[2]);
-      grad.addColorStop(1, palette[0]);
-      ctx.fillStyle = grad;
-      ctx.fillRect(c * plankW, 0, plankW, size);
-      ctx.strokeStyle = `${accent}66`;
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(c * plankW, 0);
-      ctx.lineTo(c * plankW, size);
-      ctx.stroke();
-    }
-  } else if (columnPattern === 'pilaster') {
-    const pilW = (size / cols) * 0.18;
-    for (let c = 0; c <= cols; c++) {
-      const x = c * (size / cols) - pilW * 0.5;
-      const grad = ctx.createLinearGradient(x, 0, x + pilW, 0);
-      grad.addColorStop(0, accent);
-      grad.addColorStop(0.5, palette[2]);
-      grad.addColorStop(1, accent);
-      ctx.fillStyle = grad;
-      ctx.fillRect(x, 0, pilW, size);
-    }
-  } else if (columnPattern === 'curtain') {
-    const mullionStep = size / (cols * 2);
-    for (let x = 0; x <= size; x += mullionStep) {
-      ctx.strokeStyle = `${frame}cc`;
-      ctx.lineWidth = (Math.round(x / mullionStep) % 2 === 0) ? 2.2 : 1.0;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, size);
-      ctx.stroke();
-    }
-  } else if (columnPattern === 'slats') {
-    const slatW = 6;
-    for (let x = 0; x < size; x += slatW) {
-      ctx.fillStyle = ((x / slatW) % 2 === 0) ? palette[0] : palette[2];
-      ctx.fillRect(x, 0, slatW - 1, size);
-      ctx.fillStyle = `${accent}77`;
-      ctx.fillRect(x + slatW - 1, 0, 1, size);
-    }
-  } else if (columnPattern === 'ashlar') {
-    const rowH = 18;
-    const blockW = 36;
-    for (let y = 0; y < size; y += rowH) {
-      const offset = ((y / rowH) % 2) * (blockW * 0.5);
-      for (let x = -blockW; x < size + blockW; x += blockW) {
-        ctx.fillStyle = ((x + y) % 3 === 0) ? palette[2] : palette[0];
-        ctx.fillRect(x + offset + 1, y + 1, blockW - 2, rowH - 2);
-        ctx.strokeStyle = `${accent}88`;
-        ctx.lineWidth = 1.0;
-        ctx.strokeRect(x + offset + 0.5, y + 0.5, blockW - 1, rowH - 1);
-      }
-    }
-  } else if (columnPattern === 'industrial') {
-    const brickH = 7;
-    const brickW = 20;
-    for (let y = 0; y < size; y += brickH) {
-      const offset = ((y / brickH) % 2) * (brickW * 0.5);
-      for (let x = -brickW; x < size + brickW; x += brickW) {
-        ctx.fillStyle = ((x + y) % 5 === 0) ? palette[2] : palette[0];
-        ctx.fillRect(x + offset, y, brickW - 1, brickH - 1);
-      }
-    }
-    const pierW = (size / cols) * 0.16;
-    for (let c = 0; c <= cols; c++) {
-      ctx.fillStyle = accent;
-      ctx.fillRect(c * (size / cols) - pierW * 0.5, 0, pierW, size);
-    }
-  } else if (columnPattern === 'waffle') {
-    const cellW = size / cols;
-    const cellH = size / floors;
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 3.2;
-    for (let c = 0; c <= cols; c++) {
-      ctx.beginPath(); ctx.moveTo(c * cellW, 0); ctx.lineTo(c * cellW, size); ctx.stroke();
-    }
-    for (let r = 0; r <= floors; r++) {
-      ctx.beginPath(); ctx.moveTo(0, r * cellH); ctx.lineTo(size, r * cellH); ctx.stroke();
-    }
-  }
-
-  const groundH = groundShop ? (size / (floors + 1)) * 1.6 : 0;
-  const upperArea = size - groundH;
-  const floorH = upperArea / floors;
-  const colW = size / cols;
-
-  ctx.strokeStyle = `${accent}99`;
-  ctx.lineWidth = opts.floorLineWidth || 1.2;
-  for (let f = 0; f <= floors; f++) {
-    const y = groundH + f * floorH;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(size, y);
-    ctx.stroke();
-  }
-
-  for (let f = 0; f < floors; f++) {
-    const yTop = groundH + f * floorH;
-    for (let c = 0; c < cols; c++) {
-      const xLeft = c * colW;
-      const padX = colW * (1 - aspect) * 0.5;
-      const padY = floorH * 0.18;
-      const wx = xLeft + padX;
-      const wy = yTop + padY;
-      const ww = colW - padX * 2;
-      const wh = floorH - padY * 2;
-      ctx.fillStyle = frame;
-      ctx.fillRect(wx - 1, wy - 1, ww + 2, wh + 2);
-      if (glassPattern === 'horizontal-bands') {
-        const grad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
-        grad.addColorStop(0, palette[2]);
-        grad.addColorStop(0.45, accent);
-        grad.addColorStop(0.55, palette[2]);
-        grad.addColorStop(1, accent);
-        ctx.fillStyle = grad;
-        ctx.fillRect(wx, wy, ww, wh);
-      } else if (glassPattern === 'balcony-bands') {
-        const grad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
-        grad.addColorStop(0, palette[2]);
-        grad.addColorStop(0.62, accent);
-        grad.addColorStop(1, '#1e293b');
-        ctx.fillStyle = grad;
-        ctx.fillRect(wx, wy, ww, wh);
-        const railY = wy + wh * 0.62;
-        ctx.fillStyle = 'rgba(226,232,240,0.72)';
-        ctx.fillRect(wx - 1, railY, ww + 2, wh * 0.36);
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = 1.0;
-        ctx.strokeRect(wx - 1, railY, ww + 2, wh * 0.36);
-      } else if (glassPattern === 'spandrel') {
-        const spandrelH = wh * 0.26;
-        ctx.fillStyle = accent;
-        ctx.fillRect(wx, wy, ww, spandrelH);
-        const grad = ctx.createLinearGradient(wx, wy + spandrelH, wx + ww, wy + wh);
-        grad.addColorStop(0, palette[2]);
-        grad.addColorStop(0.5, '#6495b8');
-        grad.addColorStop(1, accent);
-        ctx.fillStyle = grad;
-        ctx.fillRect(wx, wy + spandrelH, ww, wh - spandrelH);
-      } else if (glassPattern === 'mullion-grid') {
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(wx, wy, ww, wh);
-        const subC = 3;
-        const subR = 2;
-        ctx.strokeStyle = frame;
-        ctx.lineWidth = 1.1;
-        for (let sc = 1; sc < subC; sc++) {
-          const sx = wx + (ww / subC) * sc;
-          ctx.beginPath(); ctx.moveTo(sx, wy); ctx.lineTo(sx, wy + wh); ctx.stroke();
-        }
-        for (let sr = 1; sr < subR; sr++) {
-          const sy = wy + (wh / subR) * sr;
-          ctx.beginPath(); ctx.moveTo(wx, sy); ctx.lineTo(wx + ww, sy); ctx.stroke();
-        }
-      } else if (glassPattern === 'french-arch') {
-        ctx.fillStyle = accent;
-        ctx.fillRect(wx, wy, ww, wh);
-        ctx.fillStyle = palette[2];
-        ctx.beginPath();
-        const r = ww * 0.48;
-        ctx.arc(wx + ww * 0.5, wy + r, r, Math.PI, 0, false);
-        ctx.lineTo(wx + ww, wy + wh);
-        ctx.lineTo(wx, wy + wh);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = frame;
-        ctx.lineWidth = 0.8;
-        ctx.beginPath();
-        ctx.moveTo(wx + ww * 0.5, wy);
-        ctx.lineTo(wx + ww * 0.5, wy + wh);
-        ctx.stroke();
-      } else if (glassPattern === 'striped') {
-        const grad = ctx.createLinearGradient(wx, wy, wx + ww, wy);
-        grad.addColorStop(0, palette[2]);
-        grad.addColorStop(1, accent);
-        ctx.fillStyle = grad;
-        ctx.fillRect(wx, wy, ww, wh);
-        ctx.strokeStyle = `${frame}66`;
-        ctx.lineWidth = 0.6;
-        ctx.beginPath();
-        ctx.moveTo(wx + ww / 2, wy);
-        ctx.lineTo(wx + ww / 2, wy + wh);
-        ctx.stroke();
-      } else if (glassPattern === 'shutters') {
-        const half = ww * 0.5;
-        ctx.fillStyle = palette[2];
-        ctx.fillRect(wx, wy, ww, wh);
-        ctx.fillStyle = accent;
-        ctx.fillRect(wx, wy, half * 0.42, wh);
-        ctx.fillRect(wx + ww - half * 0.42, wy, half * 0.42, wh);
-        ctx.strokeStyle = `${frame}88`;
-        ctx.lineWidth = 0.5;
-        for (let s = 1; s < 4; s++) {
-          const sy = wy + (wh / 4) * s;
-          ctx.beginPath();
-          ctx.moveTo(wx, sy);
-          ctx.lineTo(wx + ww, sy);
-          ctx.stroke();
-        }
-      } else {
-        const grad = ctx.createLinearGradient(wx, wy, wx + ww, wy + wh);
-        grad.addColorStop(0, palette[2]);
-        grad.addColorStop(1, accent);
-        ctx.fillStyle = grad;
-        ctx.fillRect(wx, wy, ww, wh);
-      }
-    }
-  }
-
-  if (groundShop && groundH > 0) {
-    ctx.fillStyle = accent;
-    ctx.fillRect(0, 0, size, groundH);
-    const bay = size / Math.max(2, Math.floor(cols * 1.2));
-    for (let i = 0; i < size; i += bay) {
-      const bw = bay * 0.85;
-      const bh = groundH * 0.78;
-      const bx = i + (bay - bw) * 0.5;
-      const by = (groundH - bh) * 0.5;
-      const grad = ctx.createLinearGradient(bx, by, bx, by + bh);
-      grad.addColorStop(0, palette[2]);
-      grad.addColorStop(1, palette[0]);
-      ctx.fillStyle = grad;
-      ctx.fillRect(bx, by, bw, bh);
-      ctx.strokeStyle = `${frame}cc`;
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(bx + 0.5, by + 0.5, bw, bh);
-    }
-    ctx.strokeStyle = `${accent}cc`;
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(0, groundH);
-    ctx.lineTo(size, groundH);
-    ctx.stroke();
-  }
-
-  for (let i = 0; i < 360; i++) {
-    const v = 130 + Math.floor(Math.random() * 80);
-    ctx.fillStyle = `rgba(${v},${v},${v},0.05)`;
-    ctx.fillRect(Math.random() * size, Math.random() * size, 1, 1);
-  }
-}
-
-const FACADE_RECIPES = {
-  CampusGlass:         { floorRows: 14, windowCols: 5, groundShop: true,  windowAspect: 0.82, glassPattern: 'horizontal-bands', columnPattern: 'flat',       accent: '#3d6b85' },
-  EcoTimber:           { floorRows: 10, windowCols: 4, groundShop: true,  windowAspect: 0.55, glassPattern: 'uniform',          columnPattern: 'timber',     accent: '#6b4a2a' },
-  CivicStone:          { floorRows: 12, windowCols: 5, groundShop: false, windowAspect: 0.35, glassPattern: 'shutters',         columnPattern: 'pilaster',   accent: '#8a7a62' },
-  DenseBrick:          { floorRows: 11, windowCols: 6, groundShop: true,  windowAspect: 0.62, glassPattern: 'uniform',          columnPattern: 'brick',      accent: '#4a1f15' },
-  CoastalWhite:        { floorRows:  9, windowCols: 3, groundShop: true,  windowAspect: 0.95, glassPattern: 'striped',          columnPattern: 'flat',       accent: '#bcd1dc' },
-  MediterraneanStucco: { floorRows: 10, windowCols: 4, groundShop: true,  windowAspect: 0.50, glassPattern: 'shutters',         columnPattern: 'flat',       accent: '#a05a3c' },
-  UrbanE:              { floorRows: 13, windowCols: 6, groundShop: true,  windowAspect: 0.78, glassPattern: 'horizontal-bands', columnPattern: 'flat',       accent: '#2f3e52' },
-  UrbanF:              { floorRows: 12, windowCols: 5, groundShop: true,  windowAspect: 0.72, glassPattern: 'balcony-bands',    columnPattern: 'pilaster',   accent: '#4b5563' },
-  CurtainWall:         { floorRows: 16, windowCols: 8, groundShop: true,  windowAspect: 0.90, glassPattern: 'spandrel',         columnPattern: 'curtain',    accent: '#1e3a5f', windowFrameColor: '#94a3b8' },
-  NordicTimber:        { floorRows: 10, windowCols: 4, groundShop: true,  windowAspect: 0.58, glassPattern: 'striped',          columnPattern: 'slats',      accent: '#5c4028' },
-  HeritageStone:       { floorRows: 11, windowCols: 5, groundShop: true,  windowAspect: 0.42, glassPattern: 'french-arch',      columnPattern: 'ashlar',     accent: '#786b59' },
-  AnatolianBrick:      { floorRows: 10, windowCols: 5, groundShop: true,  windowAspect: 0.56, glassPattern: 'balcony-bands',    columnPattern: 'brick',      accent: '#6b2d1f' },
-  IndustrialLoft:      { floorRows:  9, windowCols: 4, groundShop: true,  windowAspect: 0.80, glassPattern: 'mullion-grid',     columnPattern: 'industrial', accent: '#27272a', windowFrameColor: '#18181b' },
-  BrutalistConcrete:   { floorRows: 12, windowCols: 6, groundShop: false, windowAspect: 0.48, glassPattern: 'spandrel',         columnPattern: 'waffle',     accent: '#52525b' }
-};
 
 function proceduralTextureCanvas(name, size = 256) {
+  // Surface recipes of the material catalogue (other names get a plain grid).
   const c = document.createElement('canvas');
   c.width = size;
   c.height = size;
   const ctx = c.getContext('2d');
   const palette = {
-    StoneB: ['#d7d0c2', '#b8ad9c', '#efe8d8'],
-    Concrete: ['#bfc4c9', '#9da5ad', '#d8dde1'],
-    Cobble: ['#a99f90', '#7f7468', '#c8bdad'],
-    WarmStone: ['#d8c7a6', '#b99d72', '#f2e4c8'],
-    CampusPaver: ['#c6cbd0', '#8e98a3', '#e5e7eb'],
-    Permeable: ['#9db489', '#657b57', '#cbd9bf'],
-    PlazaGranite: ['#c8cdd2', '#8d949c', '#eef1f3'],
-    Tile: ['#d7d3c9', '#8f8a80', '#f4f0e7'],
-    Grid: ['#dbeafe', '#64748b', '#f8fafc'],
-    SharedStreet: ['#3a3f44', '#6b7280', '#eef2f7'],
-    UrbanE: ['#d8dee7', '#536171', '#f3f6f9'],
-    UrbanF: ['#e2e5ea', '#4b5563', '#f8fafc'],
-    CampusGlass: ['#a9d6e8', '#2f5f73', '#e8f6fb'],
-    CurtainWall: ['#b8d4e8', '#1e3a5f', '#e6f3fb'],
-    EcoTimber: ['#9a6b3a', '#4f3824', '#d5b07c'],
-    NordicTimber: ['#b8895a', '#5c4028', '#e3c39a'],
-    CivicStone: ['#c8c2b6', '#7c7468', '#eee8dd'],
-    HeritageStone: ['#dcd3c2', '#786b59', '#f3ede2'],
-    DenseBrick: ['#8f3f2d', '#55261d', '#c2694f'],
-    AnatolianBrick: ['#a84a32', '#6b2d1f', '#d97f62'],
-    CoastalWhite: ['#f5f1e8', '#92a7b4', '#ffffff'],
-    MediterraneanStucco: ['#ead8bd', '#b78b64', '#fff4df'],
-    IndustrialLoft: ['#8c3b2b', '#27272a', '#cbd5e1'],
-    BrutalistConcrete: ['#b4b8bf', '#52525b', '#d4d8de']
+    GraniteSlab: ['#c8cdd2', '#8d949c', '#eef1f3'],
+    ConcreteSlab: ['#bfc4c9', '#9da5ad', '#d8dde1'],
+    GrassPaver: ['#9db489', '#657b57', '#cbd9bf']
   }[name] || ['#cbd5e1', '#94a3b8', '#f8fafc'];
 
   ctx.fillStyle = palette[0];
   ctx.fillRect(0, 0, size, size);
 
-  if (['StoneB', 'Cobble', 'WarmStone', 'PlazaGranite'].includes(name)) {
-    const cell = name === 'Cobble' ? 26 : 34;
+  if (name === 'GraniteSlab') {
+    const cell = 34;
     for (let y = -cell; y < size + cell; y += cell) {
       const offset = ((y / cell) % 2) * (cell * 0.45);
       for (let x = -cell; x < size + cell; x += cell) {
@@ -1851,20 +1249,7 @@ function proceduralTextureCanvas(name, size = 256) {
         ctx.strokeRect(x + offset + 1, y + 1, w, h);
       }
     }
-  } else if (['Concrete', 'CampusPaver', 'Tile', 'Grid', 'SharedStreet'].includes(name)) {
-    ctx.strokeStyle = `${palette[1]}88`;
-    ctx.lineWidth = 1;
-    const step = name === 'Grid' ? 16 : name === 'Tile' ? 32 : 42;
-    for (let i = 0; i <= size; i += step) {
-      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
-    }
-    for (let i = 0; i < 700; i++) {
-      const v = 130 + Math.floor(Math.random() * 80);
-      ctx.fillStyle = `rgba(${v},${v},${v},0.08)`;
-      ctx.fillRect(Math.random() * size, Math.random() * size, 1.5, 1.5);
-    }
-  } else if (name === 'Permeable') {
+  } else if (name === 'GrassPaver') {
     for (let y = 0; y < size; y += 20) {
       for (let x = 0; x < size; x += 20) {
         ctx.fillStyle = palette[(x + y) % 40 === 0 ? 2 : 0];
@@ -1874,28 +1259,17 @@ function proceduralTextureCanvas(name, size = 256) {
       }
     }
   } else {
-    const isFacade = Object.prototype.hasOwnProperty.call(textureSets.facade, name);
-    if (isFacade && FACADE_RECIPES[name]) {
-      drawWindowedFacade(ctx, size, palette, FACADE_RECIPES[name]);
-    } else {
-      const cols = isFacade ? 6 : 10;
-      const rows = isFacade ? 11 : 10;
-      for (let r = 0; r < rows; r++) {
-        for (let col = 0; col < cols; col++) {
-          const x = (col / cols) * size;
-          const y = (r / rows) * size;
-          const w = size / cols;
-          const h = size / rows;
-          ctx.fillStyle = (r + col) % 3 === 0 ? palette[2] : palette[0];
-          ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
-          ctx.strokeStyle = `${palette[1]}77`;
-          ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-          if (isFacade && r % 2 === 0 && col % 2 === 0) {
-            ctx.fillStyle = 'rgba(50,80,100,0.18)';
-            ctx.fillRect(x + w * 0.22, y + h * 0.28, w * 0.42, h * 0.32);
-          }
-        }
-      }
+    ctx.strokeStyle = `${palette[1]}88`;
+    ctx.lineWidth = 1;
+    const step = 42;
+    for (let i = 0; i <= size; i += step) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
+    }
+    for (let i = 0; i < 700; i++) {
+      const v = 130 + Math.floor(Math.random() * 80);
+      ctx.fillStyle = `rgba(${v},${v},${v},0.08)`;
+      ctx.fillRect(Math.random() * size, Math.random() * size, 1.5, 1.5);
     }
   }
   const t = new THREE.CanvasTexture(c);
@@ -1906,12 +1280,15 @@ function proceduralTextureCanvas(name, size = 256) {
 }
 
 async function textureFromSet(setName, key, repeatX = 1, repeatY = 1) {
-  const token = textureSets[setName]?.[key];
+  const set = textureSets[setName];
+  const name = set ? presetValue(key, set, null) : null;
+  const token = name ? set[name] : null;
   if (!token) return null;
-  if (typeof token === 'string' && (token.startsWith('assets/') || token.startsWith('http'))) {
+  if (token.startsWith('assets/') || token.startsWith('http')) {
     return loadTexture(token, repeatX, repeatY);
   }
-  const tex = proceduralTextureCanvas(token || key);
+  const tex = token === 'surface:asphalt' ? createAsphaltTexture()
+    : (token === 'surface:paver' ? createPaverTexture() : proceduralTextureCanvas(token));
   tex.repeat.set(repeatX, repeatY);
   tex.needsUpdate = true;
   return tex;
@@ -1938,12 +1315,25 @@ function normalizeHexColor(value, fallback = null) {
   return /^#[0-9a-fA-F]{6}$/.test(withHash) ? withHash : fallback;
 }
 
+function catalogueGroupOf(presetMap) {
+  if (presetMap === textureSets.facade) return 'facade';
+  if (presetMap === textureSets.roof) return 'roof';
+  if ([textureSets.road, textureSets.pavement, textureSets.hardscape, textureSets.island].includes(presetMap)) return 'surface';
+  return null;
+}
+
+// A key of presetMap matching value (any letter case); for the catalogue's
+// texture sets also a legacy name, which maps to its current entry.
 function presetValue(value, presetMap, fallback) {
-  if (value === null || value === undefined) return fallback;
-  const raw = String(value).trim();
-  if (!raw) return fallback;
-  const found = Object.keys(presetMap).find((key) => key.toLowerCase() === raw.toLowerCase());
-  return found || fallback;
+  const group = catalogueGroupOf(presetMap);
+  const resolve = (v) => {
+    if (v === null || v === undefined) return null;
+    const raw = String(v).trim();
+    if (!raw) return null;
+    const found = Object.keys(presetMap).find((key) => key.toLowerCase() === raw.toLowerCase());
+    return found || (group ? catalogueName(group, raw, presetMap) : null);
+  };
+  return resolve(value) || resolve(fallback) || fallback;
 }
 
 function roofShapeValue(value, fallback) {
@@ -2006,7 +1396,7 @@ const OSM_BUILDING_CATEGORY = {
 function titleCaseWord(v) { v = String(v || ''); return v ? v.charAt(0).toUpperCase() + v.slice(1) : v; }
 function buildingFunctionValue(props) {
   // OSM-native: read the `building` tag and map it to an English category.
-  const raw = propFirst(props || {}, namesWithMapping('building_function_field', ['building', 'uipfonksiyon', 'fonksiyon', 'landuse', 'arazi_kull']));
+  const raw = propFirst(props || {}, namesWithMapping('building_function_field', ['building', 'landuse']));
   if (raw === null || raw === undefined || String(raw).trim() === '') return 'Building';
   const key = String(raw).trim().toLowerCase();
   if (OSM_BUILDING_CATEGORY[key]) return OSM_BUILDING_CATEGORY[key];
@@ -2046,16 +1436,17 @@ const settings = {
   islandTexture: 'None',
   parcelBoundaryColor: '#71717a',
   parcelBoundaryOpacity: 0.35,
-  hardscapeStyle: 'Cobble',
+  hardscapeStyle: 'Cobblestone',
   hardscapeHeight: 0.30,
   buildingMode: 'Auto Smart Massing',
+  facadeMode: 'Auto by function',
   terrainAnalysisMode: 'Texture',
   assetTheme: 'Modern Urban',
   colorTheme: DEFAULT_COLOR_THEME,
   activeLook: '',
   showXyzTiles: false,
   xyzTileUrl: '',
-  roofTexture: 'USShingle',
+  roofTexture: 'Shingle',
   roofShape: 'Pyramid',
   roofHeight: 2.0,
   roadStyle: 'Asphalt',
@@ -2117,7 +1508,7 @@ const settings = {
   dayOfYear: 172,
   latitude: 39.0,
   parkColor: '#5e9e3e',
-  parkTexture: 'ParkGreen',
+  parkTexture: 'Grass',
   sportColor: '#4a8c30',
   furnitureGroundOffset: 0.02,
   terrainTileMeters: 60,
@@ -2182,7 +1573,7 @@ const PERSISTED_SETTING_KEYS = [
   'terrainOutsideColor', 'terrainSmoothingPasses', 'terrainSmoothingStrength', 'terrainMaxSlope',
   'showTerrainSides', 'terrainSideDrop', 'terrainSideColor',
   'fogDensity', 'autoTime', 'autoTimeSpeed', 'enableSSAO', 'enableBloom',
-  'pavementStyle', 'hardscapeStyle', 'hardscapeHeight', 'buildingMode', 'facadeTextureScale', 'terrainAnalysisMode', 'showXyzTiles', 'xyzTileUrl',
+  'pavementStyle', 'hardscapeStyle', 'hardscapeHeight', 'buildingMode', 'facadeMode', 'facadeTextureScale', 'terrainAnalysisMode', 'showXyzTiles', 'xyzTileUrl',
   'assetTheme', 'colorTheme', 'activeLook',
   'floorHeight', 'roofTexture', 'roofShape', 'roofHeight', 'roadStyle', 'roadColor', 'roadColorMode', 'roadWidth',
   'showLights', 'lightStyle', 'showBenches', 'benchStyle', 'showBins', 'binStyle', 'showBusStops', 'stopStyle',
@@ -2266,7 +1657,15 @@ function loadPersistedSettings() {
       }
     }
     settings.roofShape = roofShapeValue(settings.roofShape, 'Pyramid');
-    settings.roofTexture = presetValue(settings.roofTexture, textureSets.roof, 'RoofA');
+    settings.roofTexture = presetValue(settings.roofTexture, textureSets.roof, 'ClayTile');
+    // Earlier versions stored other material names; keep them as the entry they map to.
+    settings.roadStyle = presetValue(settings.roadStyle, textureSets.road, 'Asphalt');
+    settings.pavementStyle = presetValue(settings.pavementStyle, textureSets.pavement, 'Asphalt');
+    settings.hardscapeStyle = presetValue(settings.hardscapeStyle, textureSets.hardscape, 'Cobblestone');
+    settings.islandTexture = presetValue(settings.islandTexture, textureSets.island, 'None');
+    settings.parkTexture = presetValue(settings.parkTexture, textureSets.island, 'Grass');
+    settings.facadeMode = { 'Dynamic (auto)': 'Auto by function', 'Catalogue textures': 'Function styles' }[settings.facadeMode]
+      || (FACADE_MODE_OPTIONS.includes(settings.facadeMode) ? settings.facadeMode : 'Auto by function');
   } catch (err) {
     console.warn('Could not restore PlanX viewer settings', err);
   }
@@ -2274,19 +1673,14 @@ function loadPersistedSettings() {
 
 /* Facade seeding pool.
  *
- * The photo-based Residential A-F and Urban A-E sets are what an exported city
- * is actually judged on, so every reseed — an asset theme, a colour theme, a
- * shuffled look — draws from them rather than from the flat procedural walls.
- * The sequence runs three Residential to one Urban and walks each family in
- * order, so the residential set dominates, every facade in both families is
- * reached, and no two adjacent functions get the same wall.
- *
- * The procedural facades (CivicStone, CampusGlass, MediterraneanStucco,
- * CoastalWhite) stay in the Style dock's per-function dropdown and remain the
- * fallback when a photo texture is missing — they simply no longer win a reseed.
+ * Every reseed (an asset theme, a colour theme, a shuffled look) draws the
+ * per-function facades from the apartment photo facades and the dynamic
+ * styles of the material catalogue: three apartment photos to one dynamic
+ * style, walking each family in order, so homes dominate, every facade is
+ * reached and no two adjacent functions get the same wall.
  */
-const RESIDENTIAL_FACADES = ['ResidentialA', 'ResidentialB', 'ResidentialC', 'ResidentialD', 'ResidentialE', 'ResidentialF'];
-const URBAN_FACADES = ['UrbanA', 'UrbanB', 'UrbanC', 'UrbanD', 'UrbanE', 'UrbanF', 'CurtainWall', 'NordicTimber', 'HeritageStone', 'AnatolianBrick', 'IndustrialLoft', 'BrutalistConcrete'];
+const RESIDENTIAL_FACADES = ['ApartmentTextureA', 'ApartmentTextureB', 'ApartmentTextureC', 'ApartmentTextureD', 'ApartmentTextureE', 'ApartmentTextureF'];
+const URBAN_FACADES = ['Apartment', 'MixedUse', 'Modern', 'Office', 'Heritage', 'Brick', 'Villa', 'Industrial', 'Civic', 'ModernTextureA', 'ModernTextureB'];
 const FACADE_RESIDENTIAL_SHARE = 3;   // residential walls per urban wall
 
 function facadeSeedPool(fallback = []) {
@@ -2295,7 +1689,7 @@ function facadeSeedPool(fallback = []) {
   const urban = URBAN_FACADES.filter(has);
   if (!residential.length) {
     const rest = urban.length ? urban : (fallback || []).filter(has);
-    return rest.length ? rest : ['UrbanA'];
+    return rest.length ? rest : ['Apartment'];
   }
   const pool = [];
   const slots = Math.max(residential.length, urban.length * FACADE_RESIDENTIAL_SHARE);
@@ -2313,12 +1707,12 @@ function defaultFunctionBuildingStyle(fn, index = 0) {
   const facadeOptions = facadeSeedPool(activeColorTheme().facades);
   return {
     color: getSemanticColor(fn) || ['#f1f5f9', '#dbeafe', '#fee2e2', '#dcfce7', '#fef3c7', '#ede9fe'][index % 6],
-    facade: normalizeFacadeKey(facadeOptions[index % Math.max(1, facadeOptions.length)] || 'UrbanA'),
+    facade: normalizeFacadeKey(facadeOptions[index % Math.max(1, facadeOptions.length)] || 'Apartment'),
     facadeScale: settings.facadeTextureScale,
     floorHeight: settings.floorHeight,
     roofShape: roofShapeValue(settings.roofShape, 'Pyramid'),
     roofHeight: settings.roofHeight,
-    roofTexture: presetValue(settings.roofTexture, textureSets.roof, 'RoofA'),
+    roofTexture: presetValue(settings.roofTexture, textureSets.roof, 'ClayTile'),
     massing: BUILDING_MODE_OPTIONS.includes(settings.buildingMode) ? settings.buildingMode : 'Auto Smart Massing'
   };
 }
@@ -2508,8 +1902,8 @@ async function ensureUploadedModelsLoaded() {
 }
 
 function rebuildTreeLayerPartially() {
-  if (!layerDataCache || !layerDataCache.agaclar) return;
-  buildTreeLayer(layerDataCache.agaclar);
+  if (!layerDataCache || !layerDataCache.treesGeo) return;
+  buildTreeLayer(layerDataCache.treesGeo);
 }
 
 function rebuildFurnitureLayerPartially() {
@@ -2897,21 +2291,58 @@ function createAsphaltTexture() {
   return t;
 }
 
-function createIslandTexturePreset(name) {
+// Concrete pavers in a running bond, neutral grey so the road or ground
+// colour tints them (the ConcretePaver surface).
+function createPaverTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#8e8e8e';
+  ctx.fillRect(0, 0, c.width, c.height);
+  let seed = 0x50415645;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  const w = 32;
+  const h = 16;
+  for (let row = 0; row < c.height / h; row++) {
+    const shift = (row % 2) * (w / 2);
+    for (let x = -w; x < c.width; x += w) {
+      const g = 178 + Math.floor(random() * 34);
+      ctx.fillStyle = `rgb(${g},${g},${g - 4})`;
+      ctx.fillRect(x + shift + 1, row * h + 1, w - 2, h - 2);
+    }
+  }
+  for (let i = 0; i < 1400; i++) {
+    const g = 120 + Math.floor(random() * 100);
+    ctx.fillStyle = `rgba(${g},${g},${g},0.16)`;
+    ctx.fillRect(random() * c.width, random() * c.height, 1.4, 1.4);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function createIslandTexturePreset(groundName) {
+  // Catalogue name (or a legacy one) -> recipe; 'None' is no texture.
+  const name = groundName === 'None' || !groundName ? 'None' : (catalogueName('surface', groundName, surfacesFor('ground')) || 'Earth');
   if (name === 'None') return null;
   const c = document.createElement('canvas');
   c.width = 256; c.height = 256;
   const ctx = c.getContext('2d');
   const islandPalette = {
-    ParkGreen:        { base: '#6f9c52', shadow: '#3f6b2c', highlight: '#a6c982' },
-    ResidentialBeige: { base: '#d6c8a6', shadow: '#a18c63', highlight: '#efe6cf' },
-    CivicGravel:      { base: '#b6b3a8', shadow: '#7b7a72', highlight: '#dad7ce' },
-    CoastalSand:      { base: '#ecd9b0', shadow: '#b39361', highlight: '#fff1d2' }
+    Grass:        { base: '#6f9c52', shadow: '#3f6b2c', highlight: '#a6c982' },
+    Earth: { base: '#d6c8a6', shadow: '#a18c63', highlight: '#efe6cf' },
+    Gravel:      { base: '#b6b3a8', shadow: '#7b7a72', highlight: '#dad7ce' },
+    Sand:      { base: '#ecd9b0', shadow: '#b39361', highlight: '#fff1d2' }
   }[name];
   if (islandPalette) {
     ctx.fillStyle = islandPalette.base;
     ctx.fillRect(0, 0, 256, 256);
-    if (name === 'ParkGreen') {
+    if (name === 'Grass') {
       for (let i = 0; i < 2200; i++) {
         const x = Math.random() * 256;
         const y = Math.random() * 256;
@@ -2929,7 +2360,7 @@ function createIslandTexturePreset(name) {
         ctx.lineTo(sx + (Math.random() - 0.5) * 30, sy + (Math.random() - 0.5) * 30);
         ctx.stroke();
       }
-    } else if (name === 'ResidentialBeige') {
+    } else if (name === 'Earth') {
       for (let i = 0; i < 900; i++) {
         const x = Math.random() * 256;
         const y = Math.random() * 256;
@@ -2941,7 +2372,7 @@ function createIslandTexturePreset(name) {
       for (let i = 0; i < 256; i += 36) {
         ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(256, i); ctx.stroke();
       }
-    } else if (name === 'CivicGravel') {
+    } else if (name === 'Gravel') {
       for (let i = 0; i < 1800; i++) {
         const x = Math.random() * 256;
         const y = Math.random() * 256;
@@ -2950,7 +2381,7 @@ function createIslandTexturePreset(name) {
         ctx.fillStyle = `rgba(${tone},${0.18 + Math.random() * 0.20})`;
         ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
       }
-    } else if (name === 'CoastalSand') {
+    } else if (name === 'Sand') {
       for (let i = 0; i < 1600; i++) {
         const x = Math.random() * 256;
         const y = Math.random() * 256;
@@ -2972,21 +2403,7 @@ function createIslandTexturePreset(name) {
   } else {
     ctx.fillStyle = '#e5e7eb';
     ctx.fillRect(0, 0, 256, 256);
-    if (name === 'SoftNoise') {
-      for (let i = 0; i < 1400; i++) {
-        const x = Math.random() * 256;
-        const y = Math.random() * 256;
-        const r = Math.random() * 1.4;
-        ctx.fillStyle = 'rgba(120,130,140,0.14)';
-        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-      }
-    } else if (name === 'FineGrid') {
-      ctx.strokeStyle = 'rgba(120,130,140,0.24)';
-      for (let i = 0; i < 256; i += 12) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 256); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(256, i); ctx.stroke();
-      }
-    } else if (name === 'Water') {
+    if (name === 'Water') {
       ctx.fillStyle = '#0f5e9c';
       ctx.fillRect(0, 0, 256, 256);
       for (let band = 0; band < 10; band++) {
@@ -3090,6 +2507,7 @@ function rebuildLightingOnly() {
     const mat = mesh.material[1];
     if (!mat) return;
     mat.emissive.setHex(isNight ? 0x333322 : 0x000000);
+    setDynamicFacadeNight(mat, isNight);
     // Deterministic per-building intensity from position hash (avoids random on every call)
     const hash = Math.abs(Math.sin(mesh.position.x * 12.9898 + mesh.position.z * 78.233)) % 1;
     mat.emissiveIntensity = isNight ? 0.2 + hash * 0.8 : 0;
@@ -3177,11 +2595,10 @@ function parseLevel(v) {
   return 4;
 }
 
-// Common Turkish/English column names for building floor count.
+// Common column names for building floor count.
 const BUILDING_FLOOR_FIELD_ALIASES = [
-  'katadedi', 'kat_adedi', 'katadet', 'kat_adet', 'katsayisi', 'kat_sayisi',
-  'kat_sayısı', 'katSayisi', 'kat', 'katlar', 'floors', 'num_floors', 'numfloors',
-  'floor_count', 'levels', 'storeys', 'stories', 'nkat', 'n_kat'
+  'floors', 'num_floors', 'numfloors',
+  'floor_count', 'levels', 'storeys', 'stories'
 ];
 
 // Raw floor-count value as stored on the feature, honoring the QGIS-mapped
@@ -3191,7 +2608,7 @@ function buildingLevelsRaw(props) {
 }
 
 // Building floor count: prefers the QGIS-mapped 'building_floors_field', then
-// falls back to common Turkish/English column names. Building height is this
+// falls back to common column names. Building height is this
 // count multiplied by the (per-feature or global) floor height.
 function buildingLevels(props) {
   return parseLevel(buildingLevelsRaw(props));
@@ -3433,10 +2850,10 @@ function deriveVectorBounds(data) {
   const roi = asFeatureCollection(data?.roi, 'ROI');
   if (roi.features.length) return geometryBounds(roi.features);
   const candidates = [
-    asFeatureCollection(data?.adalar, 'Blocks').features,
-    asFeatureCollection(data?.yollar, 'Roads').features,
-    asFeatureCollection(data?.yapilar, 'Buildings').features,
-    asFeatureCollection(data?.parseller, 'Parcels').features,
+    asFeatureCollection(data?.blocksGeo, 'Blocks').features,
+    asFeatureCollection(data?.roadsGeo, 'Roads').features,
+    asFeatureCollection(data?.buildingsGeo, 'Buildings').features,
+    asFeatureCollection(data?.parcelsGeo, 'Parcels').features,
     asFeatureCollection(data?.sidewalks, 'Sidewalks').features,
     asFeatureCollection(data?.pedestrianPaths, 'Pedestrian paths').features
   ]
@@ -3474,15 +2891,9 @@ function activateFlatTerrainFallback(sourceBounds = null, height = 0, statusMess
 
 function normalizeAccessText(value) {
   return String(value ?? '')
-    .toLocaleLowerCase('tr-TR')
+    .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/ı/g, 'i')
-    .replace(/ş/g, 's')
-    .replace(/ğ/g, 'g')
-    .replace(/ü/g, 'u')
-    .replace(/ö/g, 'o')
-    .replace(/ç/g, 'c');
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 function keywordList(values) {
@@ -3501,8 +2912,8 @@ function roadAllowsCars(feature) {
   const raw = props[field];
   if (raw === undefined || raw === null || String(raw).trim() === '') return true;
   const value = normalizeAccessText(raw);
-  const noCar = keywordList(access.noCarKeywords || ['yaya', 'pedestrian', 'foot', 'walk', 'path']);
-  const vehicle = keywordList(access.vehicleKeywords || ['tasit', 'vehicle', 'car', 'arac', 'motorlu']);
+  const noCar = keywordList(access.noCarKeywords || ['pedestrian', 'foot', 'walk', 'path']);
+  const vehicle = keywordList(access.vehicleKeywords || ['vehicle', 'car']);
   const hasNoCar = noCar.some((kw) => value.includes(kw));
   const hasVehicle = vehicle.some((kw) => value.includes(kw));
   return !hasNoCar || hasVehicle;
@@ -3514,21 +2925,21 @@ function roadModeText(feature) {
   const props = feature?.properties || {};
   const hierarchy = mappedField('road_hierarchy_field');
   if (hierarchy) return featureLabelText(props, [hierarchy], '');
-  return field ? featureLabelText(props, [field], '') : featureLabelText(props, ['yol_turu', 'yoltipi', 'tur', 'tip', 'access', 'mode'], '');
+  return field ? featureLabelText(props, [field], '') : featureLabelText(props, ['access', 'mode'], '');
 }
 
 function estimateAmenityPoints() {
   const points = [];
   const data = layerDataCache || {};
   const furniture = data.furniture || {};
-  for (const collection of [furniture.busstops, furniture.lights, data.agaclar]) {
+  for (const collection of [furniture.busstops, furniture.lights, data.treesGeo]) {
     for (const f of collection?.features || []) {
       if (f.geometry?.type === 'Point') points.push(f.geometry.coordinates);
     }
   }
-  for (const f of data.yapilar?.features || []) {
+  for (const f of data.buildingsGeo?.features || []) {
     const fn = normalizeAccessText(buildingFunctionValue(f.properties || {}));
-    if (!/(egitim|okul|park|saglik|ticaret|sosyal|kultur|spor|yesil|donati)/.test(fn)) continue;
+    if (!/(school|educat|universit|college|kindergarten|park|health|hospital|clinic|retail|commerc|shop|market|community|social|cultur|librar|museum|sport|stadium|green|garden)/.test(fn)) continue;
     const rings = getPolygonRings(f.geometry);
     const outer = rings?.[0]?.[0];
     if (!outer?.length) continue;
@@ -3565,8 +2976,8 @@ function roadVisualColor(feature, amenityPoints = []) {
   if (settings.roadColorMode === 'Access / traffic') {
     if (!roadAllowsCars(feature)) return new THREE.Color(0x0ea5e9);
     const mode = normalizeAccessText(roadModeText(feature));
-    if (/(ana|arter|bulvar|otoyol|primary|trunk)/.test(mode)) return new THREE.Color(0xef4444);
-    if (/(cadde|collector|secondary)/.test(mode)) return new THREE.Color(0xf59e0b);
+    if (/(motorway|trunk|primary|arterial|boulevard)/.test(mode)) return new THREE.Color(0xef4444);
+    if (/(secondary|tertiary|collector)/.test(mode)) return new THREE.Color(0xf59e0b);
     return new THREE.Color(0x64748b);
   }
   return new THREE.Color(settings.roadColor);
@@ -4470,17 +3881,17 @@ function applyIslandMaterialVisibility(material) {
   return material;
 }
 
-function shouldApplyIslandPlateaus(adalar) {
-  if (!settings.flattenIslands || !adalar?.features?.length) return false;
+function shouldApplyIslandPlateaus(blocksGeo) {
+  if (!settings.flattenIslands || !blocksGeo?.features?.length) return false;
   return !!(settings.showIslands || settings.showBuildings || settings.showHardscape || settings.showTrees || settings.showFurniture);
 }
 
-function applyIslandPlateaus(pos, segments, width, depth, adalar, transitionM) {
+function applyIslandPlateaus(pos, segments, width, depth, blocksGeo, transitionM) {
   islandPlateauCache.length = 0;
-  if (!adalar?.features?.length) return;
+  if (!blocksGeo?.features?.length) return;
   const count = pos.count;
 
-  for (const feature of adalar.features) {
+  for (const feature of blocksGeo.features) {
     const rings = getPolygonRings(feature.geometry);
     if (!rings.length) continue;
     const localPolys = rings.map((poly) => poly.map((ring) => ring.map((c) => metersToLocal(c[0], c[1]))));
@@ -4557,7 +3968,7 @@ function applyIslandPlateaus(pos, segments, width, depth, adalar, transitionM) {
   pos.needsUpdate = true;
 }
 
-async function buildTerrain(adalar, buildToken = sceneBuildToken) {
+async function buildTerrain(blocksGeo, buildToken = sceneBuildToken) {
   const width = bounds.maxX - bounds.minX;
   const depth = bounds.maxY - bounds.minY;
   const segments = currentTerrainSegments();
@@ -4631,8 +4042,8 @@ async function buildTerrain(adalar, buildToken = sceneBuildToken) {
   }
   limitTerrainBoundarySpikes(pos, segments, width, depth, avgZ, roiPolyCache);
   smoothTerrainSurface(pos, segments, width, depth);
-  if (shouldApplyIslandPlateaus(adalar)) {
-    applyIslandPlateaus(pos, segments, width, depth, adalar, settings.islandPlateauTransition);
+  if (shouldApplyIslandPlateaus(blocksGeo)) {
+    applyIslandPlateaus(pos, segments, width, depth, blocksGeo, settings.islandPlateauTransition);
   } else {
     islandPlateauCache.length = 0;
   }
@@ -4720,15 +4131,15 @@ async function buildTerrain(adalar, buildToken = sceneBuildToken) {
     world.add(terrainOverlayMesh);
   }
   buildTerrainSideSkirt(width, depth, zMin, finalStats.avg);
-  _lastTerrainY = finalStats.avg;   // fallback için kararlı terrain yüksekliğini başlat
+  _lastTerrainY = finalStats.avg;   // stable terrain height for the fallback
   const terrainLabel = demSampler?.flat ? 'Flat terrain plane' : 'mydem.tif';
   setStatus(`${t('demLoaded')} (${terrainLabel}). Z: ${zMin.toFixed(1)} - ${zMax.toFixed(1)} m`);
   return true;
 }
 
-/* terrainLocalYAt: DEM'den doğrudan yükseklik okur.
- * Raycasting KULLANMAZ — demHeightAtProjected ile aynı kaynağı kullanır.
- * Terrain mesh segment çözünürlüğüne bağımlılık ortadan kalkar. */
+/* terrainLocalYAt: reads the height straight from the DEM.
+ * No raycasting: it uses the same source as demHeightAtProjected, so it does
+ * not depend on the terrain mesh's segment resolution. */
 let _lastTerrainY = 0;
 function terrainLocalYAt(localX, localZ) {
   if (islandPlateauCache.length) {
@@ -4884,7 +4295,7 @@ function blockCategoryValue(properties) {
   const p = properties || {};
   const field = projectManifest?.fieldMappings?.block_category_field;
   // OSM greens carry leisure / landuse / natural; pick the first non-empty.
-  for (const k of [field, 'leisure', 'landuse', 'natural', 'uipfonksiyon', 'arazi_kull', 'category', 'function']) {
+  for (const k of [field, 'leisure', 'landuse', 'natural', 'category', 'function']) {
     if (k && p[k] !== undefined && p[k] !== null && String(p[k]).trim() !== '') return p[k];
   }
   return 'Residential';
@@ -4897,35 +4308,35 @@ function defaultBlockCategoryStyle(cat, index = 0) {
   // Parking first: 'PARKING' contains 'PARK', so it must be caught before the green
   // PARK rule below, otherwise a car park would render as a green park.
   if (c.includes('PARKING')) {
-    return { color: '#73787e', texture: 'CivicGravel' };
+    return { color: '#73787e', texture: 'Gravel' };
   }
   // Paved public squares/plazas (pedestrian/footway areas, town squares, markets) —
   // a light stone pavement, distinct from the darker asphalt of car parks. Caught
   // before the green PARK rule for the same substring reason as parking.
   if (c.includes('PEDESTRIAN') || c.includes('PLAZA') || c.includes('SQUARE') || c.includes('MARKET')) {
-    return { color: '#bdb8b0', texture: 'CivicGravel' };
+    return { color: '#bdb8b0', texture: 'Gravel' };
   }
   if (c.includes('GRASS') || c.includes('MEADOW') || c.includes('FOREST') || c.includes('WOOD') || c.includes('RECREATION') || c.includes('CEMETERY') || c.includes('SCRUB') || c.includes('GARDEN') || c.includes('ORCHARD') || c.includes('VINEYARD') || c.includes('FARMLAND') || c.includes('ALLOTMENT') || c.includes('HEATH') || c.includes('NATURE') || c.includes('GOLF') || c.includes('COMMON')) {
-    return { color: '#5e9e3e', texture: 'ParkGreen' };
+    return { color: '#5e9e3e', texture: 'Grass' };
   }
   if (c.includes('PITCH')) {
-    return { color: '#4a8c30', texture: 'FineGrid' };
+    return { color: '#4a8c30', texture: 'Grass' };
   }
-  if (c.includes('PARK') || c.includes('GREEN') || c.includes('YEŞİL') || c.includes('ORMAN') || c.includes('PLAYGROUND') || c.includes('BAHÇE')) {
+  if (c.includes('PARK') || c.includes('GREEN') || c.includes('PLAYGROUND')) {
     color = '#5e9e3e';
-    texture = 'ParkGreen';
-  } else if (c.includes('WATER') || c.includes('SU') || c.includes('GÖL') || c.includes('DENİZ') || c.includes('NEHİR')) {
+    texture = 'Grass';
+  } else if (c.includes('WATER')) {
     color = '#0f5e9c';
     texture = 'Water';
-  } else if (c.includes('SPORT') || c.includes('SPOR')) {
+  } else if (c.includes('SPORT')) {
     color = '#4a8c30';
-    texture = 'FineGrid';
-  } else if (c.includes('RESIDENT') || c.includes('KONUT')) {
+    texture = 'Grass';
+  } else if (c.includes('RESIDENT')) {
     color = '#d6c8a6';
-    texture = 'ResidentialBeige';
-  } else if (c.includes('CIVIC') || c.includes('KAMU') || c.includes('COMMERCIAL') || c.includes('TİCARET') || c.includes('SCHOOL') || c.includes('OKUL')) {
+    texture = 'Earth';
+  } else if (c.includes('CIVIC') || c.includes('COMMERCIAL') || c.includes('SCHOOL')) {
     color = '#b6b3a8';
-    texture = 'CivicGravel';
+    texture = 'Gravel';
   }
   return { color, texture };
 }
@@ -5331,23 +4742,23 @@ function buildWaterlinesLayer(waterlines) {
   }
 }
 
-async function buildIslandLayer(adalar) {
+async function buildIslandLayer(blocksGeo) {
   clearGroup(islandGroup);
-  if (!adalar?.features?.length) return;
+  if (!blocksGeo?.features?.length) return;
   
-  const categories = [...new Set(adalar.features.map(f => String(blockCategoryValue(f.properties))))];
+  const categories = [...new Set(blocksGeo.features.map(f => String(blockCategoryValue(f.properties))))];
   categories.forEach((cat, i) => {
     ensureBlockCategoryStyle(cat, i);
   });
 
   const customMaterials = {};
   
-  for (const f of adalar.features) {
+  for (const f of blocksGeo.features) {
     const cat = String(blockCategoryValue(f.properties));
     const catStyle = ensureBlockCategoryStyle(cat, categories.indexOf(cat));
     
-    const featureColor = normalizeHexColor(propFirst(f.properties || {}, ['planx_color', 'planx_renk', 'color', 'renk']), catStyle.color);
-    const featureTexture = presetValue(propFirst(f.properties || {}, ['planx_texture', 'planx_island_texture', 'texture', 'doku']), textureSets.island, catStyle.texture);
+    const featureColor = normalizeHexColor(propFirst(f.properties || {}, ['planx_color', 'color']), catStyle.color);
+    const featureTexture = presetValue(propFirst(f.properties || {}, ['planx_texture', 'planx_island_texture', 'texture']), textureSets.island, catStyle.texture);
     
     const matKey = `${featureColor}_${featureTexture}`;
     if (!customMaterials[matKey]) {
@@ -5402,19 +4813,19 @@ async function buildIslandLayer(adalar) {
   }
 }
 
-function buildParcelLayer(parseller) {
+function buildParcelLayer(parcelsGeo) {
   clearGroup(parcelGroup);
-  if (!parseller?.features?.length) return;
-  /* Parsel: sadece boundary (sınır çizgisi), fill yok.
-   * Her vertex kendi DEM yüksekliğini alır (relevant to DEM). */
+  if (!parcelsGeo?.features?.length) return;
+  /* Parcels: boundary lines only, no fill.
+   * Every vertex takes its own DEM height. */
   const lineMat = new THREE.LineBasicMaterial({
     color: new THREE.Color(settings.parcelBoundaryColor),
     transparent: true,
     opacity: settings.parcelBoundaryOpacity,
-    depthWrite: false          // ada yüzeyleriyle depth-fighting önlenir
+    depthWrite: false          // avoids depth fighting with the block surfaces
   });
 
-  for (const f of parseller.features) {
+  for (const f of parcelsGeo.features) {
     for (const poly of getPolygonRings(f.geometry)) {
       const outer = poly[0];
       if (!outer || outer.length < 3) continue;
@@ -5496,15 +4907,15 @@ function polygonAreaGeo(ring) {
 function estimateBuildingFeatureMetrics(feature) {
   const props = feature?.properties || {};
   const levels = buildingLevels(props);
-  let footprint = parseNumberProp(props, ['taban_alani', 'footprint_area', 'aream2'], null);
+  let footprint = parseNumberProp(props, ['footprint_area', 'aream2'], null);
   if (!footprint) {
     const outer = getPolygonRings(feature.geometry)?.[0]?.[0];
     footprint = polygonAreaGeo(outer);
   }
-  const floorArea = parseNumberProp(props, namesWithMapping('building_floor_area_field', ['toplam_insaat', 'insaat_alani', 'floor_area', 'gross_area']), footprint * levels);
-  const dwellings = parseNumberProp(props, namesWithMapping('building_dwelling_field', ['daire', 'daire_sayisi', 'dwelling', 'dwellings']), Math.max(1, Math.round(floorArea / 115)));
-  const population = parseNumberProp(props, namesWithMapping('building_population_field', ['nufus', 'nüfus', 'nÃ¼fus', 'population', 'pop']), Math.round(dwellings * 3.1));
-  const vehicles = parseNumberProp(props, namesWithMapping('building_vehicle_field', ['arac', 'araç', 'araÃ§', 'vehicle', 'cars']), Math.round(dwellings * 0.7));
+  const floorArea = parseNumberProp(props, namesWithMapping('building_floor_area_field', ['floor_area', 'gross_area']), footprint * levels);
+  const dwellings = parseNumberProp(props, namesWithMapping('building_dwelling_field', ['dwelling', 'dwellings']), Math.max(1, Math.round(floorArea / 115)));
+  const population = parseNumberProp(props, namesWithMapping('building_population_field', ['population', 'pop']), Math.round(dwellings * 3.1));
+  const vehicles = parseNumberProp(props, namesWithMapping('building_vehicle_field', ['vehicle', 'cars']), Math.round(dwellings * 0.7));
   return { footprint, floorArea, dwellings, population, vehicles };
 }
 
@@ -5694,7 +5105,7 @@ function featureSidewalkWidth(feature) {
 }
 
 function buildingHeightFromProps(props, levels, floorHeight = settings.floorHeight) {
-  const explicit = parseNumberProp(props || {}, ['planx_height', 'height', 'yukseklik', 'yükseklik', 'yÃ¼kseklik', 'bina_yuksekligi', 'building_height'], null);
+  const explicit = parseNumberProp(props || {}, ['planx_height', 'height', 'building_height'], null);
   if (explicit !== null && explicit > 0) return explicit;
   return levels * Math.max(2.4, Math.min(6, Number(floorHeight) || settings.floorHeight));
 }
@@ -5703,20 +5114,19 @@ function isOdorOrEmissionSource(feature) {
   const props = feature?.properties || {};
   const odorField = mappedField('odor_source_field');
   if (odorField && props[odorField] !== undefined) {
-    return /(1|true|evet|yes|source|risk|sanayi|industry|atik|waste|cop|depolama|storage|aritma|sewage)/.test(normalizeAccessText(props[odorField]));
+    return /(1|true|yes|source|risk|industry|waste|storage|sewage)/.test(normalizeAccessText(props[odorField]));
   }
   const text = normalizeAccessText([
-    props[mappedField('landuse_function_field')], props.uipfonksiyon, props.fonksiyon, props.kullanim, props.landuse,
-    props.tesis, props.adi, props.name, props.tip, props.tur
+    props[mappedField('landuse_function_field')], props.landuse, props.building, props.amenity, props.man_made, props.name
   ].filter(Boolean).join(' '));
-  return /(sanayi|industry|atik|waste|cop|solid|depolama|transfer|arıtma|aritma|sewage|lojistik|logistics)/.test(text);
+  return /(industr|waste|landfill|solid|storage|transfer|wastewater|sewage|logistics)/.test(text);
 }
 
 function buildWindPlumeLayer() {
   clearGroup(windPlumeGroup);
   if (!settings.showWindPlumes) return;
   const sources = [
-    ...(layerDataCache?.yapilar?.features || []),
+    ...(layerDataCache?.buildingsGeo?.features || []),
     ...(layerDataCache?.hardscape?.features || [])
   ].filter(isOdorOrEmissionSource);
   if (!sources.length) return;
@@ -5753,47 +5163,21 @@ function buildWindPlumeLayer() {
   }
 }
 
-function createRoofPresetTexture(name) {
+function createRoofPresetTexture(roofName) {
+  // Catalogue name (or a legacy one) -> recipe.
+  const name = catalogueName('roof', roofName) || 'ClayTile';
   const c = document.createElement('canvas');
   c.width = 256;
   c.height = 256;
   const ctx = c.getContext('2d');
   const bg = {
-    RoofA: '#9a7b61', RoofB: '#6f7885', RoofC: '#8e5a49', RoofD: '#5e6368',
-    GermanTile: '#3d4a5c', TurkishTile: '#b94a1a', USShingle: '#2d3340',
-    StandingSeam: '#506070', GreenRoof: '#587642', SolarRoof: '#26364c', CeramicLight: '#d1a16d'
-  }[name] || '#9a7b61';
+    ClayTile: '#a8442a', Slate: '#3d4a5c', Shingle: '#2d3340', MetalSeam: '#506070', Green: '#587642',
+    Solar: '#26364c', Copper: '#437c6c', Gravel: '#8b8982', Lead: '#4a525d'
+  }[name] || '#a8442a';
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, 256, 256);
 
-  if (name === 'RoofA') {
-    ctx.strokeStyle = 'rgba(240,220,200,0.65)';
-    for (let y = 10; y < 256; y += 16) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(90,70,55,0.28)';
-    for (let y = 18; y < 256; y += 16) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
-    }
-  } else if (name === 'RoofB') {
-    ctx.strokeStyle = 'rgba(210,220,235,0.55)';
-    for (let x = -120; x < 300; x += 18) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 90, 256); ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(60,70,85,0.3)';
-    for (let x = -120; x < 300; x += 18) {
-      ctx.beginPath(); ctx.moveTo(x + 7, 0); ctx.lineTo(x + 97, 256); ctx.stroke();
-    }
-  } else if (name === 'RoofC') {
-    ctx.strokeStyle = 'rgba(255,220,200,0.45)';
-    for (let y = 0; y < 256; y += 20) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y + 8); ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(80,45,38,0.25)';
-    for (let y = 8; y < 256; y += 20) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y + 8); ctx.stroke();
-    }
-  } else if (name === 'GermanTile') {
+  if (name === 'Slate') {
     // Dark slate, staggered rectangular tiles with shadow lines
     ctx.fillStyle = '#3d4a5c';
     ctx.fillRect(0, 0, 256, 256);
@@ -5812,7 +5196,7 @@ function createRoofPresetTexture(name) {
         ctx.beginPath(); ctx.moveTo(x + 1, y + 1); ctx.lineTo(x + tw - 1, y + 1); ctx.stroke();
       }
     }
-  } else if (name === 'TurkishTile') {
+  } else if (name === 'ClayTile') {
     // Terracotta curved tiles (Ottoman/Marsilya kiremit)
     ctx.fillStyle = '#b94a1a';
     ctx.fillRect(0, 0, 256, 256);
@@ -5838,7 +5222,7 @@ function createRoofPresetTexture(name) {
         ctx.beginPath(); ctx.moveTo(x, y + th - 1); ctx.lineTo(x + tw, y + th - 1); ctx.stroke();
       }
     }
-  } else if (name === 'USShingle') {
+  } else if (name === 'Shingle') {
     // Asphalt shingles – dark charcoal, staggered, slightly bumpy
     ctx.fillStyle = '#2d3340';
     ctx.fillRect(0, 0, 256, 256);
@@ -5866,7 +5250,7 @@ function createRoofPresetTexture(name) {
         }
       }
     }
-  } else if (name === 'StandingSeam') {
+  } else if (name === 'MetalSeam') {
     ctx.fillStyle = '#506070';
     ctx.fillRect(0, 0, 256, 256);
     for (let x = 0; x < 256; x += 22) {
@@ -5879,7 +5263,7 @@ function createRoofPresetTexture(name) {
       ctx.strokeStyle = 'rgba(210,220,230,0.35)';
       ctx.beginPath(); ctx.moveTo(x + 18, 0); ctx.lineTo(x + 18, 256); ctx.stroke();
     }
-  } else if (name === 'GreenRoof') {
+  } else if (name === 'Green') {
     ctx.fillStyle = '#587642';
     ctx.fillRect(0, 0, 256, 256);
     for (let i = 0; i < 1800; i++) {
@@ -5893,7 +5277,7 @@ function createRoofPresetTexture(name) {
     for (let x = 0; x < 256; x += 48) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 40, 256); ctx.stroke();
     }
-  } else if (name === 'SolarRoof') {
+  } else if (name === 'Solar') {
     ctx.fillStyle = '#26364c';
     ctx.fillRect(0, 0, 256, 256);
     const pw = 42, ph = 26;
@@ -5909,21 +5293,7 @@ function createRoofPresetTexture(name) {
         ctx.strokeRect(x, y, pw, ph);
       }
     }
-  } else if (name === 'CeramicLight') {
-    ctx.fillStyle = '#d1a16d';
-    ctx.fillRect(0, 0, 256, 256);
-    for (let y = 0; y < 280; y += 22) {
-      for (let x = -14; x < 270; x += 28) {
-        const shade = 185 + ((x + y) % 38);
-        ctx.fillStyle = `rgb(${shade},${Math.floor(shade * 0.62)},${Math.floor(shade * 0.34)})`;
-        ctx.beginPath();
-        ctx.ellipse(x + ((y / 22) % 2) * 14, y + 11, 15, 10, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(105,65,30,0.38)';
-        ctx.stroke();
-      }
-    }
-  } else if (name === 'CopperPatina') {
+  } else if (name === 'Copper') {
     ctx.fillStyle = '#4e8c7b';
     ctx.fillRect(0, 0, 256, 256);
     for (let x = 0; x < 256; x += 20) {
@@ -5936,7 +5306,7 @@ function createRoofPresetTexture(name) {
       ctx.strokeStyle = 'rgba(210,245,235,0.32)';
       ctx.beginPath(); ctx.moveTo(x + 18, 0); ctx.lineTo(x + 18, 256); ctx.stroke();
     }
-  } else if (name === 'GravelBallast') {
+  } else if (name === 'Gravel') {
     ctx.fillStyle = '#9ca3af';
     ctx.fillRect(0, 0, 256, 256);
     for (let i = 0; i < 2200; i++) {
@@ -5946,7 +5316,7 @@ function createRoofPresetTexture(name) {
       ctx.fillStyle = `rgba(${v},${v},${Math.min(255, v + 6)},0.55)`;
       ctx.fillRect(x, y, 2.5, 2.5);
     }
-  } else if (name === 'LeadMansard') {
+  } else if (name === 'Lead') {
     ctx.fillStyle = '#3f4752';
     ctx.fillRect(0, 0, 256, 256);
     const sw = 24, sh = 20;
@@ -6468,11 +5838,11 @@ function representativeTreeCoords(geometry) {
 }
 
 // InstancedMesh trees — dynamic variant buckets (up to 10 presets) with optional randomize + rand(min,max) heights.
-function buildTreeLayer(agaclar) {
+function buildTreeLayer(treesGeo) {
   clearGroup(treeGroup);
-  if (!agaclar?.features?.length) return;
+  if (!treesGeo?.features?.length) return;
   const treeSamples = [];
-  for (const feat of agaclar.features || []) {
+  for (const feat of treesGeo.features || []) {
     const coords = representativeTreeCoords(feat?.geometry);
     if (!coords.length) continue;
     for (const coord of coords) treeSamples.push({ feature: feat, coord });
@@ -6482,7 +5852,7 @@ function buildTreeLayer(agaclar) {
     return;
   }
   const mappedHeightField = mappedField('tree_height_field');
-  const fallbackHeightFields = ['planx_tree_height', 'tree_height', 'height', 'boy', 'agac_boyu', 'ağaç_boyu', 'aÄŸaÃ§_boyu', 'yukseklik', 'yükseklik', 'yÃ¼kseklik'];
+  const fallbackHeightFields = ['planx_tree_height', 'tree_height', 'height'];
   const heightFields = mappedHeightField ? [mappedHeightField, ...fallbackHeightFields] : fallbackHeightFields;
   const randomHeightExpr = parseRandRangeExpr(settings.treeHeightRandomExpr);
   const randomizeTrees = !!settings.treeRandomize;
@@ -6674,7 +6044,7 @@ function furnitureRotationY(feature, x, z, mappedKey) {
   const props = feature?.properties || {};
   const fieldNames = namesWithMapping(mappedKey, [
     'planx_angle', 'planx_rotation', 'angle', 'rotation', 'rot',
-    'heading', 'bearing', 'azimuth', 'direction', 'yon', 'yön', 'yÃ¶n'
+    'heading', 'bearing', 'azimuth', 'direction'
   ]);
   const deg = numericPropFirst(props, fieldNames);
   if (deg !== null) return -THREE.MathUtils.degToRad(deg);
@@ -7018,15 +6388,15 @@ function getSemanticColor(fn) {
   // Function-distinct palette driven by the active colour theme (activeColorTheme).
   // Subtle per-function shifts keep functions readable in every theme.
   const pal = activeColorTheme().buildings || {};
-  if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE') || f.includes('DETACHED') || f.includes('TERRACE') || f.includes('DORMITORY') || f.includes('KONUT') || f.includes('YERLEŞİK') || f.includes('MESKEN')) return pal.resid;
-  if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS') || f.includes('COLLEGE') || f.includes('KINDERGARTEN') || f.includes('OKUL') || f.includes('EĞİTİM') || f.includes('ÜNİVERSİTE')) return pal.educ;
-  if (f.includes('WORSHIP') || f.includes('MOSQUE') || f.includes('CHURCH') || f.includes('TEMPLE') || f.includes('SYNAGOGUE') || f.includes('CATHEDRAL') || f.includes('CHAPEL') || f.includes('CAMİ') || f.includes('DİNİ') || f.includes('İBADET')) return pal.worship;
-  if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE') || f.includes('SUPERMARKET') || f.includes('SHOP') || f.includes('KIOSK') || f.includes('TİCARET') || f.includes('ÇARŞI') || f.includes('AVM')) return pal.commerc;
-  if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC') || f.includes('SAĞLIK') || f.includes('HASTANE') || f.includes('KLİNİK')) return pal.health;
-  if (f.includes('SPORT') || f.includes('PITCH') || f.includes('SPOR') || f.includes('STADYUM') || f.includes('ARENA')) return pal.sport;
-  if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN') || f.includes('MEADOW') || f.includes('CEMETERY') || f.includes('PARK') || f.includes('YEŞİL') || f.includes('BAHÇE')) return pal.green;
-  if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC') || f.includes('TOWNHALL') || f.includes('KAMU') || f.includes('İDARİ') || f.includes('BELEDİYE')) return pal.civic;
-  if (f.includes('INDUSTR') || f.includes('WAREHOUSE') || f.includes('MANUFACTURE') || f.includes('HANGAR') || f.includes('SANAYİ') || f.includes('ENDÜSTRİ') || f.includes('FABRİKA')) return pal.industr;
+  if (f.includes('RESID') || f.includes('APARTMENT') || f.includes('HOUSE') || f.includes('DETACHED') || f.includes('TERRACE') || f.includes('DORMITORY')) return pal.resid;
+  if (f.includes('EDUCAT') || f.includes('SCHOOL') || f.includes('UNIVERS') || f.includes('COLLEGE') || f.includes('KINDERGARTEN')) return pal.educ;
+  if (f.includes('WORSHIP') || f.includes('MOSQUE') || f.includes('CHURCH') || f.includes('TEMPLE') || f.includes('SYNAGOGUE') || f.includes('CATHEDRAL') || f.includes('CHAPEL')) return pal.worship;
+  if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE') || f.includes('SUPERMARKET') || f.includes('SHOP') || f.includes('KIOSK')) return pal.commerc;
+  if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC')) return pal.health;
+  if (f.includes('SPORT') || f.includes('PITCH') || f.includes('ARENA')) return pal.sport;
+  if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN') || f.includes('MEADOW') || f.includes('CEMETERY') || f.includes('PARK')) return pal.green;
+  if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC') || f.includes('TOWNHALL')) return pal.civic;
+  if (f.includes('INDUSTR') || f.includes('WAREHOUSE') || f.includes('MANUFACTURE') || f.includes('HANGAR')) return pal.industr;
   return pal.default || '#b6bbc1';
 }
 
@@ -7038,17 +6408,9 @@ function getFunctionIcon(fn) {
   if (f.includes('COMMERC') || f.includes('RETAIL') || f.includes('OFFICE')) return '🏪';
   if (f.includes('HEALTH') || f.includes('HOSPITAL') || f.includes('CLINIC')) return '🏥';
   if (f.includes('SPORT') || f.includes('PITCH')) return '🏟️';
-  if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN')) return '🌳';
+  if (f.includes('GREEN') || f.includes('GRASS') || f.includes('FOREST') || f.includes('WOOD') || f.includes('GARDEN') || f.includes('PARK')) return '🌳';
   if (f.includes('CIVIC') || f.includes('GOVERN') || f.includes('PUBLIC')) return '🏛️';
   if (f.includes('INDUSTR') || f.includes('WAREHOUSE')) return '🏭';
-  if (f.includes('KONUT') || f.includes('YERLEŞİK')) return '🏠';
-  if (f.includes('OKUL') || f.includes('EĞİTİM')) return '🏫';
-  if (f.includes('CAMİ') || f.includes('DİNİ')) return '🕌';
-  if (f.includes('TİCARET') || f.includes('AVM')) return '🏪';
-  if (f.includes('SAĞLIK') || f.includes('HASTANE')) return '🏥';
-  if (f.includes('SPOR')) return '🏟️';
-  if (f.includes('PARK') || f.includes('YEŞİL')) return '🌳';
-  if (f.includes('KAMU') || f.includes('İDARİ')) return '🏛️';
   return '🏢';
 }
 
@@ -7096,7 +6458,7 @@ function resolveBuildingMassing(requestedMode, levels, footprintArea, fn, seed =
   if (footprintArea >= 420 && levels >= 3 && levels <= 8) {
     return (seed % 3 === 0) ? 'courtyard' : 'podium';
   }
-  if ((fnUpper.includes('COMMERC') || fnUpper.includes('OFFICE') || fnUpper.includes('CIVIC') || fnUpper.includes('TICARET')) && levels >= 4) {
+  if ((fnUpper.includes('COMMERC') || fnUpper.includes('OFFICE') || fnUpper.includes('CIVIC')) && levels >= 4) {
     return (seed % 2 === 0) ? 'podium' : 'cantilever';
   }
   if (levels >= 5) {
@@ -7139,11 +6501,11 @@ function insetTierForPolygon(poly, baseShape, baseFootprint, distance) {
   };
 }
 
-async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
+async function buildBuildingLayer(buildingsGeo, buildToken = sceneBuildToken) {
   clearGroup(buildingGroup);
-  if (!yapilar?.features?.length) return;
+  if (!buildingsGeo?.features?.length) return;
 
-  const functions = [...new Set(yapilar.features.map((f) => String(buildingFunctionValue(f.properties || {}))))];
+  const functions = [...new Set(buildingsGeo.features.map((f) => String(buildingFunctionValue(f.properties || {}))))];
 
   for (let i = 0; i < functions.length; i++) {
     const fn = functions[i];
@@ -7156,35 +6518,52 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
   for (const fn of functions) {
     const style = ensureFunctionBuildingStyle(fn, functions.indexOf(fn));
     const key = normalizeFacadeKey(style.facade);
-    if (isTurkishFacadeFamily(key)) continue;
+    if (dynamicStyleOfToken(textureSets.facade[key])) continue;
     if (!facadeCache[key]) {
-      const scale = Math.max(1, Math.min(8, Number(style.facadeScale) || FACADE_TEXTURE_SCALE_MULTIPLIER));
-      facadeCache[key] = await textureFromSet('facade', key, 0.55 / scale, 0.55 / scale);
+      facadeCache[key] = await textureFromSet('facade', key, 1, 1);
       if (isSceneBuildStale(buildToken)) return;
     }
   }
-  // Per-building texture scale cache keyed by (facade_type + floor_count)
-  const facadeScaleCache = {};
+  // Photo facades laid out on the walls' bay/floor grid: one tile spans the
+  // photo's window columns and rows (FACADE_TEXTURE_GRID).
+  const photoFacadeCache = {};
+  const photoFacadeTexture = (name) => {
+    const base = facadeCache[name];
+    const grid = FACADE_TEXTURE_GRID[name];
+    if (!base || !grid) return base || null;
+    if (!photoFacadeCache[name]) {
+      const t = base.clone();
+      t.repeat.set(1 / grid.bays, 1 / grid.floors);
+      t.offset.set(grid.offset[0] / grid.bays, grid.offset[1] / grid.floors);
+      t.needsUpdate = true;
+      photoFacadeCache[name] = t;
+    }
+    return photoFacadeCache[name];
+  };
 
-  for (const f of yapilar.features) {
+  for (const f of buildingsGeo.features) {
     const props = f.properties || {};
     const fn = String(buildingFunctionValue(props));
     const fnIndex = Math.max(0, functions.indexOf(fn));
     const fnStyle = ensureFunctionBuildingStyle(fn, fnIndex);
     const levels = buildingLevels(f.properties);
-    const featureFloorHeight = parseNumberProp(props, ['planx_floor_height', 'floor_height', 'kat_yuksekligi', 'kat_yüksekliği'], fnStyle.floorHeight);
+    const featureFloorHeight = parseNumberProp(props, ['planx_floor_height', 'floor_height'], fnStyle.floorHeight);
     const height = buildingHeightFromProps(props, levels, featureFloorHeight);
-    const featureColor = normalizeHexColor(propFirst(props, ['planx_color', 'planx_renk', 'color', 'renk']), fnStyle.color);
-    const selectedFacadeRaw = presetValue(propFirst(props, ['planx_facade', 'planx_texture', 'facade', 'cephe', 'doku']), textureSets.facade, fnStyle.facade);
+    const featureColor = normalizeHexColor(propFirst(props, ['planx_color', 'color']), fnStyle.color);
+    const selectedFacadeRaw = presetValue(propFirst(props, ['planx_facade', 'planx_texture', 'facade']), textureSets.facade, fnStyle.facade);
     const selectedFacade = normalizeFacadeKey(selectedFacadeRaw);
-    const featureFacade = resolveFacadeForLevels(selectedFacade, levels);
-    const featureFacadeScale = Math.max(1, Math.min(8, parseNumberProp(props, ['planx_facade_scale', 'facade_scale', 'cephe_olcegi'], fnStyle.facadeScale)));
-    const featureRoofTexture = presetValue(propFirst(props, ['planx_roof_texture', 'roof_texture', 'cati_doku', 'cati_texture']), textureSets.roof, fnStyle.roofTexture);
-    const explicitRoof = propFirst(props, ['planx_roof_shape', 'roof_shape', 'cati_tipi']);
+    const featureFacadeScale = Math.max(1, Math.min(8, parseNumberProp(props, ['planx_facade_scale', 'facade_scale'], fnStyle.facadeScale)));
+    // Auto by function: a facade from the building's function and height
+    // (an explicit facade attribute always wins); Function styles: the
+    // facade set per function in the Style dock.
+    const explicitFacade = propFirst(props, ['planx_facade', 'planx_texture', 'facade']);
+    const autoFacade = settings.facadeMode !== 'Function styles' && !explicitFacade;
+    const featureRoofTexture = presetValue(propFirst(props, ['planx_roof_texture', 'roof_texture']), textureSets.roof, fnStyle.roofTexture);
+    const explicitRoof = propFirst(props, ['planx_roof_shape', 'roof_shape']);
     const featureRoofShape = roofShapeValue(explicitRoof || fnStyle.roofShape, settings.roofShape);
-    const featureRoofHeight = parseNumberProp(props, ['planx_roof_height', 'roof_height', 'cati_yuksekligi', 'çatı_yüksekliği'], fnStyle.roofHeight);
-    const featureRoofColor = normalizeHexColor(propFirst(props, ['planx_roof_color', 'roof_color', 'cati_renk']), '#ffffff');
-    const explicitMassing = propFirst(props, ['planx_massing', 'massing', 'bina_modeli', 'building_mode']);
+    const featureRoofHeight = parseNumberProp(props, ['planx_roof_height', 'roof_height'], fnStyle.roofHeight);
+    const featureRoofColor = normalizeHexColor(propFirst(props, ['planx_roof_color', 'roof_color']), '#ffffff');
+    const explicitMassing = propFirst(props, ['planx_massing', 'massing', 'building_mode']);
     const requestedMassing = explicitMassing
       || (settings.buildingMode !== 'Auto Smart Massing' ? settings.buildingMode : (fnStyle.massing || settings.buildingMode));
 
@@ -7204,13 +6583,25 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
       }
 
       const baseY = buildingBaseYForOuterRing(outer);
-      const footprintArea = parseNumberProp(props, ['taban_alani', 'footprint_area', 'aream2'], polygonAreaGeo(outer));
-      const floorArea = parseNumberProp(props, namesWithMapping('building_floor_area_field', ['toplam_insaat', 'insaat_alani', 'floor_area', 'gross_area']), footprintArea * levels);
-      const dwellings = parseNumberProp(props, namesWithMapping('building_dwelling_field', ['daire', 'daire_sayisi', 'dwelling', 'dwellings']), Math.max(1, Math.round(floorArea / 115)));
-      const population = parseNumberProp(props, ['nufus', 'nüfus', 'population', 'pop'], Math.round(dwellings * 3.1));
-      const vehicles = parseNumberProp(props, ['arac', 'araç', 'vehicle', 'cars'], Math.round(dwellings * 0.7));
+      const footprintArea = parseNumberProp(props, ['footprint_area', 'aream2'], polygonAreaGeo(outer));
+      const floorArea = parseNumberProp(props, namesWithMapping('building_floor_area_field', ['floor_area', 'gross_area']), footprintArea * levels);
+      const dwellings = parseNumberProp(props, namesWithMapping('building_dwelling_field', ['dwelling', 'dwellings']), Math.max(1, Math.round(floorArea / 115)));
+      const population = parseNumberProp(props, ['population', 'pop'], Math.round(dwellings * 3.1));
+      const vehicles = parseNumberProp(props, ['vehicle', 'cars'], Math.round(dwellings * 0.7));
       const seedInt = Math.abs(Math.round(sx + sy)) % 97;
       const massingKind = resolveBuildingMassing(requestedMassing, levels, footprintArea, fn, seedInt);
+      const facadeSeed = Math.abs(Math.round(sx * 7.3 + sy * 13.1)) % 4096;
+      const featureFacade = autoFacade ? autoFacadeName(fn, levels, facadeSeed) : selectedFacade;
+      // Dynamic styles draw their windows in the shader; photo facades are
+      // laid out on the same bay/floor grid.
+      const dynamicStyle = dynamicStyleOfToken(textureSets.facade[featureFacade]);
+      const photoGrid = dynamicStyle ? null : FACADE_TEXTURE_GRID[featureFacade];
+      // Wall coordinates in window bays and floors (prismGeometry).
+      const facadeFrame = (yOffset) => ({
+        bay: (DYNAMIC_FACADE_STYLES[dynamicStyle]?.bay || 3.1) * Math.max(0.6, Math.min(1.6, featureFacadeScale / FACADE_TEXTURE_SCALE_MULTIPLIER)),
+        floor: height / Math.max(1, levels),
+        z0: yOffset - baseY
+      });
 
       if (massingKind === 'footprint') {
         const fpGeo = new THREE.ShapeGeometry(shape);
@@ -7251,27 +6642,11 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
         }
       }
 
-      if (!facadeCache[featureFacade]) {
-        facadeCache[featureFacade] = await textureFromSet('facade', featureFacade, 0.5 / featureFacadeScale, 0.5 / featureFacadeScale);
+      if (!dynamicStyle && !facadeCache[featureFacade]) {
+        facadeCache[featureFacade] = await textureFromSet('facade', featureFacade, 1, 1);
         if (isSceneBuildStale(buildToken)) return;
       }
-      const getTierFacadeTex = (tierLevels, tierHeight) => {
-        const texKey = `${featureFacade}_${tierLevels}_${tierHeight.toFixed(2)}_${featureFacadeScale.toFixed(2)}`;
-        if (!facadeScaleCache[texKey]) {
-          const base = facadeCache[featureFacade];
-          if (base) {
-            const recipe = (typeof FACADE_RECIPES !== 'undefined') ? FACADE_RECIPES[featureFacade] : null;
-            const textureFloorRows = facadeTextureFloorRows(featureFacade, recipe?.floorRows || 10);
-            const repeatV = Math.max(0.025, Math.min(3.0, tierLevels / textureFloorRows / featureFacadeScale));
-            const t = base.clone();
-            t.repeat.set(0.5 / featureFacadeScale, repeatV);
-            t.needsUpdate = true;
-            facadeScaleCache[texKey] = t;
-          }
-        }
-        return facadeScaleCache[texKey] || facadeCache[featureFacade];
-      };
-      const facadeTex = getTierFacadeTex(levels, height);
+      const facadeTex = dynamicStyle ? null : photoFacadeTexture(featureFacade);
       if (!roofTextureCache[featureRoofTexture]) {
         roofTextureCache[featureRoofTexture] = createRoofPresetTexture(featureRoofTexture);
       }
@@ -7280,15 +6655,32 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
       const matRoof = new THREE.MeshStandardMaterial({ map: featureRoofTex, color: new THREE.Color(featureRoofColor), roughness: 0.85, side: THREE.DoubleSide });
       const matHiddenCap = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
       const wallColor = jitterBuildingColor(featureColor, `${Math.round(sx)}_${Math.round(sy)}`);
-      const makeWallMat = (tex, colHex = wallColor) => new THREE.MeshStandardMaterial({
+      const makeWallMat = (tex, colHex = wallColor) => (dynamicStyle ? createDynamicFacadeMaterial(dynamicStyle, {
+        color: new THREE.Color(colHex),
+        seed: facadeSeed,
+        night: isNight,
+        anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1)
+      }) : new THREE.MeshStandardMaterial({
         map: tex,
         color: new THREE.Color(colHex),
         roughness: 0.72,
         side: THREE.DoubleSide,
         emissive: isNight ? new THREE.Color(0x333322) : new THREE.Color(0x000000),
         emissiveIntensity: isNight ? (Math.random() * 0.8 + 0.2) : 0
-      });
+      }));
       const matWall = makeWallMat(facadeTex, wallColor);
+      // Building volume from yOffset up by depth: caps (group 0) and walls
+      // (group 1) with the bay/floor wall coordinates of the facades.
+      const volumeGeometry = (volShape, yOffset, depth) => {
+        const prism = (dynamicStyle || photoGrid) ? prismGeometry(volShape, depth, facadeFrame(yOffset)) : null;
+        if (prism) return prism;
+        const extrude = new THREE.ExtrudeGeometry(volShape, { depth, bevelEnabled: false });
+        extrude.rotateX(Math.PI / 2);
+        extrude.computeBoundingBox();
+        const minY = extrude.boundingBox ? extrude.boundingBox.min.y : 0;
+        if (minY !== 0) extrude.translate(0, -minY, 0);
+        return extrude;
+      };
 
       const useSeparateRoofMesh = massingKind !== 'extrude';
       const buildingData = {
@@ -7302,12 +6694,8 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
 
       const addTierExtrusion = (tierShape, yOffset, tierHeight, tierLevels, capWithRoofMat) => {
         if (!tierShape || tierHeight <= 0.05) return;
-        const extrude = new THREE.ExtrudeGeometry(tierShape, { depth: tierHeight, bevelEnabled: false });
-        extrude.rotateX(Math.PI / 2);
-        extrude.computeBoundingBox();
-        const minY = extrude.boundingBox ? extrude.boundingBox.min.y : 0;
-        if (minY !== 0) extrude.translate(0, -minY, 0);
-        const tierWallMat = makeWallMat(getTierFacadeTex(Math.max(1, tierLevels), tierHeight), wallColor);
+        const extrude = volumeGeometry(tierShape, yOffset, tierHeight);
+        const tierWallMat = makeWallMat(facadeTex, wallColor);
         const mesh = new THREE.Mesh(extrude, capWithRoofMat ? [matRoof, tierWallMat] : [matHiddenCap, tierWallMat]);
         mesh.position.y = yOffset;
         mesh.castShadow = true;
@@ -7383,11 +6771,7 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
         roofTowerHeight = height - podiumHeight;
       } else {
         // Normal Extrusion (Single volume or Courtyard block)
-        const extrude = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
-        extrude.rotateX(Math.PI / 2);
-        extrude.computeBoundingBox();
-        const minY = extrude.boundingBox ? extrude.boundingBox.min.y : 0;
-        if (minY !== 0) extrude.translate(0, -minY, 0);
+        const extrude = volumeGeometry(shape, baseY, height);
 
         const b = new THREE.Mesh(extrude, useSeparateRoofMesh ? [matHiddenCap, matWall] : [matRoof, matWall]);
         b.position.y = baseY;
@@ -7444,21 +6828,21 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
     }
   }
 }
-function buildZoningEnvelopesLayer(yapilar) {
+function buildZoningEnvelopesLayer(buildingsGeo) {
   clearGroup(zoningGroup);
-  if (!settings.showZoningEnvelopes || !yapilar?.features?.length) return;
+  if (!settings.showZoningEnvelopes || !buildingsGeo?.features?.length) return;
 
   const zoningHeight = settings.zoningMaxHeight;
   const zoningSetbackVal = settings.zoningSetback;
   const highlight = settings.highlightViolations;
 
-  for (const f of yapilar.features) {
+  for (const f of buildingsGeo.features) {
     const props = f.properties || {};
     const levels = buildingLevels(props);
     const fn = String(buildingFunctionValue(props));
     const fnIndex = Math.max(0, Object.keys(functionColorState).indexOf(fn));
     const fnStyle = ensureFunctionBuildingStyle(fn, fnIndex);
-    const featureFloorHeight = parseNumberProp(props, ['planx_floor_height', 'floor_height', 'kat_yuksekligi', 'kat_yüksekliği'], fnStyle.floorHeight);
+    const featureFloorHeight = parseNumberProp(props, ['planx_floor_height', 'floor_height'], fnStyle.floorHeight);
     const height = buildingHeightFromProps(props, levels, featureFloorHeight);
 
     const poly = getPolygonRings(f.geometry);
@@ -7697,7 +7081,7 @@ function buildBicycleTraffic() {
   }
 }
 
-async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
+async function buildRoadsAndTraffic(roadsGeo, buildToken = sceneBuildToken) {
   clearGroup(roadGroup);
   clearGroup(carGroup);
   clearGroup(pedestrianGroup);
@@ -7705,16 +7089,12 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
   vehicleRoadCurves = [];
   cars = [];
   pedestrians = [];
-  if (!yollar?.features?.length) return;
+  if (!roadsGeo?.features?.length) return;
 
-  let roadTex = null;
-  if (settings.roadStyle === 'Asphalt') {
-    roadTex = createAsphaltTexture();
-  } else if (settings.roadStyle === 'Cobblestone') {
-    roadTex = await textureFromSet('road', 'Cobblestone', 2, 20);
-  } else if (settings.roadStyle === 'SharedStreet') {
-    roadTex = await textureFromSet('road', 'SharedStreet', 2, 16);
-  }
+  const roadStyle = presetValue(settings.roadStyle, textureSets.road, 'Asphalt');
+  const roadTex = roadStyle === 'Asphalt'
+    ? createAsphaltTexture()
+    : await textureFromSet('road', roadStyle, 2, roadStyle === 'Cobblestone' ? 20 : 16);
   if (isSceneBuildStale(buildToken)) return;
 
   const roadMat = new THREE.MeshStandardMaterial({
@@ -7730,7 +7110,7 @@ async function buildRoadsAndTraffic(yollar, buildToken = sceneBuildToken) {
   const roadMaterialCache = new Map();
   const amenityPoints = settings.roadColorMode === 'Amenity distance' ? estimateAmenityPoints() : [];
 
-  for (const f of explodeLineFeatures(yollar)) {
+  for (const f of explodeLineFeatures(roadsGeo)) {
     const xzPts = [];
     for (const c of f.geometry.coordinates) {
       const [x, z] = metersToLocal(c[0], c[1]);
@@ -8156,21 +7536,21 @@ function buildSidewalkPolygonLayer(sidewalks, buildToken = sceneBuildToken) {
   }
 }
 
-function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = sceneBuildToken) {
+function buildSidewalkLayer(roadsGeo, sidewalks = EMPTY_GEOJSON, buildToken = sceneBuildToken) {
   clearGroup(sidewalkGroup);
   if (!settings.showSidewalks) return;
   if (sidewalks?.features?.length) {
     buildSidewalkPolygonLayer(sidewalks, buildToken);
     return;
   }
-  if (!yollar?.features?.length) return;
+  if (!roadsGeo?.features?.length) return;
 
   const curbRise = 0.12;
   // DoubleSide so a sidewalk is never culled when a road's winding flips the
   // strip normal (the cause of sidewalks appearing on only one side).
   const swMat = new THREE.MeshStandardMaterial({ color: 0xcdc4a8, roughness: 0.95, metalness: 0.0, side: THREE.DoubleSide });
 
-  for (const f of explodeLineFeatures(yollar)) {
+  for (const f of explodeLineFeatures(roadsGeo)) {
     const xzPtsW = [];
     for (const c of f.geometry.coordinates) {
       const [x, z] = metersToLocal(c[0], c[1]);
@@ -8234,7 +7614,7 @@ function buildSidewalkLayer(yollar, sidewalks = EMPTY_GEOJSON, buildToken = scen
 function pedestrianPathWidth(feature) {
   const width = parseNumberProp(
     feature?.properties || {},
-    ['width', 'genislik', 'genişlik', 'path_width', 'walkway_width', 'yaya_yolu_genisligi'],
+    ['width', 'path_width', 'walkway_width'],
     2.2
   );
   return Math.max(0.8, Math.min(6.0, width || 2.2));
@@ -8360,10 +7740,10 @@ function buildPedestrianPathLayer(paths = EMPTY_GEOJSON, buildToken = sceneBuild
   }
 }
 
-function buildCrosswalkLayer(yollar) {
+function buildCrosswalkLayer(roadsGeo) {
   clearGroup(crosswalkGroup);
   if (!settings.showCrosswalks) return;
-  if (!yollar?.features?.length) return;
+  if (!roadsGeo?.features?.length) return;
 
   const cwMat = new THREE.MeshStandardMaterial({ color: 0xf0ede5, roughness: 0.85 });
   const stripeW = 0.38;
@@ -8371,7 +7751,7 @@ function buildCrosswalkLayer(yollar) {
   const stripeCount = 5;
   const totalLen = stripeCount * stripeW + (stripeCount - 1) * stripeGap;
 
-  for (const f of yollar.features) {
+  for (const f of roadsGeo.features) {
     if (!f.geometry || f.geometry.type !== 'LineString') continue;
     const coords = f.geometry.coordinates;
     if (coords.length < 2) continue;
@@ -8591,24 +7971,24 @@ async function rebuildScene() {
     loadingText.innerText = t('sceneGeojson') + '...';
     projectManifest = await loadManifest();
     applyManifestDefaults();
-    const adalar = await loadGeoJson('../data/yerlesim/myblocks.geojson', { required: manifestRequiresInput('blocks'), label: 'Blocks' });
-    const yapilar = await loadGeoJson('../data/yerlesim/mybuildings.geojson', { required: manifestRequiresInput('buildings'), label: 'Buildings' });
-    const yollar = await loadGeoJson('../data/yerlesim/myroads.geojson', { required: manifestRequiresInput('roads'), label: 'Roads' });
-    const agaclar = await loadGeoJson('../data/yerlesim/mytrees.geojson', { label: 'Trees' });
-    const lights = await loadGeoJson('../data/yerlesim/mylights.geojson', { label: 'Lights' });
-    const benches = await loadGeoJson('../data/yerlesim/mybenches.geojson', { label: 'Benches' });
-    const bins = await loadGeoJson('../data/yerlesim/mytrashbins.geojson', { label: 'Trash bins' });
-    const busstops = await loadGeoJson('../data/yerlesim/mybusstops.geojson', { label: 'Bus stops' });
-    const bikeLanes = await loadGeoJson('../data/yerlesim/mybikelanes.geojson', { label: 'Bike lanes' });
-    const waterlines = await loadGeoJson('../data/yerlesim/mywaterlines.geojson', { label: 'Water lines' });
+    const blocksGeo = await loadGeoJson('../data/layers/myblocks.geojson', { required: manifestRequiresInput('blocks'), label: 'Blocks' });
+    const buildingsGeo = await loadGeoJson('../data/layers/mybuildings.geojson', { required: manifestRequiresInput('buildings'), label: 'Buildings' });
+    const roadsGeo = await loadGeoJson('../data/layers/myroads.geojson', { required: manifestRequiresInput('roads'), label: 'Roads' });
+    const treesGeo = await loadGeoJson('../data/layers/mytrees.geojson', { label: 'Trees' });
+    const lights = await loadGeoJson('../data/layers/mylights.geojson', { label: 'Lights' });
+    const benches = await loadGeoJson('../data/layers/mybenches.geojson', { label: 'Benches' });
+    const bins = await loadGeoJson('../data/layers/mytrashbins.geojson', { label: 'Trash bins' });
+    const busstops = await loadGeoJson('../data/layers/mybusstops.geojson', { label: 'Bus stops' });
+    const bikeLanes = await loadGeoJson('../data/layers/mybikelanes.geojson', { label: 'Bike lanes' });
+    const waterlines = await loadGeoJson('../data/layers/mywaterlines.geojson', { label: 'Water lines' });
 
-    const roi = await loadGeoJson('../data/yerlesim/roi.geojson', { required: manifestRequiresInput('roi'), label: 'ROI' });
+    const roi = await loadGeoJson('../data/layers/roi.geojson', { required: manifestRequiresInput('roi'), label: 'ROI' });
     layerDataCache = {
-       adalar: asFeatureCollection(adalar, 'Blocks'),
-       yapilar: asFeatureCollection(yapilar, 'Buildings'),
-       yollar: asFeatureCollection(yollar, 'Roads'),
-       agaclar: asFeatureCollection(agaclar, 'Trees'),
-       parseller: null,
+       blocksGeo: asFeatureCollection(blocksGeo, 'Blocks'),
+       buildingsGeo: asFeatureCollection(buildingsGeo, 'Buildings'),
+       roadsGeo: asFeatureCollection(roadsGeo, 'Roads'),
+       treesGeo: asFeatureCollection(treesGeo, 'Trees'),
+       parcelsGeo: null,
        hardscape: null,
        sidewalks: EMPTY_GEOJSON,
        pedestrianPaths: null,
@@ -8625,50 +8005,50 @@ async function rebuildScene() {
     };
   }
   if (isSceneBuildStale(buildToken)) return;
-  if (settings.showParcels && !layerDataCache.parseller) {
-    const parseller = await loadGeoJson('../data/yerlesim/myparcels.geojson', { required: manifestRequiresInput('parcels'), label: 'Parcels' });
-    layerDataCache.parseller = asFeatureCollection(parseller, 'Parcels');
+  if (settings.showParcels && !layerDataCache.parcelsGeo) {
+    const parcelsGeo = await loadGeoJson('../data/layers/myparcels.geojson', { required: manifestRequiresInput('parcels'), label: 'Parcels' });
+    layerDataCache.parcelsGeo = asFeatureCollection(parcelsGeo, 'Parcels');
   }
   if (settings.showHardscape && !layerDataCache.hardscape) {
-    const hardscape = await loadGeoJson('../data/yerlesim/myhardscape.geojson', { label: 'Hardscape' });
+    const hardscape = await loadGeoJson('../data/layers/myhardscape.geojson', { label: 'Hardscape' });
     layerDataCache.hardscape = asFeatureCollection(hardscape, 'Hardscape');
   }
   if (settings.showWindPlumes && !layerDataCache.hardscape) {
-    const hardscape = await loadGeoJson('../data/yerlesim/myhardscape.geojson', { label: 'Hardscape' });
+    const hardscape = await loadGeoJson('../data/layers/myhardscape.geojson', { label: 'Hardscape' });
     layerDataCache.hardscape = asFeatureCollection(hardscape, 'Hardscape');
   }
   if (settings.showPedestrianPaths && !layerDataCache.pedestrianPaths) {
-    const pedestrianPaths = await loadGeoJson('../data/yerlesim/mypedestrian_paths.geojson', { label: 'Pedestrian paths' });
+    const pedestrianPaths = await loadGeoJson('../data/layers/mypedestrian_paths.geojson', { label: 'Pedestrian paths' });
     layerDataCache.pedestrianPaths = asFeatureCollection(pedestrianPaths, 'Pedestrian paths');
   }
   if (settings.showWaterlines && !layerDataCache.waterlines) {
-    const waterlines = await loadGeoJson('../data/yerlesim/mywaterlines.geojson', { label: 'Water lines' });
+    const waterlines = await loadGeoJson('../data/layers/mywaterlines.geojson', { label: 'Water lines' });
     layerDataCache.waterlines = asFeatureCollection(waterlines, 'Water lines');
   }
   
-  const adalar = asFeatureCollection(layerDataCache.adalar, 'Blocks');
-  const yapilar = asFeatureCollection(layerDataCache.yapilar, 'Buildings');
-  const yollar = asFeatureCollection(layerDataCache.yollar, 'Roads');
-  const agaclar = asFeatureCollection(layerDataCache.agaclar, 'Trees');
-  const parseller = layerDataCache.parseller ? asFeatureCollection(layerDataCache.parseller, 'Parcels') : null;
+  const blocksGeo = asFeatureCollection(layerDataCache.blocksGeo, 'Blocks');
+  const buildingsGeo = asFeatureCollection(layerDataCache.buildingsGeo, 'Buildings');
+  const roadsGeo = asFeatureCollection(layerDataCache.roadsGeo, 'Roads');
+  const treesGeo = asFeatureCollection(layerDataCache.treesGeo, 'Trees');
+  const parcelsGeo = layerDataCache.parcelsGeo ? asFeatureCollection(layerDataCache.parcelsGeo, 'Parcels') : null;
   const hardscape = layerDataCache.hardscape ? asFeatureCollection(layerDataCache.hardscape, 'Hardscape') : null;
   const sidewalks = layerDataCache.sidewalks ? asFeatureCollection(layerDataCache.sidewalks, 'Sidewalks') : null;
   const pedestrianPaths = layerDataCache.pedestrianPaths ? asFeatureCollection(layerDataCache.pedestrianPaths, 'Pedestrian paths') : null;
   const fences = layerDataCache.fences ? asFeatureCollection(layerDataCache.fences, 'Fences') : null;
   const waterlines = layerDataCache.waterlines ? asFeatureCollection(layerDataCache.waterlines, 'Water lines') : null;
   const bikeLanes = layerDataCache.bikeLanes ? asFeatureCollection(layerDataCache.bikeLanes, 'Bike lanes') : null;
-  Object.assign(layerDataCache, { adalar, yapilar, yollar, agaclar, parseller, hardscape, sidewalks, pedestrianPaths, fences, waterlines, bikeLanes });
+  Object.assign(layerDataCache, { blocksGeo, buildingsGeo, roadsGeo, treesGeo, parcelsGeo, hardscape, sidewalks, pedestrianPaths, fences, waterlines, bikeLanes });
   updateDashboard(layerDataCache);
 
   // Calculate and update stats
   const statDiv = document.getElementById('stats-content');
   if (statDiv) {
-    const blockCount = adalar.features.length;
-    const parcelCount = parseller ? parseller.features.length : '-';
-    const bldCount = yapilar.features.length;
+    const blockCount = blocksGeo.features.length;
+    const parcelCount = parcelsGeo ? parcelsGeo.features.length : '-';
+    const bldCount = buildingsGeo.features.length;
     let totalFloors = 0;
     const funcMap = {};
-    yapilar.features.forEach(f => {
+    buildingsGeo.features.forEach(f => {
        const fn = buildingFunctionValue(f.properties || {});
        funcMap[fn] = (funcMap[fn] || 0) + 1;
        totalFloors += buildingLevels(f.properties);
@@ -8678,7 +8058,7 @@ async function rebuildScene() {
     let html = `<div class="stat-row"><span>${t('statBld')}</span><span class="stat-val">${bldCount}</span></div>`;
     html += `<div class="stat-row"><span>${t('statBlock')}</span><span class="stat-val">${blockCount}</span></div>`;
     html += `<div class="stat-row"><span>${t('statFlr')}</span><span class="stat-val">${avgFlr}</span></div>`;
-    if (parseller) html += `<div class="stat-row"><span>${t('statParcel')}</span><span class="stat-val">${parcelCount}</span></div>`;
+    if (parcelsGeo) html += `<div class="stat-row"><span>${t('statParcel')}</span><span class="stat-val">${parcelCount}</span></div>`;
     const topFuncs = Object.entries(funcMap).sort((a, b) => b[1] - a[1]).slice(0, 4);
     topFuncs.forEach(([k, v]) => {
       const icon = getFunctionIcon(k);
@@ -8740,7 +8120,7 @@ async function rebuildScene() {
       setSceneState('scenePlanTexture');
       terrainTexture = markPersistentTexture(await loadTerrainTextureFromGeoTiff());
     } catch (err) {
-      console.warn('Plan texture yuklenemedi, pavement ile devam ediliyor.', err);
+      console.warn('Plan texture could not be loaded; using the pavement.', err);
       setStatus(t('planTextureFail'));
     }
   }
@@ -8750,13 +8130,13 @@ async function rebuildScene() {
       setSceneState('sceneBasemap');
       baseMapTexture = markPersistentTexture(await loadBaseMapTexture());
     } catch (err) {
-      console.warn('QGIS basemap texture yuklenemedi, zemin dokusu ile devam ediliyor.', err);
+      console.warn('QGIS basemap texture could not be loaded; using the ground texture.', err);
       setStatus(t('basemapFail'));
     }
   }
   loadingText.innerText = t('sceneTerrain') + '...';
   setSceneState('sceneTerrain');
-  const terrainBuilt = await buildTerrain(adalar, buildToken);
+  const terrainBuilt = await buildTerrain(blocksGeo, buildToken);
   if (!terrainBuilt || isSceneBuildStale(buildToken)) return;
 
   // Basemap underlay over the base (Basemap & Texture dock).
@@ -8772,14 +8152,14 @@ async function rebuildScene() {
   loadingText.innerText = t('processing');
   setSceneState('sceneLayers');
 
-  if (settings.showIslands && (!isRasterTextureMode() || adalar.features.length)) {
-    await runLayerBuild('Blocks', () => buildIslandLayer(adalar), () => clearGroup(islandGroup));
+  if (settings.showIslands && (!isRasterTextureMode() || blocksGeo.features.length)) {
+    await runLayerBuild('Blocks', () => buildIslandLayer(blocksGeo), () => clearGroup(islandGroup));
   } else {
     clearGroup(islandGroup);
   }
   if (isSceneBuildStale(buildToken)) return;
-  if (settings.showParcels && parseller) {
-    await runLayerBuild('Parcels', () => buildParcelLayer(parseller), () => clearGroup(parcelGroup));
+  if (settings.showParcels && parcelsGeo) {
+    await runLayerBuild('Parcels', () => buildParcelLayer(parcelsGeo), () => clearGroup(parcelGroup));
   } else {
     clearGroup(parcelGroup);
   }
@@ -8791,22 +8171,22 @@ async function rebuildScene() {
   if (isSceneBuildStale(buildToken)) return;
   await runLayerBuild('Wind plume', () => buildWindPlumeLayer(), () => clearGroup(windPlumeGroup));
   if (settings.showBuildings) {
-    await runLayerBuild('Buildings', () => buildBuildingLayer(yapilar, buildToken), () => clearGroup(buildingGroup));
+    await runLayerBuild('Buildings', () => buildBuildingLayer(buildingsGeo, buildToken), () => clearGroup(buildingGroup));
   } else {
     clearGroup(buildingGroup);
   }
   if (isSceneBuildStale(buildToken)) return;
-  if (settings.showZoningEnvelopes && settings.showBuildings && yapilar) {
-    await runLayerBuild('Zoning Envelopes', () => buildZoningEnvelopesLayer(yapilar), () => clearGroup(zoningGroup));
+  if (settings.showZoningEnvelopes && settings.showBuildings && buildingsGeo) {
+    await runLayerBuild('Zoning Envelopes', () => buildZoningEnvelopesLayer(buildingsGeo), () => clearGroup(zoningGroup));
   } else {
     clearGroup(zoningGroup);
   }
   if (isSceneBuildStale(buildToken)) return;
-  await runLayerBuild('Roads', () => buildRoadsAndTraffic(yollar, buildToken), () => { clearGroup(roadGroup); clearGroup(carGroup); clearGroup(pedestrianGroup); });
+  await runLayerBuild('Roads', () => buildRoadsAndTraffic(roadsGeo, buildToken), () => { clearGroup(roadGroup); clearGroup(carGroup); clearGroup(pedestrianGroup); });
   await runLayerBuild('Bike lanes', () => buildBikeLaneLayer(bikeLanes, buildToken), () => { clearGroup(bikeLaneGroup); clearGroup(bikeGroup); bikeLaneCurves = []; bikes = []; });
   if (isSceneBuildStale(buildToken)) return;
   if (settings.showSidewalks) {
-    await runLayerBuild('Sidewalks', () => buildSidewalkLayer(yollar, sidewalks, buildToken), () => clearGroup(sidewalkGroup));
+    await runLayerBuild('Sidewalks', () => buildSidewalkLayer(roadsGeo, sidewalks, buildToken), () => clearGroup(sidewalkGroup));
   } else {
     clearGroup(sidewalkGroup);
   }
@@ -8817,13 +8197,13 @@ async function rebuildScene() {
     pedestrianPathCurves = [];
   }
   if (settings.showCrosswalks) {
-    await runLayerBuild('Crosswalks', () => buildCrosswalkLayer(yollar), () => clearGroup(crosswalkGroup));
+    await runLayerBuild('Crosswalks', () => buildCrosswalkLayer(roadsGeo), () => clearGroup(crosswalkGroup));
   } else {
     clearGroup(crosswalkGroup);
   }
   await runLayerBuild('Pedestrians', () => buildPedestrianLayer(), () => clearGroup(pedestrianGroup));
   if (settings.showTrees) {
-    await runLayerBuild('Trees', () => buildTreeLayer(agaclar), () => clearGroup(treeGroup));
+    await runLayerBuild('Trees', () => buildTreeLayer(treesGeo), () => clearGroup(treeGroup));
   } else {
     clearGroup(treeGroup);
   }
@@ -8888,22 +8268,22 @@ function setSceneState(textOrKey, kind = 'ok') {
 
 function updateDashboard(data) {
   if (!data) return;
-  const adalar = data.adalar || EMPTY_GEOJSON;
-  const yapilar = data.yapilar || EMPTY_GEOJSON;
-  const yollar = data.yollar || EMPTY_GEOJSON;
-  const agaclar = data.agaclar || EMPTY_GEOJSON;
-  const parseller = data.parseller || EMPTY_GEOJSON;
+  const blocksGeo = data.blocksGeo || EMPTY_GEOJSON;
+  const buildingsGeo = data.buildingsGeo || EMPTY_GEOJSON;
+  const roadsGeo = data.roadsGeo || EMPTY_GEOJSON;
+  const treesGeo = data.treesGeo || EMPTY_GEOJSON;
+  const parcelsGeo = data.parcelsGeo || EMPTY_GEOJSON;
   const furniture = data.furniture || {};
 
-  const bldCount = yapilar.features.length;
-  const blockCount = adalar.features.length;
-  const parcelCount = parseller?.features?.length || 0;
+  const bldCount = buildingsGeo.features.length;
+  const blockCount = blocksGeo.features.length;
+  const parcelCount = parcelsGeo?.features?.length || 0;
   let totalFloors = 0;
   let totalPopulation = 0;
   let totalDwellings = 0;
   let totalVehicles = 0;
   const funcMap = {};
-  yapilar.features.forEach((f) => {
+  buildingsGeo.features.forEach((f) => {
     const fn = buildingFunctionValue(f.properties || {});
     funcMap[fn] = (funcMap[fn] || 0) + 1;
     totalFloors += buildingLevels(f.properties);
@@ -8950,11 +8330,11 @@ function updateDashboard(data) {
   if (health) {
     const manifestEmpty = new Set(projectManifest?.summary?.emptyOptionalInputs || []);
     const optional = [
-      ['blocks', 'Greens', adalar.features.length],
-      ['roads', 'Roads', yollar.features.length],
+      ['blocks', 'Greens', blocksGeo.features.length],
+      ['roads', 'Roads', roadsGeo.features.length],
       ['bike_lanes', 'Bike lanes', layerDataCache.bikeLanes?.features?.length || 0],
       ['waterlines', 'Waterways', layerDataCache.waterlines?.features?.length || 0],
-      ['trees', 'Trees', agaclar.features.length],
+      ['trees', 'Trees', treesGeo.features.length],
       ['lights', 'Lights', furniture.lights?.features?.length || 0],
       ['benches', 'Benches', furniture.benches?.features?.length || 0],
       ['bins', 'Bins', furniture.bins?.features?.length || 0],
@@ -9024,8 +8404,8 @@ window.addEventListener('mousemove', (e) => {
     const p = hits[0].object.userData || {};
     const icon = getFunctionIcon(buildingFunctionValue(p) || '');
     const floorVal = buildingLevelsRaw(p);
-    const floors = floorVal != null ? `${floorVal} ${t('biKat').toLowerCase()}` : '-';
-    hoverTip.innerHTML = `<div class="tooltip-title">${icon} ${escapeHtml((buildingFunctionValue(p) || '-').slice(0, 26))}</div><div class="tooltip-row"><span>${t('biKat')}</span><span>${escapeHtml(floors)}</span></div>`;
+    const floors = floorVal != null ? `${floorVal} ${t('biFloors').toLowerCase()}` : '-';
+    hoverTip.innerHTML = `<div class="tooltip-title">${icon} ${escapeHtml((buildingFunctionValue(p) || '-').slice(0, 26))}</div><div class="tooltip-row"><span>${t('biFloors')}</span><span>${escapeHtml(floors)}</span></div>`;
     hoverTip.style.display = 'block';
     const tx = Math.min(e.clientX + 16, innerWidth - 200);
     const ty = Math.max(e.clientY - 60, 8);
@@ -9053,34 +8433,30 @@ window.addEventListener('click', (e) => {
   const p = hits[0].object.userData || {};
   const icon = getFunctionIcon(buildingFunctionValue(p) || '');
   const areaStr = p.aream2 ? `${parseFloat(p.aream2).toFixed(0)} m²` : '-';
-  const calcFootprintArea = parseNumberProp(p, ['planx_calc_footprint_area', 'taban_alani', 'footprint_area'], null);
-  const calcFloorArea = parseNumberProp(p, ['planx_calc_floor_area', 'toplam_insaat', 'insaat_alani'], null);
-  const calcPopulation = parseNumberProp(p, ['planx_calc_population', 'nufus', 'nüfus', 'population'], null);
-  const calcDwellings = parseNumberProp(p, ['planx_calc_dwellings', 'daire', 'daire_sayisi', 'dwellings'], null);
-  const calcVehicles = parseNumberProp(p, ['planx_calc_vehicles', 'arac', 'araç', 'vehicle', 'cars'], null);
+  const calcFootprintArea = parseNumberProp(p, ['planx_calc_footprint_area', 'footprint_area'], null);
+  const calcFloorArea = parseNumberProp(p, ['planx_calc_floor_area'], null);
+  const calcPopulation = parseNumberProp(p, ['planx_calc_population', 'population'], null);
+  const calcDwellings = parseNumberProp(p, ['planx_calc_dwellings', 'dwellings'], null);
+  const calcVehicles = parseNumberProp(p, ['planx_calc_vehicles', 'vehicle', 'cars'], null);
   const styleRows = [
-    ['Renk', p.planx_color || p.renk],
-    ['Cephe', p.planx_facade],
-    ['Cati', p.planx_roof_shape],
-    ['Cati doku', p.planx_roof_texture],
+    ['Colour', p.planx_color],
+    ['Facade', p.planx_facade],
+    ['Roof', p.planx_roof_shape],
+    ['Roof texture', p.planx_roof_texture],
   ].filter(([, value]) => value);
   const safeFunction = escapeHtml((buildingFunctionValue(p) || '-').slice(0, 24));
   const safeLevels = escapeHtml(buildingLevelsRaw(p) ?? '-');
-  const safeNizam = escapeHtml(p.nizam || '-');
   if (detailTip) {
     detailTip.innerHTML = `
-      <div class="tooltip-title">${icon} ${t('binaInfo')} <span class="tip-close" onclick="this.closest('#bldg-detail-tip').style.display='none'">✕</span></div>
-      <div class="tooltip-row"><span>${t('biFonk')}</span><span>${safeFunction}</span></div>
-      <div class="tooltip-row"><span>${t('biKat')}</span><span>${safeLevels}</span></div>
-      <div class="tooltip-row"><span>${t('biNiz')}</span><span>${safeNizam}</span></div>
-      ${p.taks != null ? `<div class="tooltip-row"><span>TAKS</span><span>${escapeHtml(p.taks)}</span></div>` : ''}
-      ${p.kaks != null ? `<div class="tooltip-row"><span>KAKS</span><span>${escapeHtml(p.kaks)}</span></div>` : ''}
-      <div class="tooltip-row"><span>Taban alanı</span><span>${areaStr}</span></div>
-      ${calcFootprintArea ? `<div class="tooltip-row"><span>Hesaplanan taban</span><span>${calcFootprintArea.toFixed(0)} m²</span></div>` : ''}
-      ${calcFloorArea ? `<div class="tooltip-row"><span>Toplam inşaat</span><span>${calcFloorArea.toFixed(0)} m²</span></div>` : ''}
-      ${calcPopulation !== null ? `<div class="tooltip-row"><span>Tahmini nüfus</span><span>${calcPopulation.toFixed(0)}</span></div>` : ''}
-      ${calcDwellings !== null ? `<div class="tooltip-row"><span>Tahmini daire</span><span>${calcDwellings.toFixed(0)}</span></div>` : ''}
-      ${calcVehicles !== null ? `<div class="tooltip-row"><span>Tahmini araç</span><span>${calcVehicles.toFixed(0)}</span></div>` : ''}
+      <div class="tooltip-title">${icon} ${t('buildingInfo')} <span class="tip-close" onclick="this.closest('#bldg-detail-tip').style.display='none'">✕</span></div>
+      <div class="tooltip-row"><span>${t('biFunction')}</span><span>${safeFunction}</span></div>
+      <div class="tooltip-row"><span>${t('biFloors')}</span><span>${safeLevels}</span></div>
+      <div class="tooltip-row"><span>Footprint area</span><span>${areaStr}</span></div>
+      ${calcFootprintArea ? `<div class="tooltip-row"><span>Computed footprint</span><span>${calcFootprintArea.toFixed(0)} m²</span></div>` : ''}
+      ${calcFloorArea ? `<div class="tooltip-row"><span>Gross floor area</span><span>${calcFloorArea.toFixed(0)} m²</span></div>` : ''}
+      ${calcPopulation !== null ? `<div class="tooltip-row"><span>Estimated population</span><span>${calcPopulation.toFixed(0)}</span></div>` : ''}
+      ${calcDwellings !== null ? `<div class="tooltip-row"><span>Estimated dwellings</span><span>${calcDwellings.toFixed(0)}</span></div>` : ''}
+      ${calcVehicles !== null ? `<div class="tooltip-row"><span>Estimated vehicles</span><span>${calcVehicles.toFixed(0)}</span></div>` : ''}
       ${styleRows.map(([label, value]) => `<div class="tooltip-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join('')}
     `;
     detailTip.style.display = 'block';
@@ -9728,7 +9104,7 @@ function animate() {
 }
 
 function updateHtmlLang() {
-  document.documentElement.lang = currentLang === 'TR' ? 'tr' : 'en';
+  document.documentElement.lang = 'en';
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     const value = t(key);
@@ -9744,11 +9120,6 @@ function updateHtmlLang() {
     const value = t(key);
     if (value !== key) el.setAttribute('placeholder', value);
   });
-  const langBtn = document.getElementById('lang-toggle');
-  if (langBtn) {
-    langBtn.innerText = currentLang === 'TR' ? 'EN' : 'TR';
-    langBtn.setAttribute('aria-label', t('toggleLanguage'));
-  }
   const scenePill = document.getElementById('scene-state');
   if (scenePill?.dataset.sceneI18n) scenePill.textContent = t(scenePill.dataset.sceneI18n);
   renderFunctionStyleDock();
@@ -10172,6 +9543,7 @@ function populateDockSelects() {
     roofTexture: Object.keys(textureSets.roof),
     pavementStyle: Object.keys(textureSets.pavement),
     terrainAnalysisMode: ['Texture', 'Elevation tint', 'Slope tint'],
+    facadeMode: FACADE_MODE_OPTIONS,
     buildingMode: ['Auto Smart Massing', 'Footprint only', 'Extruded', 'Extruded + roof', 'Podium + tower', 'Stepped tower', 'Courtyard block', 'Cantilever / pilotis', 'Penthouse crown'],
     hardscapeStyle: Object.keys(textureSets.hardscape),
     roadStyle: Object.keys(textureSets.road),
@@ -10304,7 +9676,7 @@ function renderFunctionStyleDock() {
 
     const roofTexture = makeSelect(roofOptions, style.roofTexture, roofTextureLabel);
     roofTexture.addEventListener('change', () => {
-      style.roofTexture = presetValue(roofTexture.value, textureSets.roof, 'RoofA');
+      style.roofTexture = presetValue(roofTexture.value, textureSets.roof, 'ClayTile');
       saveFunctionBuildingStyles();
       rebuildScene();
     });
@@ -10565,24 +9937,9 @@ initDockUi();
     helpOrbit: 'Orbit / rotate', helpZoom: 'Zoom', helpPan: 'Pan',
     helpWalkRow: 'Enter walk mode', helpWalkMove: 'Move & look', helpExitRow: 'Exit walk / close',
     helpMeasureRow: 'Measure distance', helpShotRow: 'Export image, document or video',
-    helpSceneRow: 'Time / weather / sun', helpLangRow: 'Switch language',
+    helpSceneRow: 'Time / weather / sun',
     helpLookRow: 'Shuffle a curated look', helpTourRow: 'Play the cinematic tour',
     helpDrag: 'Left-drag', helpWheel: 'Mouse wheel', helpRdrag: 'Right-drag', helpMouse: 'mouse',
-  });
-  Object.assign(i18n.TR, {
-    exportTitle: 'Export studyosu',
-    measureTitle: 'Mesafe olc',
-    helpTitle: 'Yardim ve kisayollar',
-    measureHud: 'Olcmek icin zeminde iki nokta sec · Bitirmek icin Esc',
-    measureClear: 'Temizle',
-    osmContributors: 'katkida bulunanlar',
-    helpFoot: '3D OSM Model · PlanX 3D City motoru',
-    helpOrbit: 'Yorunge / dondur', helpZoom: 'Yakinlastir', helpPan: 'Kaydir',
-    helpWalkRow: 'Yurume moduna gir', helpWalkMove: 'Hareket et & bak', helpExitRow: 'Yurumeden cik / kapat',
-    helpMeasureRow: 'Mesafe olc', helpShotRow: 'Gorsel, belge veya video export',
-    helpSceneRow: 'Zaman / hava / gunes', helpLangRow: 'Dili degistir',
-    helpLookRow: 'Rastgele hazir gorunum', helpTourRow: 'Sinematik turu oynat',
-    helpDrag: 'Sol surukle', helpWheel: 'Fare tekeri', helpRdrag: 'Sag surukle', helpMouse: 'fare',
   });
   if (typeof updateHtmlLang === 'function') updateHtmlLang();
 

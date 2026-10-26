@@ -89,7 +89,7 @@
     <li><strong>OSM download:</strong> <code>QgsTask</code> background thread fetches from Overpass API with multi-mirror fallback.</li>
     <li><strong>Parse and build:</strong> Iterates every OSM element, clips to study boundary, builds 11 in-memory vector layers with computed attributes.</li>
     <li><strong>GeoJSON export:</strong> Writes each layer to GeoJSON via <code>QgsVectorFileWriter.writeAsVectorFormatV3()</code>.</li>
-    <li><strong>Atomic publish:</strong> Staging directory &rarr; <code>web/data/yerlesim/</code> with backup on failure. Every GeoJSON validated as valid FeatureCollection.</li>
+    <li><strong>Atomic publish:</strong> Staging directory &rarr; <code>web/data/layers/</code> with backup on failure. Every GeoJSON validated as valid FeatureCollection.</li>
     <li><strong>Optional DEM export:</strong> <code>gdal:warpreproject</code>, bounded to ~512 px max dimension, output as <code>web/data/dem/mydem.tif</code>.</li>
     <li><strong>Optional basemap export:</strong> <code>QgsMapRendererCustomPainterJob</code> at max 2048 px, transparent PNG, output as <code>web/data/basemap/basemap.png</code>.</li>
     <li><strong>Manifest:</strong> Writes <code>planx_manifest.json</code> with schema, field mappings, theme colours, and viewer defaults.</li>

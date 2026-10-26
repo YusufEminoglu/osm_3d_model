@@ -3,7 +3,8 @@
  * roof shapes by name, and every consumer in app.js silently ignores a name it
  * does not recognise — so a misspelt 'StandingSeem' would not throw, it would
  * just quietly do nothing and the look would render wrong. This test reads the
- * real tables out of app.js and asserts every referenced name exists.
+ * real tables out of app.js and the material catalogue and asserts every
+ * referenced name exists.
  *
  *     node tests/looks_check.mjs
  */
@@ -13,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { LOOKS, LOOK_IDS, getLook, pickLookId, TOUR_SHOTS, TOUR_DURATION, tourStateAt } from '../web/src/looks.js';
+import { ROOFS, surfacesFor } from '../web/src/material_catalogue.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appSrc = await readFile(join(here, '..', 'web', 'src', 'app.js'), 'utf8');
@@ -52,12 +54,13 @@ function topLevelKeys(body) {
 
 const colorThemes = topLevelKeys(objectBody(appSrc, 'const COLOR_THEMES'));
 const assetThemes = topLevelKeys(objectBody(appSrc, 'const assetThemePresets'));
-const textureSetsBody = objectBody(appSrc, 'const textureSets');
+// The texture sets come from the material catalogue (see textureSets in app.js).
+assert.ok(/road: surfacesFor\('road'\)/.test(objectBody(appSrc, 'const textureSets')), 'app.js textureSets no longer uses the material catalogue — update this test');
 const textures = {
-  road: topLevelKeys(objectBody(textureSetsBody, 'road:')),
-  pavement: topLevelKeys(objectBody(textureSetsBody, 'pavement:')),
-  island: topLevelKeys(objectBody(textureSetsBody, 'island:')),
-  roof: topLevelKeys(objectBody(textureSetsBody, 'roof:'))
+  road: Object.keys(surfacesFor('road')),
+  pavement: Object.keys(surfacesFor('walk')),
+  island: ['None', ...Object.keys(surfacesFor('ground'))],
+  roof: Object.keys(ROOFS)
 };
 const roofShapes = /const ROOF_SHAPE_OPTIONS = \[([^\]]+)\]/
   .exec(appSrc)[1]
@@ -70,7 +73,7 @@ const buildingModes = /buildingMode: \['([^\]]+)'\]/
 // Sanity: the extraction itself worked before we trust any assertion built on it.
 assert.ok(colorThemes.length >= 8, `parsed too few colour themes: ${colorThemes.length}`);
 assert.ok(assetThemes.length >= 4, `parsed too few asset themes: ${assetThemes.length}`);
-assert.ok(textures.roof.includes('StandingSeam'), 'roof texture table did not parse');
+assert.ok(textures.roof.includes('MetalSeam'), 'roof texture table did not load');
 assert.deepEqual(roofShapes, ['Flat', 'Pyramid', 'Hip', 'Gable', 'Shed']);
 
 assert.equal(LOOKS.length, 10, 'the shuffle promises ten curated looks');

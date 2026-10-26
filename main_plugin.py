@@ -462,7 +462,7 @@ class Osm3dModelPlugin:
     def _open_data_folder(self):
         if self._unloaded or self._running:
             return
-        folder = os.path.join(self.web_root, "data", "yerlesim")
+        folder = os.path.join(self.web_root, "data", "layers")
         if not os.path.isdir(folder):
             folder = os.path.join(self.web_root, "data")
         from qgis.PyQt.QtCore import QUrl
