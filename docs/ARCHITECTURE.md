@@ -21,7 +21,7 @@
 
 ## Layer Contract
 
-The viewer expects data in `web/data/yerlesim/` after export. The bundled sample uses the same contract.
+The viewer expects data in `web/data/layers/` after export. The bundled sample uses the same contract.
 
 | File | Meaning |
 | --- | --- |

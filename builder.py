@@ -650,8 +650,8 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
         "basemap": ({"image": "data/basemap/basemap.png", "bbox": basemap_bbox}
                     if basemap_bbox else None),
         "roadAccess": None,
-        # OSM-native column names (the export now carries raw OSM tags, no PlanX
-        # Turkish schema). The viewer maps these through to floors/function/width.
+        # OSM-native column names (the export carries raw OSM tags). The viewer
+        # maps these through to floors/function/width.
         "fieldMappings": {
             "building_floors_field": "building_levels",
             "building_function_field": "building",
@@ -760,9 +760,9 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
 
     # Write GeoJSON the viewer expects.
     web_path = Path(web_root)
-    vector_dir = web_path / "data" / "yerlesim"
+    vector_dir = web_path / "data" / "layers"
     vector_dir.parent.mkdir(parents=True, exist_ok=True)
-    staging_dir = Path(tempfile.mkdtemp(prefix=".yerlesim-", dir=str(vector_dir.parent)))
+    staging_dir = Path(tempfile.mkdtemp(prefix=".layers-", dir=str(vector_dir.parent)))
 
     roi_layer = _roi_layer_from_polygon(base_utm, epsg_dest)
     layer_files = {
