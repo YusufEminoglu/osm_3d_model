@@ -27,6 +27,15 @@ import {
   tourStateAt
 } from './looks.js';
 import { WALK, eyeHeight, gaitOffset, gaitStrength, stepWalkVelocity, topSpeed } from './walk.js';
+import {
+  DYNAMIC_FACADE_STYLES,
+  FACADE_MODE_OPTIONS,
+  autoDynamicStyle,
+  createDynamicFacadeMaterial,
+  dynamicStyleOfToken,
+  prismGeometry,
+  setDynamicFacadeNight
+} from './facade_dynamic.js';
 
 let currentLang = 'EN';
 const urlParams = new URLSearchParams(window.location.search);
@@ -1060,6 +1069,13 @@ const textureSets = {
     PlazaGranite: 'PlazaGranite'
   },
   facade: {
+    // Windows drawn in the shader on each wall's bay/floor grid (facade_dynamic.js).
+    DynamicApartment: 'Dynamic:Apartment',
+    DynamicMixedUse: 'Dynamic:MixedUse',
+    DynamicModern: 'Dynamic:Modern',
+    DynamicOffice: 'Dynamic:Office',
+    DynamicHeritage: 'Dynamic:Heritage',
+    DynamicBrick: 'Dynamic:Brick',
     ResidentialA: 'assets/facade_resid_a.webp',
     ResidentialB: 'assets/facade_resid_b.webp',
     ResidentialC: 'assets/facade_resid_c.webp',
@@ -2049,6 +2065,7 @@ const settings = {
   hardscapeStyle: 'Cobble',
   hardscapeHeight: 0.30,
   buildingMode: 'Auto Smart Massing',
+  facadeMode: 'Dynamic (auto)',
   terrainAnalysisMode: 'Texture',
   assetTheme: 'Modern Urban',
   colorTheme: DEFAULT_COLOR_THEME,
@@ -2182,7 +2199,7 @@ const PERSISTED_SETTING_KEYS = [
   'terrainOutsideColor', 'terrainSmoothingPasses', 'terrainSmoothingStrength', 'terrainMaxSlope',
   'showTerrainSides', 'terrainSideDrop', 'terrainSideColor',
   'fogDensity', 'autoTime', 'autoTimeSpeed', 'enableSSAO', 'enableBloom',
-  'pavementStyle', 'hardscapeStyle', 'hardscapeHeight', 'buildingMode', 'facadeTextureScale', 'terrainAnalysisMode', 'showXyzTiles', 'xyzTileUrl',
+  'pavementStyle', 'hardscapeStyle', 'hardscapeHeight', 'buildingMode', 'facadeMode', 'facadeTextureScale', 'terrainAnalysisMode', 'showXyzTiles', 'xyzTileUrl',
   'assetTheme', 'colorTheme', 'activeLook',
   'floorHeight', 'roofTexture', 'roofShape', 'roofHeight', 'roadStyle', 'roadColor', 'roadColorMode', 'roadWidth',
   'showLights', 'lightStyle', 'showBenches', 'benchStyle', 'showBins', 'binStyle', 'showBusStops', 'stopStyle',
@@ -3090,6 +3107,7 @@ function rebuildLightingOnly() {
     const mat = mesh.material[1];
     if (!mat) return;
     mat.emissive.setHex(isNight ? 0x333322 : 0x000000);
+    setDynamicFacadeNight(mat, isNight);
     // Deterministic per-building intensity from position hash (avoids random on every call)
     const hash = Math.abs(Math.sin(mesh.position.x * 12.9898 + mesh.position.z * 78.233)) % 1;
     mat.emissiveIntensity = isNight ? 0.2 + hash * 0.8 : 0;
@@ -7156,7 +7174,7 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
   for (const fn of functions) {
     const style = ensureFunctionBuildingStyle(fn, functions.indexOf(fn));
     const key = normalizeFacadeKey(style.facade);
-    if (isTurkishFacadeFamily(key)) continue;
+    if (isTurkishFacadeFamily(key) || dynamicStyleOfToken(textureSets.facade[key])) continue;
     if (!facadeCache[key]) {
       const scale = Math.max(1, Math.min(8, Number(style.facadeScale) || FACADE_TEXTURE_SCALE_MULTIPLIER));
       facadeCache[key] = await textureFromSet('facade', key, 0.55 / scale, 0.55 / scale);
@@ -7179,6 +7197,11 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
     const selectedFacade = normalizeFacadeKey(selectedFacadeRaw);
     const featureFacade = resolveFacadeForLevels(selectedFacade, levels);
     const featureFacadeScale = Math.max(1, Math.min(8, parseNumberProp(props, ['planx_facade_scale', 'facade_scale', 'cephe_olcegi'], fnStyle.facadeScale)));
+    // Dynamic facades: a Dynamic* facade picked for the feature or its
+    // function, or in Dynamic (auto) mode a style from function and height
+    // (an explicit facade attribute keeps its texture).
+    const explicitFacade = propFirst(props, ['planx_facade', 'planx_texture', 'facade', 'cephe', 'doku']);
+    let dynamicStyle = dynamicStyleOfToken(textureSets.facade[featureFacade]);
     const featureRoofTexture = presetValue(propFirst(props, ['planx_roof_texture', 'roof_texture', 'cati_doku', 'cati_texture']), textureSets.roof, fnStyle.roofTexture);
     const explicitRoof = propFirst(props, ['planx_roof_shape', 'roof_shape', 'cati_tipi']);
     const featureRoofShape = roofShapeValue(explicitRoof || fnStyle.roofShape, settings.roofShape);
@@ -7211,6 +7234,16 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
       const vehicles = parseNumberProp(props, ['arac', 'araç', 'vehicle', 'cars'], Math.round(dwellings * 0.7));
       const seedInt = Math.abs(Math.round(sx + sy)) % 97;
       const massingKind = resolveBuildingMassing(requestedMassing, levels, footprintArea, fn, seedInt);
+      const facadeSeed = Math.abs(Math.round(sx * 7.3 + sy * 13.1)) % 4096;
+      if (!dynamicStyle && settings.facadeMode !== 'Catalogue textures' && !explicitFacade) {
+        dynamicStyle = autoDynamicStyle(fn, levels, facadeSeed);
+      }
+      // Wall coordinates in window bays and floors (prismGeometry).
+      const facadeFrame = (yOffset) => ({
+        bay: (DYNAMIC_FACADE_STYLES[dynamicStyle]?.bay || 3.1) * Math.max(0.6, Math.min(1.6, featureFacadeScale / FACADE_TEXTURE_SCALE_MULTIPLIER)),
+        floor: height / Math.max(1, levels),
+        z0: yOffset - baseY
+      });
 
       if (massingKind === 'footprint') {
         const fpGeo = new THREE.ShapeGeometry(shape);
@@ -7251,11 +7284,12 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
         }
       }
 
-      if (!facadeCache[featureFacade]) {
+      if (!dynamicStyle && !facadeCache[featureFacade]) {
         facadeCache[featureFacade] = await textureFromSet('facade', featureFacade, 0.5 / featureFacadeScale, 0.5 / featureFacadeScale);
         if (isSceneBuildStale(buildToken)) return;
       }
       const getTierFacadeTex = (tierLevels, tierHeight) => {
+        if (dynamicStyle) return null;
         const texKey = `${featureFacade}_${tierLevels}_${tierHeight.toFixed(2)}_${featureFacadeScale.toFixed(2)}`;
         if (!facadeScaleCache[texKey]) {
           const base = facadeCache[featureFacade];
@@ -7280,15 +7314,32 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
       const matRoof = new THREE.MeshStandardMaterial({ map: featureRoofTex, color: new THREE.Color(featureRoofColor), roughness: 0.85, side: THREE.DoubleSide });
       const matHiddenCap = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
       const wallColor = jitterBuildingColor(featureColor, `${Math.round(sx)}_${Math.round(sy)}`);
-      const makeWallMat = (tex, colHex = wallColor) => new THREE.MeshStandardMaterial({
+      const makeWallMat = (tex, colHex = wallColor) => (dynamicStyle ? createDynamicFacadeMaterial(dynamicStyle, {
+        color: new THREE.Color(colHex),
+        seed: facadeSeed,
+        night: isNight,
+        anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1)
+      }) : new THREE.MeshStandardMaterial({
         map: tex,
         color: new THREE.Color(colHex),
         roughness: 0.72,
         side: THREE.DoubleSide,
         emissive: isNight ? new THREE.Color(0x333322) : new THREE.Color(0x000000),
         emissiveIntensity: isNight ? (Math.random() * 0.8 + 0.2) : 0
-      });
+      }));
       const matWall = makeWallMat(facadeTex, wallColor);
+      // Building volume from yOffset up by depth: caps (group 0) and walls
+      // (group 1); dynamic facades need the bay/floor wall coordinates.
+      const volumeGeometry = (volShape, yOffset, depth) => {
+        const prism = dynamicStyle ? prismGeometry(volShape, depth, facadeFrame(yOffset)) : null;
+        if (prism) return prism;
+        const extrude = new THREE.ExtrudeGeometry(volShape, { depth, bevelEnabled: false });
+        extrude.rotateX(Math.PI / 2);
+        extrude.computeBoundingBox();
+        const minY = extrude.boundingBox ? extrude.boundingBox.min.y : 0;
+        if (minY !== 0) extrude.translate(0, -minY, 0);
+        return extrude;
+      };
 
       const useSeparateRoofMesh = massingKind !== 'extrude';
       const buildingData = {
@@ -7302,11 +7353,7 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
 
       const addTierExtrusion = (tierShape, yOffset, tierHeight, tierLevels, capWithRoofMat) => {
         if (!tierShape || tierHeight <= 0.05) return;
-        const extrude = new THREE.ExtrudeGeometry(tierShape, { depth: tierHeight, bevelEnabled: false });
-        extrude.rotateX(Math.PI / 2);
-        extrude.computeBoundingBox();
-        const minY = extrude.boundingBox ? extrude.boundingBox.min.y : 0;
-        if (minY !== 0) extrude.translate(0, -minY, 0);
+        const extrude = volumeGeometry(tierShape, yOffset, tierHeight);
         const tierWallMat = makeWallMat(getTierFacadeTex(Math.max(1, tierLevels), tierHeight), wallColor);
         const mesh = new THREE.Mesh(extrude, capWithRoofMat ? [matRoof, tierWallMat] : [matHiddenCap, tierWallMat]);
         mesh.position.y = yOffset;
@@ -7383,11 +7430,7 @@ async function buildBuildingLayer(yapilar, buildToken = sceneBuildToken) {
         roofTowerHeight = height - podiumHeight;
       } else {
         // Normal Extrusion (Single volume or Courtyard block)
-        const extrude = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
-        extrude.rotateX(Math.PI / 2);
-        extrude.computeBoundingBox();
-        const minY = extrude.boundingBox ? extrude.boundingBox.min.y : 0;
-        if (minY !== 0) extrude.translate(0, -minY, 0);
+        const extrude = volumeGeometry(shape, baseY, height);
 
         const b = new THREE.Mesh(extrude, useSeparateRoofMesh ? [matHiddenCap, matWall] : [matRoof, matWall]);
         b.position.y = baseY;
@@ -10172,6 +10215,7 @@ function populateDockSelects() {
     roofTexture: Object.keys(textureSets.roof),
     pavementStyle: Object.keys(textureSets.pavement),
     terrainAnalysisMode: ['Texture', 'Elevation tint', 'Slope tint'],
+    facadeMode: FACADE_MODE_OPTIONS,
     buildingMode: ['Auto Smart Massing', 'Footprint only', 'Extruded', 'Extruded + roof', 'Podium + tower', 'Stepped tower', 'Courtyard block', 'Cantilever / pilotis', 'Penthouse crown'],
     hardscapeStyle: Object.keys(textureSets.hardscape),
     roadStyle: Object.keys(textureSets.road),

@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Dynamic facades (new default, Style > Facades: `Dynamic (auto)` or `Catalogue textures`), shared with PlanX 3D City: building walls get facade coordinates in window bays and floors, with a whole number of bays per wall restarting at every corner, so windows are never cut by a corner and rows sit on the real floors. Six styles (Apartment, Mixed-use, Modern, Office, Heritage, Brick) draw windows, frames, sills, reveals, shutters, balconies, shopfronts with signs, entrances and lobby glazing in the shader over a plaster, render, brick, stone or concrete material; each building varies its proportions, balconies, doors and blinds, and at night a share of its windows is lit. The style comes from the OSM building category and height; a facade attribute or a Dynamic facade in the Style dock still wins. New test `tests/facade_check.mjs`, run in CI.
+
 ## [1.8.1] - 2026-10-20
 
 - Scoped all 19 QGIS and Qt enum references (`QgsWkbTypes.GeometryType`, `QgsMapLayerProxyModel.Filter`, `QgsUnitTypes.RenderUnit`, `QgsTask.Flag`, `Qgis.MessageLevel`, `QgsBlockingNetworkRequest.ErrorCode`, `QgsVectorFileWriter.WriterError`) so the QGIS Hub static Qt6 checker reports zero warnings while preserving identical QGIS 3 and QGIS 4 runtime performance and behavior.
