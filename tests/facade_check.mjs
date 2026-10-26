@@ -1,13 +1,15 @@
 /* Pins the dynamic facade grid (web/src/facade_dynamic.js): every wall gets a
  * whole number of window bays that restarts at its corners, rows sit on the
  * floors, walls face out of the footprint (courtyards into the courtyard),
- * and the automatic style follows the OSM building category.
+ * and the automatic facade follows the OSM building category with names from
+ * the shared material catalogue.
  *
  *     node tests/facade_check.mjs
  */
 import assert from 'node:assert/strict';
 import * as THREE from '../web/assets/vendor/three/build/three.module.js';
-import { prismGeometry, autoDynamicStyle, DYNAMIC_FACADE_STYLES } from '../web/src/facade_dynamic.js';
+import { prismGeometry, autoFacadeName, dynamicStyleOfToken } from '../web/src/facade_dynamic.js';
+import { APARTMENT_TEXTURES, FACADES, FACADE_TEXTURE_GRID, catalogueName } from '../web/src/material_catalogue.js';
 
 const rect = (w, d) => new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(w, 0), new THREE.Vector2(w, d), new THREE.Vector2(0, d)]);
 const walls = (geo) => {
@@ -45,10 +47,28 @@ for (const p of cw.filter((q) => q.x > 9 && q.x < 21 && q.z > 9 && q.z < 21)) {
 }
 assert.deepEqual(values(cw, 'v'), [2, 4]);
 
-// Automatic styles from OSM categories.
-assert.equal(autoDynamicStyle('Office', 6, 1), 'Office');
-assert.ok(['MixedUse', 'Modern'].includes(autoDynamicStyle('Commercial', 3, 2)));
-assert.ok(['Heritage', 'Brick'].includes(autoDynamicStyle('Worship', 2, 3)));
-for (let seed = 0; seed < 50; seed++) assert.ok(DYNAMIC_FACADE_STYLES[autoDynamicStyle('Residential', 5, seed)]);
+// Automatic facades from OSM categories: dynamic styles by type, the photo
+// apartment facades (or villas when low) for homes.
+assert.equal(autoFacadeName('Office', 6, 1), 'Office');
+assert.ok(['MixedUse', 'Modern'].includes(autoFacadeName('Commercial', 3, 2)));
+assert.ok(['Civic', 'Heritage'].includes(autoFacadeName('Worship', 2, 3)));
+assert.equal(autoFacadeName('Industrial', 2, 4), 'Industrial');
+const homes = new Set();
+for (let seed = 0; seed < 60; seed++) {
+  const name = autoFacadeName('Residential', 5, seed);
+  assert.ok(FACADES[name], name);
+  homes.add(name);
+}
+assert.ok(APARTMENT_TEXTURES.every((name) => homes.has(name)), 'every apartment photo facade is reached');
+for (const [name, look] of Object.entries(FACADES)) {
+  assert.ok(dynamicStyleOfToken(look) || FACADE_TEXTURE_GRID[name], `${name}: neither dynamic nor a photo facade with a window grid`);
+}
+
+// Legacy names still load as the entry chosen for them.
+assert.equal(catalogueName('facade', 'ResidentialC'), 'ApartmentTextureC');
+assert.equal(catalogueName('facade', 'curtainwall'), 'Office');
+assert.equal(catalogueName('roof', 'TurkishTile'), 'ClayTile');
+assert.equal(catalogueName('surface', 'PlazaGranite'), 'GraniteSlab');
+assert.equal(catalogueName('facade', 'NoSuchFacade'), null);
 
 console.log('facade_check: ok');

@@ -15,14 +15,15 @@
 // three is imported by path so node tests can load this module; the URL is
 // the one the page's import map gives 'three', so there is one instance.
 import * as THREE from '../assets/vendor/three/build/three.module.js';
+import { APARTMENT_TEXTURES } from './material_catalogue.js';
 
 /**
  * @typedef {{ material: 'plaster' | 'render' | 'brick' | 'stone' | 'concrete', winW: number, winH: number,
- *   sill: number, balcony: number, ground: 'residential' | 'shops' | 'lobby', tint: number, shutters?: boolean,
- *   ribbon?: boolean, frame: string, glass: string, accent: string, bay: number }} DynamicFacadeStyle
+ *   sill: number, balcony: number, ground: 'residential' | 'shops' | 'lobby' | 'loading' | 'civic', tint: number,
+ *   shutters?: boolean, ribbon?: boolean, arch?: boolean, frame: string, glass: string, accent: string, bay: number }} DynamicFacadeStyle
  * winW / winH / sill: window width, height and sill height as shares of a bay and a floor;
  * balcony: share of upper-floor bays with a balcony; tint: how much the building colour tints
- * the wall material; bay: preferred bay width (m).
+ * the wall material; arch: round-headed windows; bay: preferred bay width (m).
  */
 
 /** @type {Record<string, DynamicFacadeStyle>} */
@@ -32,41 +33,42 @@ export const DYNAMIC_FACADE_STYLES = {
   Modern: { material: 'render', winW: 0.66, winH: 0.58, sill: 0.24, balcony: 0.55, ground: 'shops', tint: 1, frame: '#2b2e33', glass: '#22303a', accent: '#c9ced3', bay: 3.4 },
   Office: { material: 'concrete', winW: 0.88, winH: 0.6, sill: 0.24, balcony: 0, ground: 'lobby', tint: 0.5, ribbon: true, frame: '#9aa3ad', glass: '#2c4152', accent: '#5b6570', bay: 3.0 },
   Heritage: { material: 'stone', winW: 0.34, winH: 0.6, sill: 0.22, balcony: 0.12, ground: 'shops', tint: 0.45, shutters: true, frame: '#ece7dc', glass: '#28333b', accent: '#3d5c49', bay: 3.0 },
-  Brick: { material: 'brick', winW: 0.38, winH: 0.54, sill: 0.28, balcony: 0.15, ground: 'residential', tint: 0.25, frame: '#ece8df', glass: '#27323a', accent: '#efe9dd', bay: 3.0 }
+  Brick: { material: 'brick', winW: 0.38, winH: 0.54, sill: 0.28, balcony: 0.15, ground: 'residential', tint: 0.25, frame: '#ece8df', glass: '#27323a', accent: '#efe9dd', bay: 3.0 },
+  Villa: { material: 'render', winW: 0.52, winH: 0.56, sill: 0.24, balcony: 0.3, ground: 'residential', tint: 1, frame: '#f4f2ee', glass: '#25313b', accent: '#8a6a4a', bay: 3.4 },
+  Industrial: { material: 'concrete', winW: 0.86, winH: 0.26, sill: 0.6, balcony: 0, ground: 'loading', tint: 0.6, frame: '#5d6670', glass: '#2b3b47', accent: '#7b8794', bay: 4.5 },
+  Civic: { material: 'stone', winW: 0.36, winH: 0.64, sill: 0.2, balcony: 0, ground: 'civic', tint: 0.45, arch: true, frame: '#e9e3d6', glass: '#26313a', accent: '#6e5f4c', bay: 3.6 }
 };
 
-export const FACADE_MODE_OPTIONS = ['Dynamic (auto)', 'Catalogue textures'];
+// Auto by function: each building gets a facade from its function and
+// height; Function styles: the facade set per function in the Style dock.
+export const FACADE_MODE_OPTIONS = ['Auto by function', 'Function styles'];
 
-/** Catalogue key of a dynamic style ('Apartment' -> 'DynamicApartment'). */
-export function dynamicFacadeKey(style) {
-  return `Dynamic${style}`;
-}
-
-/** The style behind a catalogue token 'Dynamic:<style>', or null. */
+/** The style behind a catalogue look 'Dynamic:<style>', or null. */
 export function dynamicStyleOfToken(token) {
   const m = /^Dynamic:(\w+)$/.exec(String(token || ''));
   return m && DYNAMIC_FACADE_STYLES[m[1]] ? m[1] : null;
 }
 
 /**
- * Pick a dynamic style for a building from its function and height, varied
- * per building (seed).
+ * Catalogue facade for a building from its function and height, varied per
+ * building (seed): homes wear the apartment photo facades (villas when low),
+ * other buildings the dynamic style of their type.
  * @param {string} fn building function
  * @param {number} levels
  * @param {number} seed
  */
-export function autoDynamicStyle(fn, levels, seed) {
+export function autoFacadeName(fn, levels, seed) {
   const f = String(fn || '').toLowerCase();
   const r = Math.abs(Math.sin(seed * 91.345 + 7.13) * 43758.5453) % 1;
-  if (/office|ofis|admin|idari|bank|corporate|hotel|otel/.test(f)) return levels >= 4 ? 'Office' : 'MixedUse';
-  if (/commerc|retail|ticaret|mixed|karma|shop|avm|market/.test(f)) return levels >= 9 ? 'Office' : (r < 0.7 ? 'MixedUse' : 'Modern');
-  if (/civic|public|kamu|cultur|kultur|relig|worship|museum|school|educat|egitim|health|saglik|hospital/.test(f)) return r < 0.6 ? 'Heritage' : 'Brick';
-  if (/indust|sanayi|warehouse|depo|factory|utility/.test(f)) return r < 0.5 ? 'Brick' : 'Office';
-  if (levels >= 10) return r < 0.6 ? 'Modern' : 'Apartment';
-  if (r < 0.5) return 'Apartment';
-  if (r < 0.75) return 'Modern';
-  if (r < 0.9) return 'Brick';
-  return 'Heritage';
+  const photo = APARTMENT_TEXTURES[Math.abs(Math.floor(seed)) % APARTMENT_TEXTURES.length];
+  if (/office|admin|bank|corporate|hotel/.test(f)) return levels >= 4 ? 'Office' : 'MixedUse';
+  if (/commerc|retail|mixed|shop|market|kiosk|supermarket/.test(f)) return levels >= 9 ? 'Office' : (r < 0.65 ? 'MixedUse' : 'Modern');
+  if (/civic|public|government|townhall|cultur|museum|relig|worship|mosque|church|school|educat|universit|college|kindergarten|health|hospital|clinic/.test(f)) return r < 0.7 ? 'Civic' : 'Heritage';
+  if (/indust|warehouse|factory|manufact|hangar|utility|garage|depot/.test(f)) return 'Industrial';
+  if (levels <= 2) return r < 0.7 ? 'Villa' : photo;
+  if (levels >= 12) return r < 0.5 ? 'Modern' : photo;
+  if (r < 0.8) return photo;
+  return r < 0.9 ? 'Modern' : 'Brick';
 }
 
 // Walls turn a corner where the outline bends by more than this (radians);
@@ -375,7 +377,7 @@ const linear = (hex) => {
   const c = new THREE.Color(hex);
   return new THREE.Vector3(c.r, c.g, c.b);
 };
-const GROUND_KIND = { residential: 0, shops: 1, lobby: 2 };
+const GROUND_KIND = { residential: 0, shops: 1, lobby: 2, loading: 3, civic: 4 };
 
 // Declarations (fragment, after <common>).
 export const DYNAMIC_FACADE_PARS = `
@@ -385,6 +387,7 @@ uniform vec2 uDynMat;
 uniform vec3 uDynFrame;
 uniform vec3 uDynGlass;
 uniform vec3 uDynAccent;
+uniform vec4 uDynC;
 uniform float uDynSeed;
 uniform float uDynNight;
 float planxDynWall = 1.0;
@@ -392,6 +395,14 @@ float planxDynGlass = 0.0;
 vec3 planxDynLit = vec3(0.0);
 float planxDynBox(vec2 p, vec2 c, vec2 halfSize) { vec2 d = abs(p - c) - halfSize; return max(d.x, d.y); }
 float planxDynFill(float sd, float aa) { return smoothstep(aa, -aa, sd); }
+// Window outline: a box, or round-headed (arch > 0.5).
+float planxDynWin(vec2 p, vec2 c, vec2 h, float arch) {
+  if (arch < 0.5) return planxDynBox(p, c, h);
+  float r = h.x;
+  float springY = c.y + h.y - r;
+  float body = planxDynBox(p, vec2(c.x, (c.y - h.y + springY) * 0.5), vec2(h.x, max(0.001, (springY - (c.y - h.y)) * 0.5)));
+  return min(body, length(p - vec2(c.x, springY)) - r);
+}
 // Hash without sin(): stable for the moderate inputs used here.
 float planxDynHash(vec2 p) {
   vec3 q = fract(vec3(p.xyx) * 0.1031);
@@ -435,9 +446,19 @@ float door = 0.0;
 float shop = 0.0;
 // Balconies on upper floors: whole bay columns (a stack per building).
 float balcony = (!fGround && planxDynHash(vec2(fCell.x * 2.1 + 0.3, bSeed)) < uDynA.w) ? 1.0 : 0.0;
+float groundKind = floor(uDynB.x + 0.5);
+float arch = uDynC.x;
 if (fGround) {
-  if (uDynB.x > 1.5) { ww = 0.9; wh = 0.76; sill = 0.03; shop = 1.0; }
-  else if (uDynB.x > 0.5) {
+  if (groundKind > 3.5) {
+    // Civic: tall round-headed entrances in some bays, tall windows.
+    door = step(0.66, planxDynHash(vec2(fCell.x * 1.9 + 2.0, bSeed)));
+    ww = mix(0.4, 0.46, door); wh = mix(0.6, 0.84, door); sill = mix(0.16, 0.0, door);
+  } else if (groundKind > 2.5) {
+    // Loading: roll-up doors and high strip windows.
+    door = step(0.45, planxDynHash(vec2(fCell.x * 2.3 + 1.0, bSeed)));
+    ww = mix(0.86, 0.8, door); wh = mix(0.26, 0.8, door); sill = mix(0.6, 0.0, door);
+  } else if (groundKind > 1.5) { ww = 0.9; wh = 0.76; sill = 0.03; shop = 1.0; }
+  else if (groundKind > 0.5) {
     door = step(0.82, planxDynHash(vec2(fCell.x * 1.7 + 5.0, bSeed)));
     ww = mix(0.84, 0.36, door); wh = mix(0.64, 0.72, door); sill = mix(0.07, 0.0, door); shop = 1.0;
   } else {
@@ -450,9 +471,9 @@ if (fGround) {
 }
 vec2 wC = vec2(0.5, sill + wh * 0.5);
 vec2 wHalf = vec2(ww, wh) * 0.5;
-float opening = planxDynFill(planxDynBox(fLoc, wC, wHalf), fAA);
+float opening = planxDynFill(planxDynWin(fLoc, wC, wHalf, arch), fAA);
 float frameW = mix(0.035, 0.02, ribbon);
-float glassIn = planxDynFill(planxDynBox(fLoc, wC, wHalf - frameW), fAA);
+float glassIn = planxDynFill(planxDynWin(fLoc, wC, wHalf, arch) + frameW, fAA);
 // Mullion and transom on wide windows; shopfronts get slim bars.
 float bars = 0.0;
 if (ww > 0.5 || shop > 0.5) bars = planxDynFill(abs(fLoc.x - 0.5) - 0.01, fAA);
@@ -474,7 +495,7 @@ if (ribbon > 0.5 && !fGround) {
   wallMask *= 1.0 - spandrel * 0.85;
 }
 // Reveal: shadow along the head and one jamb of the opening.
-float reveal = planxDynFill(planxDynBox(fLoc, wC + vec2(0.012, 0.016), wHalf + 0.012), fAA) * (1.0 - opening);
+float reveal = planxDynFill(planxDynWin(fLoc, wC + vec2(0.012, 0.016), wHalf + 0.012, arch), fAA) * (1.0 - opening);
 col *= 1.0 - 0.35 * reveal;
 // Sill or lintel band.
 if (shop < 0.5 && door < 0.5) {
@@ -492,9 +513,14 @@ if (uDynB.z > 0.5 && !fGround && ww < 0.5) {
 }
 col = mix(col, uDynFrame, frame);
 col = mix(col, glassCol, glass);
+// Roll-up doors of loading bays: ribbed metal, not glass.
+if (fGround && door > 0.5 && groundKind > 2.5 && groundKind < 3.5) {
+  col = mix(col, uDynAccent * (0.72 + 0.28 * planxDynBars(fLoc.y, 26.0, 0.3)), glassIn);
+  glass = 0.0;
+}
 wallMask *= 1.0 - opening;
 // Shop sign band above the shopfronts.
-if (shop > 0.5 && uDynB.x < 1.5) {
+if (shop > 0.5 && groundKind < 1.5) {
   float sign = planxDynFill(planxDynBox(fLoc, vec2(0.5, 0.86), vec2(0.46, 0.06)), fAA);
   vec3 signCol = mix(uDynAccent, vec3(0.12, 0.2, 0.32), step(0.5, planxDynHash(vec2(fCell.x + 13.0, bSeed * 3.0))));
   col = mix(col, signCol, sign * (1.0 - door));
@@ -553,6 +579,7 @@ export function createDynamicFacadeMaterial(styleName, { color, seed, night = fa
   const uniforms = {
     uDynA: { value: new THREE.Vector4(style.winW, style.winH, style.sill, style.balcony) },
     uDynB: { value: new THREE.Vector4(GROUND_KIND[style.ground] ?? 0, style.tint, style.shutters ? 1 : 0, style.ribbon ? 1 : 0) },
+    uDynC: { value: new THREE.Vector4(style.arch ? 1 : 0, 0, 0, 0) },
     // Material texture repeats per bay and per floor (bays ~3.1 m, floors ~3 m).
     uDynMat: { value: new THREE.Vector2(3.1 / tile, 3.0 / tile) },
     uDynFrame: { value: linear(style.frame) },

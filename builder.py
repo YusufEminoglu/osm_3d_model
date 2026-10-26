@@ -62,58 +62,58 @@ _THEMES = {
     "Editorial Paper": {
         "islandColor": "#e6dfd3", "terrainOutsideColor": "#fdfbf7", "terrainSideColor": "#b9aa96",
         "roadColor": "#7c5c43", "parkColor": "#c2c5aa", "sportColor": "#aeb89a",
-        "waterColor": "#9ab8c2", "roofTexture": "RoofA", "assetTheme": "Civic Heritage",
+        "waterColor": "#9ab8c2", "roofTexture": "ClayTile", "assetTheme": "Civic Heritage",
     },
     "Plugin Tones": {
         "islandColor": "#dcc7bd", "terrainOutsideColor": "#e7d7d0", "terrainSideColor": "#b8978a",
         "roadColor": "#9a8c84", "parkColor": "#9fae8a", "sportColor": "#8fa07c",
-        "roofTexture": "USShingle", "assetTheme": "Modern Urban",
+        "roofTexture": "Shingle", "assetTheme": "Modern Urban",
     },
     "Tinted Gray Teal": {
         "islandColor": "#dde6e3", "terrainOutsideColor": "#e6efec", "terrainSideColor": "#7fb0a8",
         "roadColor": "#36433f", "parkColor": "#6fa589", "sportColor": "#5f9579",
-        "roofTexture": "StandingSeam", "assetTheme": "Modern Urban",
+        "roofTexture": "MetalSeam", "assetTheme": "Modern Urban",
     },
     "Teal & Salmon": {
         "islandColor": "#e7d7d0", "terrainOutsideColor": "#dfeae7", "terrainSideColor": "#4f8c84",
         "roadColor": "#2f4a46", "parkColor": "#5e9e7e", "sportColor": "#4f8e70",
-        "roofTexture": "StandingSeam", "assetTheme": "Modern Urban",
+        "roofTexture": "MetalSeam", "assetTheme": "Modern Urban",
     },
     "Light Purple & Black": {
         "islandColor": "#e7e2f0", "terrainOutsideColor": "#efecf6", "terrainSideColor": "#9b8fb0",
         "roadColor": "#2a2a30", "parkColor": "#8a9e6e", "sportColor": "#7a8e60",
-        "roofTexture": "USShingle", "assetTheme": "Modern Urban",
+        "roofTexture": "Shingle", "assetTheme": "Modern Urban",
     },
     "Warm Sand & Slate": {
         "islandColor": "#e8ddc7", "terrainOutsideColor": "#efe7d4", "terrainSideColor": "#c2a878",
         "roadColor": "#46413a", "parkColor": "#8aa05e", "sportColor": "#7a9050",
-        "roofTexture": "GermanTile", "assetTheme": "Modern Urban",
+        "roofTexture": "Slate", "assetTheme": "Modern Urban",
     },
     # Stylised "look" themes (v0.18.0) — scene colours mirror app.js COLOR_THEMES.
     "Anime": {
         "islandColor": "#e9f1e4", "terrainOutsideColor": "#eef5ec", "terrainSideColor": "#b9d0c0",
         "roadColor": "#7d8a96", "parkColor": "#7fc785", "sportColor": "#6fb8a0",
-        "roofTexture": "CeramicLight", "assetTheme": "Coastal Light",
+        "roofTexture": "ClayTile", "assetTheme": "Coastal Light",
     },
     "Cartoon": {
         "islandColor": "#fbe7c6", "terrainOutsideColor": "#fdf1da", "terrainSideColor": "#d9b98a",
         "roadColor": "#4a4540", "parkColor": "#5fbf57", "sportColor": "#4fae87",
-        "roofTexture": "TurkishTile", "assetTheme": "Modern Urban",
+        "roofTexture": "ClayTile", "assetTheme": "Modern Urban",
     },
     "Pixar": {
         "islandColor": "#ecdcc2", "terrainOutsideColor": "#f4ead6", "terrainSideColor": "#c9a981",
         "roadColor": "#6f655c", "parkColor": "#7bb069", "sportColor": "#6aa085",
-        "roofTexture": "RoofA", "assetTheme": "Mediterranean",
+        "roofTexture": "ClayTile", "assetTheme": "Mediterranean",
     },
     "Futuristic City": {
         "islandColor": "#2b3038", "terrainOutsideColor": "#2a3340", "terrainSideColor": "#1f2730",
         "roadColor": "#1a1d24", "parkColor": "#2f9e7e", "sportColor": "#2f8eae",
-        "roofTexture": "SolarRoof", "assetTheme": "Dense Urban",
+        "roofTexture": "Solar", "assetTheme": "Dense Urban",
     },
     "Classic Era": {
         "islandColor": "#d8c8a8", "terrainOutsideColor": "#e4d6b8", "terrainSideColor": "#b89c72",
         "roadColor": "#6b6052", "parkColor": "#8a9560", "sportColor": "#7a8550",
-        "roofTexture": "TurkishTile", "assetTheme": "Civic Heritage",
+        "roofTexture": "ClayTile", "assetTheme": "Civic Heritage",
     },
 }
 
