@@ -309,7 +309,7 @@ This plugin is one of 15 open-source QGIS plugins for urban planning by the same
 
 ## Data, Credits, and License
 
-3D OSM Model is developed by Yusuf Eminoglu at Dokuz Eylul University, Department of City and Regional Planning.
+3D OSM Model is developed by Geophilo.
 
 Map data is provided by OpenStreetMap contributors under the ODbL. Keep the OSM attribution visible when sharing exports, screenshots, or demos.
 

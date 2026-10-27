@@ -224,7 +224,7 @@ class Osm3dModelDialog(QDialog):
 
         body.addStretch(1)
 
-        footer = QLabel("PlanX 3D City engine · Dokuz Eylül University — City & Regional Planning")
+        footer = QLabel("PlanX 3D City engine")
         footer.setWordWrap(True)
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer.setStyleSheet("color: #9b837a; font-size: 10px; padding-top: 4px;")
