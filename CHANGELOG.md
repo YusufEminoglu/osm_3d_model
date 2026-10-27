@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.1] - 2026-10-27
+
+- Hub listing text rewritten; author Geophilo; university affiliation removed; documentation links use the standard geophilo.com pages (manual.html, guide/); manual HTML no longer ships in the plugin package.
+
 ## [1.9.0] - 2026-10-26
 
 - No Turkish anywhere: the unused Turkish language pack is removed (the viewer is English only), and so are the Turkish attribute aliases and keyword matching (the export carries raw OSM tags). Code identifiers are English, the building info card is English (TAKS/KAKS/Nizam rows removed), and the exported layers now live in `web/data/layers/` (was `yerlesim`).

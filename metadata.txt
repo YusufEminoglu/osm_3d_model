@@ -2,7 +2,7 @@
 name=3D OSM Model
 qgisMinimumVersion=3.28
 description=One click from a map area to a styled 3D city of OpenStreetMap buildings, streets, water and trees in your browser, exported as images, PDF, SVG, HTML or video.
-version=1.9.0
+version=1.9.1
 author=Geophilo
 email=yusuf.eminoglu@deu.edu.tr
 about=3D OSM Model builds a presentation-ready 3D city from OpenStreetMap in one step. Choose an area of up to about 300 ha and a boundary shape (circle, rounded rectangle, rectangle or your own polygon) and it downloads buildings, roads, cycleways, water, greens, parking, squares, trees and street furniture, styles them as a native QGIS layer group, and opens the same city in a Three.js viewer.
