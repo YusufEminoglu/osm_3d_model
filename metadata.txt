@@ -22,6 +22,7 @@ hasProcessingProvider=no
 plugin_dependencies=
 license=MIT
 changelog=
+    1.9.1 - Hub listing text rewritten; author Geophilo; university affiliation removed; documentation links use the standard geophilo.com pages (manual.html, guide/); manual HTML no longer ships in the plugin package.
     1.9.0 - Dynamic facades, one English material catalogue, and an English-only viewer.
         - Dynamic facades (new default, Style > Facades): every wall gets window bays and floors, with a whole number of bays per wall restarting at each corner, so windows are never cut by a corner and rows sit on the real floors. Six styles - Apartment, Mixed-use, Modern, Office, Heritage, Brick - draw windows, frames, sills, shutters, balconies, shopfronts and entrances in the shader; each building varies its proportions, and at night a share of its windows is lit. The style follows the OSM building category and height; a facade attribute still wins.
         - One material catalogue for facades, roofs and surfaces, shared with PlanX 3D City, English names only. New Villa, Industrial and Civic facades; photo facades laid out on each wall's window grid; nine roofs and eleven ground surfaces. Older names in saved settings, themes and attributes still load.
