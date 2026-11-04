@@ -36,7 +36,11 @@ export const DYNAMIC_FACADE_STYLES = {
   Brick: { material: 'brick', winW: 0.38, winH: 0.54, sill: 0.28, balcony: 0.15, ground: 'residential', tint: 0.25, frame: '#ece8df', glass: '#27323a', accent: '#efe9dd', bay: 3.0 },
   Villa: { material: 'render', winW: 0.52, winH: 0.56, sill: 0.24, balcony: 0.3, ground: 'residential', tint: 1, frame: '#f4f2ee', glass: '#25313b', accent: '#8a6a4a', bay: 3.4 },
   Industrial: { material: 'concrete', winW: 0.86, winH: 0.26, sill: 0.6, balcony: 0, ground: 'loading', tint: 0.6, frame: '#5d6670', glass: '#2b3b47', accent: '#7b8794', bay: 4.5 },
-  Civic: { material: 'stone', winW: 0.36, winH: 0.64, sill: 0.2, balcony: 0, ground: 'civic', tint: 0.45, arch: true, frame: '#e9e3d6', glass: '#26313a', accent: '#6e5f4c', bay: 3.6 }
+  Civic: { material: 'stone', winW: 0.36, winH: 0.64, sill: 0.2, balcony: 0, ground: 'civic', tint: 0.45, arch: true, frame: '#e9e3d6', glass: '#26313a', accent: '#6e5f4c', bay: 3.6 },
+  Glass: { material: 'concrete', winW: 0.96, winH: 0.86, sill: 0.06, balcony: 0, ground: 'lobby', tint: 0.35, ribbon: true, frame: '#7d8a96', glass: '#2f4a5e', accent: '#46525e', bay: 2.4 },
+  Townhouse: { material: 'brick', winW: 0.34, winH: 0.62, sill: 0.24, balcony: 0.1, ground: 'residential', tint: 0.3, shutters: true, frame: '#f1ede4', glass: '#26313a', accent: '#2f4a3a', bay: 2.6 },
+  Loft: { material: 'brick', winW: 0.72, winH: 0.66, sill: 0.2, balcony: 0, ground: 'shops', tint: 0.3, frame: '#2a2c2e', glass: '#2a3640', accent: '#3b3f44', bay: 3.6 },
+  Coastal: { material: 'render', winW: 0.46, winH: 0.52, sill: 0.26, balcony: 0.6, ground: 'shops', tint: 1, shutters: true, frame: '#fbfaf7', glass: '#25323c', accent: '#2f6f8f', bay: 3.2 }
 };
 
 // Auto by function: each building gets a facade from its function and
@@ -61,14 +65,14 @@ export function autoFacadeName(fn, levels, seed) {
   const f = String(fn || '').toLowerCase();
   const r = Math.abs(Math.sin(seed * 91.345 + 7.13) * 43758.5453) % 1;
   const photo = APARTMENT_TEXTURES[Math.abs(Math.floor(seed)) % APARTMENT_TEXTURES.length];
-  if (/office|admin|bank|corporate|hotel/.test(f)) return levels >= 4 ? 'Office' : 'MixedUse';
-  if (/commerc|retail|mixed|shop|market|kiosk|supermarket/.test(f)) return levels >= 9 ? 'Office' : (r < 0.65 ? 'MixedUse' : 'Modern');
+  if (/office|admin|bank|corporate|hotel/.test(f)) return levels >= 12 ? 'Glass' : (levels >= 4 ? 'Office' : 'MixedUse');
+  if (/commerc|retail|mixed|shop|market|kiosk|supermarket/.test(f)) return levels >= 9 ? 'Office' : (r < 0.55 ? 'MixedUse' : (r < 0.8 ? 'Modern' : 'Loft'));
   if (/civic|public|government|townhall|cultur|museum|relig|worship|mosque|church|school|educat|universit|college|kindergarten|health|hospital|clinic/.test(f)) return r < 0.7 ? 'Civic' : 'Heritage';
   if (/indust|warehouse|factory|manufact|hangar|utility|garage|depot/.test(f)) return 'Industrial';
   if (levels <= 2) return r < 0.7 ? 'Villa' : photo;
   if (levels >= 12) return r < 0.5 ? 'Modern' : photo;
   if (r < 0.8) return photo;
-  return r < 0.9 ? 'Modern' : 'Brick';
+  return r < 0.86 ? 'Modern' : (r < 0.93 ? 'Townhouse' : 'Brick');
 }
 
 // Walls turn a corner where the outline bends by more than this (radians);
