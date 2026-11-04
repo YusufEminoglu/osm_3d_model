@@ -94,6 +94,12 @@ def _first_sentence(text: str, limit: int = 140) -> str:
     return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
 
 
+def _cancel_quietly(task) -> None:
+    """Cancel a task QGIS may already have deleted."""
+    with contextlib.suppress(RuntimeError):
+        task.cancel()
+
+
 class _OverpassFetchTask(QgsTask):
     """Network-only task; QGIS geometry and layer work stays on the UI thread.
 
@@ -205,11 +211,11 @@ class Osm3dModelPlugin:
         self._unloaded = True
         self._running = False
 
-        for task in (self._task, self._place_task):
-            if task is not None:
-                self._retired_tasks.append(task)  # alive until QGIS lets go of it
-                with contextlib.suppress(RuntimeError):
-                    task.cancel()
+        # Running tasks are let go here and cancelled only after unload has
+        # returned (see the end of this method).
+        running = [task for task in (self._task, self._place_task) if task is not None]
+        for task in running:
+            self._retire(task)
         self._task = None
         self._place_task = None
         self._pending_run = None
@@ -247,6 +253,33 @@ class Osm3dModelPlugin:
 
         if server is not None:
             server.stop()
+
+        # Cancel from the event loop, after unload has returned (the timer
+        # cannot fire before). A cancelled transfer tears its Qt objects down
+        # on the worker thread, and that teardown needs the Python GIL while
+        # holding one of Qt's shared signal/slot locks; the teardown above runs
+        # with the GIL held and takes those same locks (every disconnect, the
+        # dialog's close), so cancelling first could deadlock the UI thread
+        # against the worker. Found in OSM Quick 3D 0.52.0 on QGIS 4.2.
+        for task in running:
+            QTimer.singleShot(0, lambda task=task: _cancel_quietly(task))
+
+    def _retire(self, task):
+        """Let a running task go: no callback into the plugin's widgets, no
+        status lines, kept referenced until it really ends, then forgotten."""
+        if task not in self._retired_tasks:
+            self._retired_tasks.append(task)
+        task.callback = self._forget_task
+        # Only the download's own status lines: QgsTask's statusChanged(int),
+        # which every other task has, is how QGIS learns that a task ended.
+        if isinstance(task, _OverpassFetchTask):
+            with contextlib.suppress(TypeError, RuntimeError):
+                task.statusChanged.disconnect()
+
+    def _forget_task(self, task, *_result):
+        """A retired task has ended: drop the last reference to it."""
+        with contextlib.suppress(ValueError):
+            self._retired_tasks.remove(task)
 
     def _dialog_connections(self, dialog):
         return (
@@ -392,10 +425,9 @@ class Osm3dModelPlugin:
             return
         self._task = None
         self._pending_run = None
-        self._retired_tasks.append(task)  # keep it alive until it really ends
-        # its late status lines must not land in the next run's status
-        with contextlib.suppress(TypeError, RuntimeError):
-            task.statusChanged.disconnect()
+        # Kept alive until it really ends, then forgotten; its late status
+        # lines must not land in the next run's status.
+        self._retire(task)
         self._running = False
         self._show_cancelled(CANCELLED_TEXT)
 
@@ -704,7 +736,7 @@ class Osm3dModelPlugin:
             return
         previous, self._place_task = self._place_task, None
         if previous is not None:
-            self._retired_tasks.append(previous)
+            self._retire(previous)
             previous.cancel()
         task = place_search.PlaceSearchTask(text, self._on_places_found)
         self._place_task = task

@@ -2,7 +2,7 @@
 name=3D OSM Model
 qgisMinimumVersion=3.28
 description=Search a place or pick a map area and open a styled 3D city of OpenStreetMap buildings, streets, water and trees in your browser. Export PNG or JPEG images, PDF and SVG pages holding a rendered snapshot, a standalone HTML page, video, or a GLB 3D model.
-version=1.10.0
+version=1.10.1
 author=Geophilo
 email=yusuf.eminoglu@deu.edu.tr
 about=3D OSM Model builds a 3D city model from OpenStreetMap. Search a place by name or use the map view or a selected polygon, pick a boundary shape (circle, rounded rectangle, rectangle or your own polygon) of up to 300 ha, and see the boundary on the map before you run. The plugin downloads buildings, roads, cycleways, water, greens, parking, squares, trees and street furniture, styles them as a QGIS layer group and opens the same city in a Three.js viewer in your browser.

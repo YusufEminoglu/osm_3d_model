@@ -834,6 +834,135 @@ def check_toolbar_shows_dialog_during_run(rig):
     return f"shown during the run with {after!r}"
 
 
+def check_unload_during_download_cancels_after_teardown(rig):
+    """Unload with a download and a place search in flight, dialog open: the
+    dialog is deleted, both tasks end and are forgotten, and nothing is
+    cancelled until unload has returned.
+
+    1.10.0 cancelled the tasks first and then tore the dialog down. The
+    cancelled transfer tears its Qt objects down on the worker, needing the
+    GIL under one of Qt's shared signal/slot locks, while unload disconnected
+    and closed the dialog with the GIL held: a rare deadlock of the UI thread
+    (OSM Quick 3D 0.52.0 hung this way about 1 run in 10 on QGIS 4.2).
+    """
+    from qgis.PyQt import sip
+    from qgis.PyQt.QtCore import QCoreApplication, QEvent
+
+    from osm_3d_model import place_search
+
+    deferred = _enum(QEvent, "Type", "DeferredDelete")
+    plugin, dialog, overpass = start_hanging_run(rig)
+    task = plugin._task
+    check(task is not None, "the run did not start a download task")
+    nominatim = rig.nominatim
+    slow, nominatim.httpd.delay_s = nominatim.httpd.delay_s, 3.0
+    unload_returned, cancelled_during_unload = [], []
+    unload_s = 0.0
+    try:
+        with patched(place_search, "GEOCODER_ENDPOINT", nominatim.url):
+            # The search box is disabled during a run; the request goes in as
+            # a search started just before Run would.
+            dialog.placeSearchRequested.emit("Alsancak")
+            place_task = plugin._place_task
+            check(wait_for(lambda: nominatim.requests, 5), "the place search never reached the fake geocoder")
+            for running in (task, place_task):
+                feedback = getattr(running, "feedback", None)
+                if feedback is not None:
+                    feedback.canceled.connect(
+                        lambda: cancelled_during_unload.append(not unload_returned))
+            started = time.monotonic()
+            plugin.unload()
+            unload_s = time.monotonic() - started
+            unload_returned.append(True)
+            rig.plugins.remove(plugin)
+            QCoreApplication.sendPostedEvents(None, deferred)
+            pump(0.2)
+            ended = wait_for(lambda: task_done(task), 3.0)
+            place_ended = wait_for(lambda: task_done(place_task), 6.0)
+    finally:
+        nominatim.httpd.delay_s = slow
+    still_hanging = not overpass.released
+    rig.overpass_fake.release_all()
+    pump(0.5)
+    problems = []
+    if not sip.isdeleted(dialog):
+        problems.append("the dialog still exists after unload")
+    if unload_s > 1.0:
+        problems.append(f"unload held the UI thread for {unload_s:.1f} s")
+    if any(cancelled_during_unload):
+        problems.append("unload cancelled a task while still tearing the dialog down; the cancel "
+                        "must reach the task from the event loop, after unload has returned")
+    if not cancelled_during_unload:
+        problems.append("unload never cancelled the running tasks")
+    if not ended or not still_hanging:
+        problems.append("the download did not end within 3 s of unload while the server hung")
+    if place_task is not None and not place_ended:
+        problems.append("the place search did not end after unload")
+    retired = getattr(plugin, "_retired_tasks", [])
+    if retired:
+        problems.append(f"{len(retired)} ended task(s) are still held by the unloaded plugin")
+    if rig.boxes.modal():
+        problems.append(f"a box appeared: {rig.boxes.modal()[0][1][:80]!r}")
+    rig.canvas.setExtent(QgsRectangle(rig.canvas.extent()))   # must not reach a deleted dialog
+    pump(0.4)
+    fail_if(problems)
+    return (f"unload returned in {unload_s * 1000:.0f} ms, cancel sent afterwards, dialog deleted, "
+            f"download and place search ended and forgotten")
+
+
+def check_abandoned_download_is_forgotten(rig):
+    """A download that ignores Cancel is let go after the grace period: the
+    dialog is free and says so, the task's late status lines stay out of it,
+    and once it really ends the plugin forgets it.
+    """
+    from osm_3d_model import main_plugin, osm_download
+
+    release = threading.Event()
+    late = "A late status line from the abandoned download"
+
+    def stubborn(*_bbox, use_cache=True, status=None, feedback=None):
+        if status is not None:
+            status("Asking 127.0.0.1…")
+        release.wait(15)            # deaf to the feedback, like a stuck transfer
+        if status is not None:
+            status(late)
+        raise osm_download.OsmDownloadError("the stuck transfer gave up")
+
+    plugin, dialog = rig.open_dialog()
+    rig.set_view(*ALSANCAK, 1400, 800)
+    rig.overpass("ok")
+    try:
+        with patched(osm_download, "fetch_overpass_ex", stubborn), \
+                patched(main_plugin, "_CANCEL_GRACE_MS", 300):
+            dialog.run_button.click()
+            check(wait_for(lambda: plugin._task is not None and "127.0.0.1" in dialog.status.text(), 5),
+                  f"the download did not start (status {dialog.status.text()!r})")
+            task = plugin._task
+            dialog.cancel_button.click()
+            freed = wait_for(lambda: not plugin._running, 2.0)
+            held = task in plugin._retired_tasks
+            release.set()
+            ended = wait_for(lambda: task_done(task), 5.0)
+            pump(0.5)
+    finally:
+        release.set()
+    problems = []
+    if not freed:
+        problems.append("the dialog was still busy 2 s after Cancel")
+    if not held:
+        problems.append("the abandoned task was not kept referenced until it ended")
+    if not ended:
+        problems.append("the abandoned task never ended")
+    if task in plugin._retired_tasks:
+        problems.append("the plugin still holds the abandoned task after it ended")
+    if dialog.status.text() != CANCELLED:
+        problems.append(f"the status reads {dialog.status.text()!r}, not {CANCELLED!r}")
+    if rig.boxes.modal() or any(note[0] in ("warning", "critical") for note in rig.bar.notes):
+        problems.append("the abandoned task's failure was reported")
+    fail_if(problems)
+    return "let go after the grace period, its late line kept out, forgotten once it ended"
+
+
 def check_failure_in_dialog_not_a_box(rig):
     """P4/P5: a failed download is told in the dialog word for word, with a short
     message-bar note, and no modal box.
@@ -1636,6 +1765,8 @@ CHECKS = (
     check_cancel_within_two_seconds,
     check_close_hides_and_run_continues,
     check_toolbar_shows_dialog_during_run,
+    check_unload_during_download_cancels_after_teardown,
+    check_abandoned_download_is_forgotten,
     check_failure_in_dialog_not_a_box,
     check_place_search,
     check_summary_tells_the_whole_result,

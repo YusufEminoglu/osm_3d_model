@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.10.1] - 2026-11-04
+
+- Unloading or updating the plugin, or closing QGIS, while an OpenStreetMap
+  download or a place search is running can no longer freeze QGIS. The cancel
+  used to be sent while the dialog was being taken down, and in rare cases the
+  download thread and the QGIS window waited for each other forever (the same
+  fault was found and fixed in OSM Quick 3D 0.52.0). The cancel is now sent
+  only after the dialog is gone, and finished downloads clean up after
+  themselves. A new check reproduces the old order and fails on 1.10.0.
+
 ## [1.10.0] - 2026-11-04
 
 Start from a place name, watch the download and stop it, keep every run, and
