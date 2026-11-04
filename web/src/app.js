@@ -1709,7 +1709,7 @@ function loadPersistedSettings() {
  * reached and no two adjacent functions get the same wall.
  */
 const RESIDENTIAL_FACADES = ['ApartmentTextureA', 'ApartmentTextureB', 'ApartmentTextureC', 'ApartmentTextureD', 'ApartmentTextureE', 'ApartmentTextureF'];
-const URBAN_FACADES = ['Apartment', 'MixedUse', 'Modern', 'Office', 'Heritage', 'Brick', 'Villa', 'Industrial', 'Civic', 'ModernTextureA', 'ModernTextureB'];
+const URBAN_FACADES = ['Apartment', 'MixedUse', 'Modern', 'Office', 'Heritage', 'Brick', 'Villa', 'Industrial', 'Civic', 'Glass', 'Townhouse', 'Loft', 'Coastal', 'ModernTextureA', 'ModernTextureB'];
 const FACADE_RESIDENTIAL_SHARE = 3;   // residential walls per urban wall
 
 function facadeSeedPool(fallback = []) {

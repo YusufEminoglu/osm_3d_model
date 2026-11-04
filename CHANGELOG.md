@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Four new dynamic facade styles in the shared material catalogue: **Glass** (full-height curtain wall, used for towers of 12+ floors), **Townhouse** (narrow brick bays with shutters), **Loft** (large steel-framed windows over shops) and **Coastal** (white render, shutters and deep balconies). Auto mode uses Glass, Townhouse and Loft; Coastal is offered in the Style dock and QGIS Quick Style.
+
 ## [1.10.1] - 2026-11-04
 
 - Unloading or updating the plugin, or closing QGIS, while an OpenStreetMap
