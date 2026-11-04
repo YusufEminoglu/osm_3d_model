@@ -6,7 +6,7 @@ It is intentionally separate from plugin versioning. Documentation, showcase ass
 
 ## Pages
 
-- [GitHub Pages landing page](index.html)
+- [GitHub Pages entry](index.html) — forwards to the hosted [reference manual](https://geophilo.com/osm_3d_model/manual.html)
 - [Showcase playbook](SHOWCASE.md)
 - [Architecture notes](ARCHITECTURE.md)
 - [Publishing guide](PUBLISHING.md)

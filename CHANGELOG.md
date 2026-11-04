@@ -1,5 +1,191 @@
 # Changelog
 
+## [1.10.0] - 2026-11-04
+
+Start from a place name, watch the download and stop it, keep every run, and
+take the city to Blender as a GLB model. The OpenStreetMap servers are now
+asked the way their 2026 rules require.
+
+### What you notice first
+
+- **Start from a place.** Type a town, a neighbourhood or an address under
+  **Find a place**, press Enter or **Search**, and pick one of up to five
+  matches: the map centres on it, wide enough for the largest boundary. The
+  search uses QGIS's own Nominatim geocoder. The model's boundary is drawn on
+  the map while the dialog is open, and the area readout now measures that
+  boundary; it measured the whole map view, so it could read 77 ha for a
+  30.6 ha model. A map view wider than 50 km is refused with a hint to zoom in
+  or search a place; 1.9.1 built a 150 ha circle in the open sea from the
+  world view.
+- **A wait you can read and stop.** While the data downloads, the status line
+  names the server being asked, counts the seconds and says when a busy server
+  is left for the next one. Cancel stops the download within two seconds, and
+  a Cancel pressed before a request goes out sends nothing; it used to run on
+  for up to a minute and end in a red error box. Esc and the
+  window's close button, which were ignored during a run, now hide the dialog
+  while the build continues, and the toolbar icon always brings it back.
+- **Your work is kept.** Every run gets its own folder in the QGIS profile
+  (`osm_3d_model/runs/<date>-<time>`), and the layers are written to a
+  GeoPackage there and loaded from it, so they survive saving and reopening
+  the project and updating the plugin. Before, they were temporary layers that
+  came back empty when a saved project was reopened, and every run overwrote
+  the previous export inside the plugin's own folder, which a plugin update
+  deleted. **Open data folder** opens the run instead of the plugin's install
+  folder, and **Reopen last viewer** opens the last run; before the first run
+  that button reads **Open sample city**. **Delete old runs** removes the
+  older run folders only when you click it and confirm; it keeps the newest
+  run and any run a layer of the open project still reads from.
+- **Summaries that say what happened.** A DEM or basemap that could not be
+  used stays in the final summary instead of showing for a fraction of a
+  second before "Export ready". The basemap underlay gets at most 20 seconds
+  to draw while QGIS keeps redrawing its window, and a blank result is left
+  out with a warning; with unreachable tiles it used to block QGIS for 65
+  seconds and then publish a fully transparent image. A run built from the
+  stored copy of an earlier download says how old the copy is and offers
+  **Download fresh**; it used to say "Downloading". The summary counts
+  OpenStreetMap trees apart from the trees the plugin plants in parks and
+  woods (in one test area, 63 of 64 "OSM trees" were planted), and says how
+  many building heights are estimated.
+- **GLB export.** In the viewer's Export Studio, the format **3D model
+  (GLB)** saves the city as a binary glTF (`.glb`) file in metres, which
+  Blender, Rhino 8 and SketchUp 2025 or later import directly. It holds the
+  static city on screen: buildings with their roofs (one object per OSM
+  building), roads, sidewalks, paths and bike lanes, the ground and model base,
+  greens and water, trees, street furniture and fences, in plain colours
+  without textures. The origin is the ground at the centre of the study area,
+  and the file records its coordinate system and the OpenStreetMap
+  attribution. The sky, the lights and the moving cars, cyclists and
+  pedestrians are left out. For 3D printing, convert the file to STL or 3MF
+  first.
+
+### Polite to the OpenStreetMap servers
+
+- **A server rests after an error.** QGIS reports every 4xx and 5xx answer as
+  a network error, so the plugin never saw the status and retried every error
+  (429, 406, 403, 400, 502, 504) on the same server 1.2 seconds later: six
+  requests in under four seconds per click. The 2026 Overpass rules ask for at
+  least 30 seconds after a 429 or 406 and ban applications that keep getting
+  429s. The status is now read even when QGIS reports an error. A server that
+  answers 429 (too many requests) rests for a minute, one that refuses (403
+  or 406) for an hour, a busy one (5xx) for 45 seconds and one that does not
+  answer or cannot be reached for two minutes; the rest doubles while the
+  server keeps failing, up to 15 minutes (a refusal stays at an hour). A
+  query that runs out of time on the server rests that server for 30 seconds,
+  without doubling. Requests to one server are at least a second apart. The
+  rests, and the server that answered last, are kept in the QGIS settings, so
+  they hold across QGIS sessions.
+- **Which server is asked first.** The servers are overpass-api.de and
+  overpass.private.coffee, asked in that order until one has delivered. A run
+  sends one light query, and overpass.private.coffee did not answer at all on
+  2 and 4 November 2026, so leading with it made every first run wait 55
+  seconds. After that, the server that delivered last is asked first, also
+  after QGIS restarts, so when overpass-api.de is busy and
+  overpass.private.coffee answers, the next run starts there.
+  overpass.kumi.systems is no longer asked: it is the same machine as
+  overpass.private.coffee, so failing over to it asked a busy server twice.
+- **One request per server per run.** The plugin sends each server one
+  request per run. After a dropped connection, QGIS 4 asks the same server
+  once more, 5 seconds later; QGIS 3 does not, because Qt 5 already re-sends a
+  dropped request by itself, up to three more times, so 1 to 4 requests can
+  reach a server there. With every server dropping the connection, a run now
+  costs at most 8 requests on QGIS 3.44 and 4 on QGIS 4.2; it cost 24 and 6.
+- **Bounded queries.** Queries carry `[maxsize:134217728]` (128 MiB) and a
+  `[timeout]` matched to QGIS's own network timeout, so a transfer ends within
+  55 seconds with a plain message, and it stops at once when you cancel or
+  when the answer passes 128 MiB. Before, QGIS cut every request at 60 seconds
+  and reported it as an empty success, so the user read "non-JSON response (0
+  bytes): Expecting value"; with every server hanging, the dialog showed one
+  unchanged line for three minutes.
+- **The plugin names itself.** Every request carries the `Referer`
+  `https://github.com/YusufEminoglu/osm_3d_model`, because QGIS replaces a
+  plugin's own User-Agent. On QGIS 4.2 and later the plugin's name and
+  version are also added to the User-Agent; QGIS 3.44 cannot do that.
+- **Only complete answers are stored.** An empty answer, or one carrying a
+  server remark (a query that ran out of time or memory), is never stored. An
+  empty answer used to be stored for a week, so the next run sent nothing and
+  blamed the area.
+- **One failure message that explains.** A failed download names every server
+  asked and what each one answered, with advice that fits the cause: wait for
+  a busy server, check the connection or proxy, or choose a smaller area only
+  when the area is the problem. It used to keep the last three failures, drop
+  the first server, repeat the last one, show raw Qt error text and always
+  advise a smaller area.
+
+### A more faithful model
+
+- **Roof tags no longer make buildings too tall.** OSM `height` includes the
+  roof, but the viewer added its own roof on top of it, and `roof:levels` were
+  added to the wall floors. Now the roof rise is taken off OSM `height` for
+  the walls, never leaving less than 2 m of wall. The rise is `roof:height`,
+  else `roof:levels` × 3 m, else, for a pitched `roof:shape`, 3 m or 0.3 × the
+  height when that is less. A building with `height` and no roof tags at all
+  keeps its full height for the walls, and the viewer still draws its default
+  roof on top.
+- **Half levels round up.** A height from levels is levels × 3 m, and 2.5
+  levels now count as 3 (9 m); 1.9.1 rounded them down to 2.
+- **Raised parts.** `min_height` and `building:min_level` lift the walls off
+  the ground, for building parts over passages, bridges between buildings and
+  overhangs; they were ignored.
+- **Where each height came from.** Every building carries `height`,
+  `roof_height`, `min_height` and `height_source` (`height`, `levels` or
+  `default`) in the GeoJSON and the GeoPackage, and the run summary counts the
+  estimated ones.
+- A multipolygon island inside a hole (an island in a pond inside a park) is
+  kept; it was lost. Proposed, abandoned and demolished roads and roads in
+  tunnels are no longer drawn as surface roads, nor streams in culverts, and
+  open building ways are no longer closed into polygons.
+- One absurd `building:levels` or `height` value no longer sinks the whole
+  export: levels are kept between 1 and 200, heights between 1 and 1000 m, and
+  a value that is not a finite number is ignored.
+
+### Legible and honest
+
+- The Run button is white on a darker brand colour, 5.0:1; it was white on
+  #b8978a, 2.68:1. Under Night Mapping the maximum area value read at about
+  1.5:1 and the Advanced toggle at 1.53:1. Run, the maximum area value, the
+  Advanced toggle and the place search box now read at 4.5:1 or more under
+  the default, Night Mapping and Blend of Gray themes and on a dark desktop.
+  Run and Cancel sit below the scrolling part of the dialog, so Run stays in
+  view in a 1366 × 728 work area with Advanced open.
+- Plain words in the dialog: "map view" instead of "canvas extent", no
+  "Overpass mirrors" or engine names, and the status line and the summary
+  name the UTM zone instead of a bare EPSG code.
+- Every image and video export carries the OpenStreetMap attribution in a
+  corner: PNG, JPEG, WebP, the image in PDF, SVG and HTML, the clipboard copy
+  and video. The PDF also prints it as text under the image, and the GLB
+  stores it in its metadata. Before, only the SVG and HTML pages mentioned it.
+- The local viewer server checks the Host header, so a web page cannot read
+  your basemap or DEM through DNS rebinding, and it no longer lists folders.
+  It never follows a link or junction out of the folder it serves, and Delete
+  old runs touches only the run folders the plugin made.
+  When all 20 ports are busy, the summary says the viewer could not start and
+  that the model was saved, instead of an error box after a successful build.
+- Bug reports reach GitHub issues: the plugin's tracker link pointed to a
+  GitLab page that returned 404.
+- The QGIS Plugins listing describes the exports as they are: PDF and SVG
+  pages hold a rendered image of the view, not drawings. It adds the search
+  words threejs, 3d viewer, 3d visualization, extrusion, glb and blender.
+
+### Fixed
+
+- A new run no longer fails with "WinError 5" when one of the previous run's
+  layer files is open in QGIS: every run writes to a new folder.
+- Documentation: the README describes the 1.9.0 dynamic facades, its links to
+  the sibling plugins point to their own repositories, the Quick start no
+  longer shows a personal path, and `docs/index.html` forwards to the hosted
+  manual instead of a page that no longer exists.
+
+### Tests
+
+- Every QGIS suite runs offline against fake servers on 127.0.0.1 and opens no
+  browser or file manager.
+- New suites for the Overpass rules, OSM fidelity, the dialog and the run
+  folders. Run against 1.9.1, they fail for the reasons they name; only the
+  checks of behaviour 1.9.1 already had pass there.
+- The resilience suite no longer asserts the 1.2-second retry after a 429 as
+  correct, and no longer stubs away the real status handling. Against 1.9.1,
+  six of seven deliberately harmful code changes passed both old suites.
+
 ## [1.9.1] - 2026-10-27
 
 - Hub listing text rewritten; author Geophilo; university affiliation removed; documentation links use the standard geophilo.com pages (manual.html, guide/); manual HTML no longer ships in the plugin package.

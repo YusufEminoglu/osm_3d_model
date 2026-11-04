@@ -6,6 +6,12 @@
 
 Source: <https://github.com/mrdoob/three.js>
 
+The viewer ships three.js r160 in `web/assets/vendor/three/`: the core build
+and the addons it uses from `examples/jsm/`, among them the GLTFLoader that
+reads custom models and the GLTFExporter that writes the GLB export. The
+addons are part of three.js and come under the same MIT licence, reproduced
+below.
+
 The MIT License
 
 Copyright © 2010-2023 Three.js Authors
@@ -48,16 +54,32 @@ visible attribution and follow the [tile usage policy](https://operations.openst
 
 ## Overpass API
 
-OSM downloads use public Overpass API mirrors. The endpoints are network
+OSM downloads use public Overpass API servers. The endpoints are network
 services and are not bundled with this plugin:
 
 - <https://overpass-api.de/api/interpreter>
-- <https://overpass.kumi.systems/api/interpreter>
 - <https://overpass.private.coffee/api/interpreter>
 
-The plugin sends a descriptive User-Agent, bounds requests, caches successful
-responses locally, and falls back between the listed mirrors when a service is
-unavailable.
+overpass-api.de is asked first, because overpass.private.coffee did not
+answer at all when this release was tested; once a server has delivered, the
+one that delivered last is asked first, also after QGIS restarts.
+
+The plugin follows the operators' 2026 rules. Every request carries the
+`Referer` `https://github.com/YusufEminoglu/osm_3d_model`, because QGIS
+replaces a plugin's own User-Agent. Each run asks each server once, and again
+only after a dropped connection. A server that answers 429 rests for a
+minute, one that refuses with 403 or 406 for an hour, a busy one (5xx) for 45
+seconds and one that does not answer for two minutes; the shorter rests
+double while the server keeps failing, up to 15 minutes. Queries are bounded
+in time and memory (`[maxsize:134217728]`), and only complete answers are
+stored on this computer, for a week.
+
+## Place search (Nominatim)
+
+The place search uses QGIS's own geocoder, `QgsNominatimGeocoder`, which
+sends the text you type to the Nominatim service of QGIS at
+<https://nominatim.qgis.org/search>. Nominatim results are OpenStreetMap
+data, © OpenStreetMap contributors, under the ODbL.
 
 ## geotiff.js
 

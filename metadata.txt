@@ -1,19 +1,20 @@
 [general]
 name=3D OSM Model
 qgisMinimumVersion=3.28
-description=One click from a map area to a styled 3D city of OpenStreetMap buildings, streets, water and trees in your browser, exported as images, PDF, SVG, HTML or video.
-version=1.9.1
+description=Search a place or pick a map area and open a styled 3D city of OpenStreetMap buildings, streets, water and trees in your browser. Export PNG or JPEG images, PDF and SVG pages holding a rendered snapshot, a standalone HTML page, video, or a GLB 3D model.
+version=1.10.0
 author=Geophilo
 email=yusuf.eminoglu@deu.edu.tr
-about=3D OSM Model builds a presentation-ready 3D city from OpenStreetMap in one step. Choose an area of up to about 300 ha and a boundary shape (circle, rounded rectangle, rectangle or your own polygon) and it downloads buildings, roads, cycleways, water, greens, parking, squares, trees and street furniture, styles them as a native QGIS layer group, and opens the same city in a Three.js viewer.
-    Buildings are coloured by function with subtle per-building variation and get pyramid, hip, gable, shed or flat roofs from OSM tags. Streets are drawn with lane markings and kerbs, parks are planted with trees, and pedestrians and cars move along them. A coordinated theme styles the QGIS map and the 3D city together, and a basemap or DEM can be draped underneath.
-    Needs an internet connection for the OpenStreetMap download. Shares the viewer of 3D City Studio.
+about=3D OSM Model builds a 3D city model from OpenStreetMap. Search a place by name or use the map view or a selected polygon, pick a boundary shape (circle, rounded rectangle, rectangle or your own polygon) of up to 300 ha, and see the boundary on the map before you run. The plugin downloads buildings, roads, cycleways, water, greens, parking, squares, trees and street furniture, styles them as a QGIS layer group and opens the same city in a Three.js viewer in your browser.
+    While it works, a status line names the server being asked and counts the seconds, and Cancel stops the download. Each run is kept in its own folder in your QGIS profile with a GeoPackage of the layers, so they survive saving the project and updating the plugin; old runs are deleted only when you ask. The summary says what was built, how many building heights are estimated, how many trees come from OpenStreetMap and how many the plugin planted in parks and woods, and whether a DEM or basemap could not be used.
+    Building heights come from the OSM height and level tags, or from a default for the building type when there are none; roof shapes follow the OSM roof tags and colours follow the building function. Streets get lane markings and kerbs, parks are planted with trees, and pedestrians and cars move along the streets. A coordinated theme styles the QGIS map and the 3D city together, and a basemap or DEM can be draped underneath. The viewer exports PNG, JPEG or WebP images, PDF and SVG pages holding a rendered snapshot, a standalone HTML page, WebM or MP4 video, and the city as a GLB model in metres for Blender, Rhino or SketchUp.
+    Polite to the OpenStreetMap servers: each server is asked once per run (again only after a dropped connection), a server that refuses, is busy or asks to slow down rests (a minute after HTTP 429, an hour after 403 or 406), queries are bounded in time and memory, and every request names the plugin. Data comes from public Overpass API servers, place searches go to the Nominatim service of QGIS, and OpenStreetMap tiles load only if you add the basemap. Needs an internet connection for the download. Shares the viewer of 3D City Studio.
     Manual: https://geophilo.com/osm_3d_model/manual.html
-tracker=https://gitlab.com/geophilo1/osm_3d_model/-/issues
+tracker=https://github.com/YusufEminoglu/osm_3d_model/issues
 repository=https://gitlab.com/geophilo1/osm_3d_model
 category=Web
 homepage=https://geophilo.com/osm_3d_model/
-tags=osm,openstreetmap,3d city,three.js,procedural,massing,urban planning,geojson,geophilo
+tags=osm,openstreetmap,3d city,three.js,procedural,massing,urban planning,geojson,geophilo,threejs,3d viewer,3d visualization,extrusion,glb,blender
 icon=icons/icon.png
 qgisMaximumVersion=4.99
 experimental=False
@@ -22,6 +23,7 @@ hasProcessingProvider=no
 plugin_dependencies=
 license=MIT
 changelog=
+    1.10.0 - Start from a place name, read the wait and stop it, keep every run, and save the city as a GLB 3D model. A place search (the Nominatim geocoder of QGIS) centres the map on a place, and the model boundary is drawn on the map before you run. A status line names the server being asked and counts the seconds, and Cancel stops the download within two seconds. Each run gets its own folder in the QGIS profile with a GeoPackage, so the layers survive saving the project and updating the plugin; old runs are deleted only when you ask. Summaries keep DEM and basemap problems, say how old a stored copy is, and count estimated heights and planted trees apart. The Overpass client follows the 2026 rules: a server rests after an error (a minute after 429, an hour after 403 or 406), each server is asked once per run (again only after a dropped connection), the server that last worked is asked first (overpass-api.de until one has), queries are bounded in time and memory, every request names the plugin, and empty answers are never stored. Roof tags no longer make buildings too tall, roof and base heights come from OSM tags, multipolygon islands are kept, and proposed roads and tunnels are no longer drawn as streets. The dialog reads well under the Night Mapping and Blend of Gray themes, image and video exports carry the OpenStreetMap attribution, the local server checks the Host header, and bug reports go to GitHub issues.
     1.9.1 - Hub listing text rewritten; author Geophilo; university affiliation removed; documentation links use the standard geophilo.com pages (manual.html, guide/); manual HTML no longer ships in the plugin package.
     1.9.0 - Dynamic facades, one English material catalogue, and an English-only viewer.
         - Dynamic facades (new default, Style > Facades): every wall gets window bays and floors, with a whole number of bays per wall restarting at each corner, so windows are never cut by a corner and rows sit on the real floors. Six styles - Apartment, Mixed-use, Modern, Office, Heritage, Brick - draw windows, frames, sills, shutters, balconies, shopfronts and entrances in the shader; each building varies its proportions, and at night a share of its windows is lit. The style follows the OSM building category and height; a facade attribute still wins.

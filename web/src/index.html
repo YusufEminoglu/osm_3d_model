@@ -296,10 +296,10 @@
 
     <aside class="dock-panel export-dock hidden" id="export-dock">
         <div class="dock-head"><span>Export Studio</span><button class="dock-close" data-close="export-dock" aria-label="Close export studio">x</button></div>
-        <div class="export-intro">Create a clean render of the current camera. Viewer panels and map controls are excluded.</div>
+        <div class="export-intro">Create a clean render of the current camera (viewer panels and map controls are left out, the OpenStreetMap attribution is added in a corner), or save the city as a 3D model.</div>
 
         <div class="dock-section export-section">
-            <p class="dock-section-title">Still image &amp; document</p>
+            <p class="dock-section-title">Image, document or 3D model</p>
             <label><span>Format</span>
                 <select id="export-format">
                     <option value="png">PNG - lossless image</option>
@@ -308,9 +308,10 @@
                     <option value="pdf">PDF - presentation page</option>
                     <option value="svg">SVG - embedded scene snapshot</option>
                     <option value="html">HTML - self-contained snapshot</option>
+                    <option value="glb">3D model (GLB) - Blender, SketchUp, Rhino</option>
                 </select>
             </label>
-            <label><span>Output size</span>
+            <label id="export-size-row"><span>Output size</span>
                 <select id="export-size-preset">
                     <option value="current">Current viewport</option>
                     <option value="1920x1080">Full HD - 1920 x 1080</option>

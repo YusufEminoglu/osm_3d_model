@@ -15,6 +15,7 @@ import {
   buildHtmlSnapshot,
   buildPdfFromJpeg,
   buildSvgSnapshot,
+  drawAttribution,
   sanitizeExportBaseName,
   timestampedFilename
 } from './export_utils.js';
@@ -37,6 +38,7 @@ import {
   setDynamicFacadeNight
 } from './facade_dynamic.js';
 import { FACADES, FACADE_TEXTURE_GRID, ROOFS, ROOF_LABELS, catalogueName, surfacesFor } from './material_catalogue.js';
+import { roofRise, wallBase, wallTop } from './building_heights.js';
 
 const urlParams = new URLSearchParams(window.location.search);
 const isPortableMode = urlParams.has('portable') || urlParams.get('portable') === '1';
@@ -253,6 +255,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('map').appendChild(renderer.domElement);
+// Attributed copy of the canvas filmed by the Export Studio recorder; set
+// only while a recording runs (declared here because the render loop starts
+// before the Export Studio code below is evaluated).
+let recordCanvas = null;
+let recordContext = null;
 
 const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(window.innerWidth, window.innerHeight);
@@ -372,6 +379,28 @@ let fenceGroup = new THREE.Group();
 let waterlineGroup = new THREE.Group();
 let zoningGroup = new THREE.Group();
 let basemapGroup = new THREE.Group();
+// Group names: the GLB export (glb_export.js STATIC_CITY_LAYERS) picks the
+// static city by these names and leaves the rest (traffic, overlays) out.
+islandGroup.name = 'islands';
+parcelGroup.name = 'parcels';
+hardscapeGroup.name = 'hardscape';
+buildingGroup.name = 'buildings';
+roadGroup.name = 'roads';
+treeGroup.name = 'trees';
+carGroup.name = 'cars';
+bikeLaneGroup.name = 'bike-lanes';
+bikeGroup.name = 'bikes';
+furnitureGroup.name = 'furniture';
+pedestrianGroup.name = 'pedestrians';
+sidewalkGroup.name = 'sidewalks';
+pedestrianPathGroup.name = 'pedestrian-paths';
+crosswalkGroup.name = 'crosswalks';
+terrainSideGroup.name = 'terrain-sides';
+windPlumeGroup.name = 'wind-plumes';
+fenceGroup.name = 'fences';
+waterlineGroup.name = 'waterlines';
+zoningGroup.name = 'zoning';
+basemapGroup.name = 'basemap';
 world.add(basemapGroup);
 world.add(islandGroup);
 world.add(parcelGroup);
@@ -4106,6 +4135,7 @@ async function buildTerrain(blocksGeo, buildToken = sceneBuildToken) {
   };
   const mat = new THREE.MeshStandardMaterial(materialOptions);
   terrainMesh = new THREE.Mesh(geo, mat);
+  terrainMesh.name = 'terrain';
   terrainMesh.rotation.x = -Math.PI / 2;
   terrainMesh.receiveShadow = true;
   terrainMesh.renderOrder = -30;
@@ -4125,6 +4155,7 @@ async function buildTerrain(blocksGeo, buildToken = sceneBuildToken) {
       polygonOffsetUnits: -1
     });
     terrainOverlayMesh = new THREE.Mesh(geo.clone(), overlayMat);
+    terrainOverlayMesh.name = 'terrain-overlay';
     terrainOverlayMesh.rotation.x = -Math.PI / 2;
     terrainOverlayMesh.receiveShadow = false;
     terrainOverlayMesh.renderOrder = -29;
@@ -5104,11 +5135,15 @@ function featureSidewalkWidth(feature) {
   return Math.max(0.5, Math.min(2.5, w != null ? w : 1.4));
 }
 
+// Wall top in metres (building_heights.js): the export's `height` (C3: the
+// top of the walls, roof excluded), else levels x floor height.
 function buildingHeightFromProps(props, levels, floorHeight = settings.floorHeight) {
-  const explicit = parseNumberProp(props || {}, ['planx_height', 'height', 'building_height'], null);
-  if (explicit !== null && explicit > 0) return explicit;
-  return levels * Math.max(2.4, Math.min(6, Number(floorHeight) || settings.floorHeight));
+  return wallTop(props || {}, levels, Number(floorHeight) || settings.floorHeight);
 }
+
+// Massing kinds that stack several volumes from the ground up; a building
+// raised on `min_height` (a canopy, a bridge, an overhang) is one volume.
+const TIERED_MASSING = new Set(['stepped', 'podium', 'cantilever', 'penthouse']);
 
 function isOdorOrEmissionSource(feature) {
   const props = feature?.properties || {};
@@ -6548,7 +6583,9 @@ async function buildBuildingLayer(buildingsGeo, buildToken = sceneBuildToken) {
     const fnStyle = ensureFunctionBuildingStyle(fn, fnIndex);
     const levels = buildingLevels(f.properties);
     const featureFloorHeight = parseNumberProp(props, ['planx_floor_height', 'floor_height'], fnStyle.floorHeight);
+    // C3: walls from min_height (0 = on the ground) up to height.
     const height = buildingHeightFromProps(props, levels, featureFloorHeight);
+    const minHeight = wallBase(props, height);
     const featureColor = normalizeHexColor(propFirst(props, ['planx_color', 'color']), fnStyle.color);
     const selectedFacadeRaw = presetValue(propFirst(props, ['planx_facade', 'planx_texture', 'facade']), textureSets.facade, fnStyle.facade);
     const selectedFacade = normalizeFacadeKey(selectedFacadeRaw);
@@ -6561,7 +6598,8 @@ async function buildBuildingLayer(buildingsGeo, buildToken = sceneBuildToken) {
     const featureRoofTexture = presetValue(propFirst(props, ['planx_roof_texture', 'roof_texture']), textureSets.roof, fnStyle.roofTexture);
     const explicitRoof = propFirst(props, ['planx_roof_shape', 'roof_shape']);
     const featureRoofShape = roofShapeValue(explicitRoof || fnStyle.roofShape, settings.roofShape);
-    const featureRoofHeight = parseNumberProp(props, ['planx_roof_height', 'roof_height'], fnStyle.roofHeight);
+    // C3: a roof_height above 0 is the roof rise; 0 or missing -> the style's default.
+    const featureRoofHeight = roofRise(props, fnStyle.roofHeight);
     const featureRoofColor = normalizeHexColor(propFirst(props, ['planx_roof_color', 'roof_color']), '#ffffff');
     const explicitMassing = propFirst(props, ['planx_massing', 'massing', 'building_mode']);
     const requestedMassing = explicitMassing
@@ -6589,7 +6627,8 @@ async function buildBuildingLayer(buildingsGeo, buildToken = sceneBuildToken) {
       const population = parseNumberProp(props, ['population', 'pop'], Math.round(dwellings * 3.1));
       const vehicles = parseNumberProp(props, ['vehicle', 'cars'], Math.round(dwellings * 0.7));
       const seedInt = Math.abs(Math.round(sx + sy)) % 97;
-      const massingKind = resolveBuildingMassing(requestedMassing, levels, footprintArea, fn, seedInt);
+      const resolvedMassing = resolveBuildingMassing(requestedMassing, levels, footprintArea, fn, seedInt);
+      const massingKind = minHeight > 0 && TIERED_MASSING.has(resolvedMassing) ? 'extrude+roof' : resolvedMassing;
       const facadeSeed = Math.abs(Math.round(sx * 7.3 + sy * 13.1)) % 4096;
       const featureFacade = autoFacade ? autoFacadeName(fn, levels, facadeSeed) : selectedFacade;
       // Dynamic styles draw their windows in the shader; photo facades are
@@ -6760,7 +6799,7 @@ async function buildBuildingLayer(buildingsGeo, buildToken = sceneBuildToken) {
         finalTowerFootprint = crownTier.footprint;
         roofBaseY = baseY + mainH;
         roofTowerHeight = crownH;
-      } else if (levels > 2 && settings.buildingSetback > 0) {
+      } else if (levels > 2 && settings.buildingSetback > 0 && minHeight <= 0) {
         const podiumHeight = featureFloorHeight;
         const towTier = insetTierForPolygon(poly, shape, footprint, settings.buildingSetback);
         addTierExtrusion(shape, baseY, podiumHeight, 1, towTier.applied);
@@ -6770,11 +6809,13 @@ async function buildBuildingLayer(buildingsGeo, buildToken = sceneBuildToken) {
         roofBaseY = baseY + podiumHeight;
         roofTowerHeight = height - podiumHeight;
       } else {
-        // Normal Extrusion (Single volume or Courtyard block)
-        const extrude = volumeGeometry(shape, baseY, height);
+        // Normal Extrusion (Single volume or Courtyard block), from the wall
+        // base (min_height above the ground) to the wall top.
+        const wallBaseY = baseY + minHeight;
+        const extrude = volumeGeometry(shape, wallBaseY, height - minHeight);
 
         const b = new THREE.Mesh(extrude, useSeparateRoofMesh ? [matHiddenCap, matWall] : [matRoof, matWall]);
-        b.position.y = baseY;
+        b.position.y = wallBaseY;
         b.castShadow = true;
         b.receiveShadow = true;
         b.userData = buildingData;
@@ -6793,6 +6834,7 @@ async function buildBuildingLayer(buildingsGeo, buildToken = sceneBuildToken) {
 
         for (let i = 1; i < levels; i++) {
           const slabY = baseY + i * featureFloorHeight;
+          if (slabY <= baseY + minHeight) continue; // no ledges under a raised building
           const slabSetback = -settings.ledgeProjection;
           const outsetShape = shapeFromInsetPolygon(poly, slabSetback);
           if (outsetShape) {
@@ -9037,6 +9079,8 @@ function animate() {
   // CSS2D overlay labels (measurement readouts, etc.). The renderer was set up
   // but never drawn before, so 2D labels never appeared; draw it every frame.
   labelRenderer.render(scene, camera);
+  // Recording: copy this frame (with the OSM attribution) for the video.
+  if (recordContext) compositeRecordingFrame();
 
   // Compass
   const compassCanvas = document.getElementById('compass-canvas');
@@ -9164,6 +9208,15 @@ let recorderTimer = null;
 let recorderStartedAt = 0;
 let viewerUnloading = false;
 
+// The recorder films a 2D copy of each rendered frame with the OSM
+// attribution stamped on it (the live canvas itself stays unmarked); the
+// render loop calls this after every frame while a recording runs.
+function compositeRecordingFrame() {
+  if (!recordContext || !recordCanvas) return;
+  recordContext.drawImage(renderer.domElement, 0, 0, recordCanvas.width, recordCanvas.height);
+  drawAttribution(recordContext, recordCanvas.width, recordCanvas.height);
+}
+
 function renderSceneFrame() {
   ssaoPass.enabled = Boolean(settings.enableSSAO);
   bloomPass.enabled = Boolean(settings.enableBloom && bloomPass.strength > 0.001);
@@ -9198,13 +9251,27 @@ function downloadBlob(blob, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-function canvasToBlob(mimeType, quality) {
+function canvasToBlob(mimeType, quality, canvas = renderer.domElement) {
   return new Promise((resolve, reject) => {
-    renderer.domElement.toBlob((blob) => {
+    canvas.toBlob((blob) => {
       if (!blob) reject(new Error('The browser could not encode this image format.'));
       else resolve(blob);
     }, mimeType, quality);
   });
+}
+
+// Every published raster carries the OpenStreetMap attribution (ODbL): the
+// frame just rendered is copied to a 2D canvas and stamped before it is
+// encoded. Call it in the same task as the render (the WebGL drawing buffer
+// is not preserved).
+function attributedFrame(width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { alpha: false });
+  context.drawImage(renderer.domElement, 0, 0, width, height);
+  drawAttribution(context, width, height);
+  return canvas;
 }
 
 function resolveExportSize() {
@@ -9247,7 +9314,8 @@ async function captureSceneImage(mimeType, quality, width, height) {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderSceneFrame();
-    const blob = await canvasToBlob(mimeType, quality);
+    const frame = attributedFrame(width, height);
+    const blob = await canvasToBlob(mimeType, quality, frame);
     if (mimeType === 'image/webp' && blob.type !== 'image/webp') {
       throw new Error('WebP encoding is not supported by this browser.');
     }
@@ -9263,6 +9331,47 @@ async function captureSceneImage(mimeType, quality, width, height) {
   }
 }
 
+// --- 3D model (GLB) ---------------------------------------------------------
+// The static city as a binary glTF in metres around the study-area centre;
+// glb_export.js picks the groups and converts the materials. Loaded on first
+// use so the exporter costs nothing at viewer start.
+function glbTriangleFilter(layerKey) {
+  // The ground mesh is a rectangle clipped to the study area by an alpha mask
+  // in the viewer; the GLB keeps only its triangles inside the study area.
+  if (layerKey !== 'terrain' || settings.showOutsideRoiTerrain) return null;
+  const polygons = roiLocalPolygons();
+  if (!polygons.length) return null;
+  return (a, b, c) => pointInRoiLocal((a.x + b.x + c.x) / 3, (a.z + b.z + c.z) / 3, polygons);
+}
+
+async function buildGlbBlob() {
+  const { exportStaticCityGlb, GLB_ATTRIBUTION } = await import('./glb_export.js');
+  const epsg = Number(projectManifest?.summary?.epsg);
+  const groundY = terrainLocalYAt(0, 0);
+  const originHeight = Number.isFinite(groundY) ? Math.round(groundY * 1000) / 1000 : 0;
+  const { glb, stats } = await exportStaticCityGlb({
+    root: world,
+    xSign: LOCAL_X_SIGN,
+    originHeight,
+    clipTriangles: glbTriangleFilter,
+    generator: '3D OSM Model',
+    georeference: {
+      crs: Number.isFinite(epsg) && epsg > 0 ? `EPSG:${epsg}` : null,
+      originEasting: centerX,
+      originNorthing: centerY,
+      originHeight,
+      units: 'metre',
+      upAxis: 'Y',
+      axes: 'glTF +X east, +Y up, -Z north (Blender: +X east, +Y north, +Z up)',
+      attribution: GLB_ATTRIBUTION,
+      license: 'Map data: Open Database License (ODbL) 1.0, https://www.openstreetmap.org/copyright',
+      source: projectManifest?.summary?.source || 'OpenStreetMap',
+      dataExportedBy: projectManifest?.version ? `3D OSM Model ${projectManifest.version}` : null
+    }
+  });
+  return { blob: new Blob([glb], { type: 'model/gltf-binary' }), stats };
+}
+
 async function exportCurrentScene() {
   if (exportBusy) return;
   const button = document.getElementById('export-scene');
@@ -9272,6 +9381,18 @@ async function exportCurrentScene() {
     const format = document.getElementById('export-format')?.value || 'png';
     const quality = Number(document.getElementById('export-quality')?.value || 0.92);
     const baseName = document.getElementById('export-filename')?.value || 'osm_3d_model';
+    if (format === 'glb') {
+      setExportStatus('Building the 3D model...');
+      await new Promise((resolve) => window.setTimeout(resolve, 0)); // let the status paint
+      const { blob, stats } = await buildGlbBlob();
+      downloadBlob(blob, timestampedFilename(baseName, 'glb'));
+      setExportStatus(
+        `3D model saved: ${stats.meshes} meshes, ${stats.triangles.toLocaleString('en')} triangles, `
+        + `${(blob.size / 1048576).toFixed(1)} MB (metres, origin at the study-area centre).`,
+        'success'
+      );
+      return;
+    }
     const { width, height } = resolveExportSize();
     setExportStatus(`Rendering ${width} x ${height}...`);
 
@@ -9296,7 +9417,7 @@ async function exportCurrentScene() {
       throw new Error(`Unsupported export format: ${format}`);
     }
     downloadBlob(blob, timestampedFilename(baseName, extension));
-    setExportStatus(`${format.toUpperCase()} exported at ${width} x ${height}.`, 'success');
+    setExportStatus(`${format.toUpperCase()} exported at ${width} x ${height}, with the OpenStreetMap attribution.`, 'success');
   } catch (error) {
     console.error('Scene export failed', error);
     setExportStatus(error?.message || 'Export failed.', 'error');
@@ -9353,6 +9474,8 @@ function resetRecorderUi() {
 function stopRecorderTracks() {
   recorderStream?.getTracks().forEach((track) => track.stop());
   recorderStream = null;
+  recordContext = null;
+  recordCanvas = null;
 }
 
 function startSceneRecording() {
@@ -9370,7 +9493,15 @@ function startSceneRecording() {
     if (!format) throw new Error('No supported video encoder is available.');
     const fps = Number(document.getElementById('record-fps')?.value || 30);
     const bitrate = Number(document.getElementById('record-bitrate')?.value || 16000000);
-    recorderStream = renderer.domElement.captureStream(fps);
+    // Film an attributed copy of the canvas at its current size.
+    recordCanvas = document.createElement('canvas');
+    recordCanvas.width = Math.max(2, renderer.domElement.width);
+    recordCanvas.height = Math.max(2, renderer.domElement.height);
+    recordContext = recordCanvas.getContext('2d', { alpha: false });
+    if (!recordCanvas.captureStream || !recordContext) throw new Error('Screen recording is not supported by this browser.');
+    renderSceneFrame();
+    compositeRecordingFrame();
+    recorderStream = recordCanvas.captureStream(fps);
     recorderChunks = [];
     sceneRecorder = new MediaRecorder(recorderStream, {
       mimeType: format.mime,
@@ -9446,15 +9577,26 @@ function updateExportControls() {
   }
   if (widthInput) widthInput.disabled = preset !== 'custom';
   if (heightInput) heightInput.disabled = preset !== 'custom';
+  const isModel = format === 'glb';
   const qualityRow = document.getElementById('export-quality-row');
-  if (qualityRow) qualityRow.hidden = format === 'png' || format === 'svg';
+  if (qualityRow) qualityRow.hidden = isModel || format === 'png' || format === 'svg';
+  const sizeRow = document.getElementById('export-size-row');
+  if (sizeRow) sizeRow.hidden = isModel;
+  const customSize = document.getElementById('export-custom-size');
+  if (customSize) customSize.hidden = isModel;
+  const exportButton = document.getElementById('export-scene');
+  if (exportButton) exportButton.textContent = isModel ? 'Export 3D model' : 'Export current view';
   const notes = {
     png: 'PNG preserves full image quality and is ideal for editing and publication.',
     jpeg: 'JPEG creates a smaller photographic image; use the quality slider to balance size and detail.',
     webp: 'WebP gives high quality at a compact size when supported by the embedded browser.',
     pdf: 'PDF fits the rendered scene onto an A4 presentation page with no external assets.',
     svg: 'SVG wraps the rendered scene in a scalable publication container; the 3D pixels remain raster.',
-    html: 'HTML creates a self-contained, offline snapshot with the image and OSM attribution embedded.'
+    html: 'HTML creates a self-contained, offline snapshot with the image and OSM attribution embedded.',
+    glb: 'GLB saves the city as a 3D model for Blender, SketchUp, Rhino or a 3D-printing slicer: buildings with roofs, '
+      + 'roads, ground, water, greens, trees and street furniture, in metres around the study-area centre, with plain '
+      + 'colours. Sky, lights, cars and pedestrians are left out; the file records its coordinate system and the '
+      + 'OpenStreetMap attribution.'
   };
   const note = document.getElementById('export-format-note');
   if (note) note.textContent = notes[format];

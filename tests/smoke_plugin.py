@@ -13,6 +13,7 @@ Run from the directory that *contains* the plugin folder:
 from __future__ import annotations
 
 import configparser
+import contextlib
 import os
 import re
 import sys
@@ -183,6 +184,32 @@ def test_lifecycle(iface):
     )
 
 
+def test_dialog_lifecycle(iface):
+    """Opening the dialog and unloading leaves no dialog or map outline behind."""
+    from qgis.gui import QgsRubberBand
+
+    module = __import__(PACKAGE)
+    plugin = module.classFactory(iface)
+    plugin.initGui()
+    app = QgsApplication.instance()
+    plugin.show_dialog()
+    app.processEvents()
+    dialog = plugin.dialog
+    opened = dialog is not None and dialog.isVisible()
+    plugin.unload()
+    app.sendPostedEvents()
+    app.processEvents()
+    bands = [item for item in iface.mapCanvas().scene().items() if isinstance(item, QgsRubberBand)]
+    gone = plugin.dialog is None
+    with contextlib.suppress(RuntimeError):
+        gone = gone and not dialog.isVisible()
+    return _ok(
+        "dialog opens, and unload closes it with no map outline left",
+        opened and gone and not bands and not iface.toolbar_icons and not iface.menu_entries,
+        f"opened={opened} closed={gone} outlines={len(bands)}",
+    )
+
+
 def run_all(iface):
     print("=" * 60)
     print(" osm_3d_model - lifecycle smoke")
@@ -193,6 +220,7 @@ def run_all(iface):
         test_icon_exists(),
         test_class_factory(),
         test_lifecycle(iface),
+        test_dialog_lifecycle(iface),
     ]
     passed = sum(1 for r in results if r)
     print("-" * 60)
@@ -208,6 +236,10 @@ def main():
         profile = tempfile.TemporaryDirectory(prefix="osm_3d_model-smoke-")
         app = QgsApplication([], True, profile.name, "external")
         app.initQgis()
+    # Before anything else: no public host, no browser, no file manager.
+    from osm_3d_model.tests._offline import isolate_network
+
+    isolate_network(guard_qgis=owns_app)
     iface = _Iface()
     try:
         return run_all(iface)

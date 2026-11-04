@@ -1,6 +1,6 @@
 # Publishing the GitHub Page
 
-The repository is ready for a GitHub Pages site from the `/docs` folder.
+The repository can serve a GitHub Pages site from the `/docs` folder. Its only page, `docs/index.html`, forwards visitors to the reference manual hosted at <https://geophilo.com/osm_3d_model/manual.html>; the manual itself is maintained with the other geophilo.com pages, not in this repository.
 
 ## Enable Pages
 
@@ -18,8 +18,8 @@ GitHub will publish `docs/index.html`.
 Update the repository description and website URL:
 
 - Description: `One click from QGIS to an interactive OpenStreetMap 3D city.`
-- Website: the GitHub Pages URL created by GitHub.
-- Topics: `qgis`, `openstreetmap`, `threejs`, `3d-city`, `urban-planning`, `geojson`, `procedural-generation`, `osm`, `gis`
+- Website: `https://geophilo.com/osm_3d_model/`, the homepage in `metadata.txt`.
+- Topics: `qgis`, `openstreetmap`, `threejs`, `3d-city`, `urban-planning`, `geojson`, `procedural-generation`, `osm`, `gis`, `glb`
 
 ## Documentation-only Rule
 

@@ -1,20 +1,29 @@
 # -*- coding: utf-8 -*-
-"""Single-button dialog for the 3D OSM Model plugin.
+"""The 3D OSM Model dialog.
 
-A compact, salmon-tinted ("yavru agzi") cockpit: pick an area, optionally add a
-DEM, run the one-button export, and read back a live area estimate plus a
-last-run summary. The heavy lifting lives in ``builder.py``; this file is only
-the GUI and emits :pyattr:`runRequested` / :pyattr:`reopenRequested` /
-:pyattr:`openFolderRequested` for ``main_plugin.py`` to handle.
+A compact, salmon-tinted ("yavru agzi") cockpit: find a place or frame one on
+the map, read the model boundary that gives (it is drawn on the map too), run
+the one-button export, follow the download while it runs and stop it, and read
+back what was built and what was not. The heavy lifting lives in
+``builder.py`` and ``main_plugin.py``; this file is only the GUI and emits
+signals for ``main_plugin.py`` to handle.
+
+Colours: every text colour here reads at 4.5:1 or more on the surface it is
+drawn on. Check boxes, radio buttons and the spin box get colour only, never a
+background or border in the stylesheet (Qt 6 then draws their indicators
+blank, TRAPS 3.7); where a QGIS UI theme styles the spin box, its own text and
+field colours are left to agree with each other.
 """
 from __future__ import annotations
 
+import html
 import os
 import re
+import time
 
 from qgis.core import QgsMapLayerProxyModel, QgsSettings
 from qgis.gui import QgsMapLayerComboBox
-from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from qgis.PyQt.QtGui import QColor, QIcon, QPalette
 from qgis.PyQt.QtWidgets import (
     QApplication,
@@ -26,6 +35,9 @@ from qgis.PyQt.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -38,8 +50,9 @@ from qgis.PyQt.QtWidgets import (
 _SETTINGS_PREFIX = "osm_3d_model"
 
 # Salmon-tinted grey identity, shared with the web viewer's --planx-accent tokens.
-ACCENT = "#b8978a"
-ACCENT_DARK = "#8a675c"
+ACCENT = "#b8978a"        # decoration only: borders, the boundary fill on the map
+ACCENT_DARK = "#8a675c"   # the Run button (white text 5.0:1), the header
+ACCENT_DEEP = "#6e5047"   # accent text on the light surfaces (6.1:1 or more)
 ACCENT_SOFT = "#d8bcb0"
 PANEL_BG = "#f4e9e4"
 CARD_BG = "#fffaf7"
@@ -48,10 +61,18 @@ TEXT = "#4a3a34"
 TEXT_MUTED = "#6b5750"
 OK = "#3f6f54"
 ERR = "#b91c1c"
+WARN = "#8a4b00"
+RUN_BG = ACCENT_DARK
+RUN_BG_HOVER = ACCENT_DEEP
+RUN_FG = "#ffffff"
+RUN_BG_BUSY = "#e3d5cf"   # "Working…" stays readable: TEXT on it is 7.3:1
 
 _ICON = os.path.join(os.path.dirname(__file__), "icons", "icon.png")
 # "&&" renders as a literal ampersand; a single "&" would be eaten as a mnemonic.
 _RUN_LABEL = "Create OSM layers && export 3D viewer"
+_BUSY_LABEL = "Working…"
+REOPEN_LABEL = "Reopen last viewer"
+SAMPLE_LABEL = "Open sample city"
 
 # Live OpenStreetMap tiles, mirrored in main_plugin.Osm3dModelPlugin.
 _BASEMAP_TOOLTIP = (
@@ -70,12 +91,6 @@ SHAPE_OPTIONS = (
     ("extent", "Rectangle (extent)"),
     ("polygon", "Exact polygon / selection"),
 )
-_SHAPE_SHORT = {
-    "circle": "inscribed circle",
-    "rounded": "rounded rectangle",
-    "extent": "rectangle",
-    "polygon": "exact polygon",
-}
 
 # Easy colour themes for the native QGIS layers and 3D web output. Values match
 # builder._THEMES and app.js COLOR_THEMES. These recolour the city content
@@ -105,26 +120,89 @@ _SHAPE_TOOLTIP = (
     "• Rounded rectangle — its bounding box with rounded corners.\n"
     "• Rectangle (extent) — its bounding box.\n"
     "• Exact polygon / selection — the selected polygon as-is "
-    "(falls back to the canvas rectangle).\n"
+    "(the map view rectangle when the map view is the area).\n"
     "The model base extends 5 m beyond the boundary with softly rounded corners."
 )
+_READOUT_TOOLTIP = (
+    "The boundary the export will use: its shape and size in hectares.\n"
+    "It is drawn on the map while this dialog is open."
+)
+_PLACE_TOOLTIP = (
+    "Type a town, a neighbourhood or an address and press Enter.\n"
+    "Pick a result to centre the model on it.\n"
+    "Place search: QGIS's Nominatim service. Names © OpenStreetMap contributors."
+)
+
+# A UTM code in a builder message reads as jargon; say which zone it is instead.
+_UTM_CODE = re.compile(r"\bEPSG:(32[67])(\d\d)\b")
+
+
+def plain_crs(text: str) -> str:
+    """Replace a bare UTM EPSG code ("EPSG:32635") with "UTM zone 35N"."""
+    def zone(match):
+        hemisphere = "N" if match.group(1) == "326" else "S"
+        return f"UTM zone {int(match.group(2))}{hemisphere}"
+
+    return _UTM_CODE.sub(zone, str(text or ""))
+
+
+def utm_zone_label(epsg) -> str:
+    """'UTM zone 35N' for 32635; '' for anything that is not a UTM code."""
+    try:
+        code = int(epsg)
+    except (TypeError, ValueError):
+        return ""
+    if 32601 <= code <= 32660:
+        return f"UTM zone {code - 32600}N"
+    if 32701 <= code <= 32760:
+        return f"UTM zone {code - 32700}S"
+    return ""
+
+
+def age_text(seconds: float) -> str:
+    """'3 hours' for 10,800 s: how old a saved download is, in words."""
+    seconds = max(0.0, float(seconds))
+    if seconds < 60:
+        return "less than a minute"
+    for unit, size in (("day", 86400), ("hour", 3600), ("minute", 60)):
+        if seconds >= size:
+            count = int(seconds // size)
+            return f"{count} {unit}{'' if count == 1 else 's'}"
+    return "less than a minute"
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
 
 
 class Osm3dModelDialog(QDialog):
     runRequested = pyqtSignal(dict)
+    cancelRequested = pyqtSignal()
     reopenRequested = pyqtSignal()
     openFolderRequested = pyqtSignal()
     clearCacheRequested = pyqtSignal()
+    deleteRunsRequested = pyqtSignal()
     basemapRequested = pyqtSignal()
+    freshRequested = pyqtSignal()
+    placeSearchRequested = pyqtSignal(str)
+    placeChosen = pyqtSignal(object)
+    visibilityChanged = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._busy = False
-        self._allow_close = False
+        self._cancelling = False
         self._ever_shown = False
-        # Set by the plugin so the dialog can show a live area estimate without
-        # duplicating the geometry-resolution logic. Signature: probe(source) -> str.
+        self._status_text = ""
+        self._status_kind = "info"
+        self._wait_started = None
+        self._places = []
+        # Set by the plugin so the dialog can describe the model boundary without
+        # duplicating the geometry logic. Signature: probe(params: dict) -> str.
         self.area_probe = None
+        self._elapsed_timer = QTimer(self)
+        self._elapsed_timer.setInterval(1000)
+        self._elapsed_timer.timeout.connect(self._render_status)
         self.setWindowTitle("3D OSM Model")
         if os.path.exists(_ICON):
             self.setWindowIcon(QIcon(_ICON))
@@ -178,10 +256,8 @@ class Osm3dModelDialog(QDialog):
         self.header_widget = self._header()
         root.addWidget(self.header_widget)
 
-        # Everything below the header scrolls. Without this the dialog needs more
-        # height than it can get on a short screen, and Qt squeezes the cards into
-        # each other instead (QGIS 4 needs ~70 px more than QGIS 3 for the same
-        # content, so it hit that ceiling first).
+        # The cards scroll; the footer with the status line, Run and Cancel does
+        # not, so Run stays on screen on a short display with Advanced open.
         self.scroll = QScrollArea()
         self.scroll.setObjectName("bodyScroll")
         self.scroll.setWidgetResizable(True)
@@ -199,42 +275,24 @@ class Osm3dModelDialog(QDialog):
 
         body.addWidget(self._area_card())
         body.addWidget(self._options_card())
-
-        self.run_button = QPushButton(_RUN_LABEL)
-        self.run_button.setObjectName("runButton")
-        self.run_button.setMinimumHeight(42)
-        self.run_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.run_button.clicked.connect(self._emit_run)
-        body.addWidget(self.run_button)
-
-        self.reopen_button = QPushButton("Reopen last viewer")
-        self.reopen_button.setObjectName("ghostButton")
-        self.reopen_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.reopen_button.clicked.connect(self.reopenRequested.emit)
-        body.addWidget(self.reopen_button)
-
-        self.status = QLabel("")
-        self.status.setWordWrap(True)
-        self.status.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
-        body.addWidget(self.status)
-
         self.summary_card = self._summary_card()
         self.summary_card.setVisible(False)
         body.addWidget(self.summary_card)
-
         body.addStretch(1)
 
-        footer = QLabel("PlanX 3D City engine")
-        footer.setWordWrap(True)
-        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        footer.setStyleSheet("color: #9b837a; font-size: 10px; padding-top: 4px;")
-        body.addWidget(footer)
+        self.footer_widget = self._footer()
+        root.addWidget(self.footer_widget)
+
+        # Enter in the search box searches; it must never press another button.
+        for button in self.findChildren(QPushButton):
+            button.setAutoDefault(False)
+            button.setDefault(False)
 
     def _header(self) -> QWidget:
         head = QFrame()
         head.setObjectName("header")
         lay = QHBoxLayout(head)
-        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setContentsMargins(16, 12, 16, 12)
         lay.setSpacing(12)
 
         if os.path.exists(_ICON):
@@ -247,8 +305,8 @@ class Osm3dModelDialog(QDialog):
         title = QLabel("3D OSM Model")
         title.setObjectName("headerTitle")
         subtitle = QLabel(
-            "Pick an area and a boundary shape, download OpenStreetMap, and open it as an "
-            "interactive 3D city. The model sits on a base that extends 5 m beyond the boundary."
+            "Search a place or frame it on the map, then open its OpenStreetMap buildings, "
+            "streets, water and trees as an interactive 3D city."
         )
         subtitle.setObjectName("headerSub")
         subtitle.setWordWrap(True)
@@ -257,11 +315,86 @@ class Osm3dModelDialog(QDialog):
         lay.addLayout(text, 1)
         return head
 
+    def _footer(self) -> QWidget:
+        foot = QFrame()
+        foot.setObjectName("footer")
+        foot.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        lay = QVBoxLayout(foot)
+        lay.setContentsMargins(16, 10, 16, 12)
+        lay.setSpacing(8)
+
+        self.status = QLabel("")
+        self.status.setObjectName("statusLine")
+        self.status.setWordWrap(True)
+        self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.status.setVisible(False)
+        lay.addWidget(self.status)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self.run_button = QPushButton(_RUN_LABEL)
+        self.run_button.setObjectName("runButton")
+        self.run_button.setMinimumHeight(42)
+        self.run_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.run_button.clicked.connect(self._emit_run)
+        row.addWidget(self.run_button, 1)
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setObjectName("cancelButton")
+        self.cancel_button.setMinimumHeight(42)
+        self.cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cancel_button.setToolTip("Stop the download. Nothing is added to the project.")
+        self.cancel_button.clicked.connect(self._cancel)
+        self.cancel_button.setVisible(False)
+        row.addWidget(self.cancel_button)
+        lay.addLayout(row)
+
+        self.reopen_button = QPushButton(SAMPLE_LABEL)
+        self.reopen_button.setObjectName("ghostButton")
+        self.reopen_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.reopen_button.clicked.connect(self.reopenRequested.emit)
+        lay.addWidget(self.reopen_button)
+        self.set_has_last_run(False)
+        return foot
+
     def _area_card(self) -> QWidget:
         card, lay = self._card("Study area")
 
+        search_row = QHBoxLayout()
+        search_row.setSpacing(8)
+        search_label = QLabel("Find a place")
+        search_label.setToolTip(_PLACE_TOOLTIP)
+        search_row.addWidget(search_label)
+        self.place_edit = QLineEdit()
+        self.place_edit.setObjectName("placeEdit")
+        self.place_edit.setPlaceholderText("e.g. Alsancak, Izmir")
+        self.place_edit.setToolTip(_PLACE_TOOLTIP)
+        self.place_edit.setClearButtonEnabled(True)
+        self.place_edit.returnPressed.connect(self._search)
+        self.place_button = QPushButton("Search")
+        self.place_button.setObjectName("ghostButton")
+        self.place_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.place_button.setToolTip(_PLACE_TOOLTIP)
+        self.place_button.clicked.connect(self._search)
+        search_row.addWidget(self.place_edit, 1)
+        search_row.addWidget(self.place_button)
+        lay.addLayout(search_row)
+
+        self.place_list = QListWidget()
+        self.place_list.setObjectName("placeResults")
+        self.place_list.setVisible(False)
+        self.place_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.place_list.itemClicked.connect(self._pick_place)
+        self.place_list.itemActivated.connect(self._pick_place)
+        lay.addWidget(self.place_list)
+
+        self.place_note = QLabel("")
+        self.place_note.setObjectName("hint")
+        self.place_note.setWordWrap(True)
+        self.place_note.setVisible(False)
+        lay.addWidget(self.place_note)
+
         self.source_group = QButtonGroup(self)
-        self.radio_canvas = QRadioButton("Current map view (canvas extent)")
+        self.radio_canvas = QRadioButton("Current map view")
         self.radio_selection = QRadioButton("Selected polygon feature(s) in the active layer")
         self.radio_canvas.setChecked(True)
         self.source_group.addButton(self.radio_canvas)
@@ -285,6 +418,7 @@ class Osm3dModelDialog(QDialog):
         self.area_readout = QLabel("—")
         self.area_readout.setObjectName("readout")
         self.area_readout.setWordWrap(True)
+        self.area_readout.setToolTip(_READOUT_TOOLTIP)
         lay.addWidget(self.area_readout)
 
         self.basemap_button = QPushButton("Add OSM basemap to the map")
@@ -330,6 +464,7 @@ class Osm3dModelDialog(QDialog):
         self.adv_toggle.setObjectName("advToggle")
         self.adv_toggle.setText("Advanced")
         self.adv_toggle.setCheckable(True)
+        self.adv_toggle.setAutoRaise(True)
         self.adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.adv_toggle.setArrowType(Qt.ArrowType.RightArrow)
         self.adv_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -350,10 +485,7 @@ class Osm3dModelDialog(QDialog):
         self.dem_combo.setCurrentIndex(0)
         dem_row.addWidget(self.dem_combo, 1)
         adv.addLayout(dem_row)
-        dem_hint = QLabel("Drapes the city over an elevation raster (clipped to the study boundary).")
-        dem_hint.setWordWrap(True)
-        dem_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
-        adv.addWidget(dem_hint)
+        adv.addWidget(self._hint("Drapes the city over an elevation raster (clipped to the study boundary)."))
 
         bm_row = QHBoxLayout()
         bm_row.addWidget(QLabel("Basemap (optional)"))
@@ -362,22 +494,36 @@ class Osm3dModelDialog(QDialog):
         self.basemap_combo.setCurrentIndex(0)
         bm_row.addWidget(self.basemap_combo, 1)
         adv.addLayout(bm_row)
-        bm_hint = QLabel("Renders the chosen layer (raster, XYZ/satellite tiles, or vector) as a flat "
-                         "underlay beneath the city. Style it live in the viewer's Basemap & Texture panel.")
-        bm_hint.setWordWrap(True)
-        bm_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
-        adv.addWidget(bm_hint)
+        adv.addWidget(self._hint(
+            "Renders the chosen layer (raster, XYZ/satellite tiles, or vector) as a flat "
+            "underlay beneath the city. Style it live in the viewer's Basemap & Texture panel."))
 
         self.clear_cache_button = QPushButton("Clear OSM download cache")
         self.clear_cache_button.setObjectName("ghostButton")
         self.clear_cache_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_cache_button.clicked.connect(self.clearCacheRequested.emit)
         adv.addWidget(self.clear_cache_button)
-        cache_hint = QLabel("OSM responses are cached on disk for a week so re-running the same "
-                            "area skips the download. Clear it to force a fresh fetch.")
-        cache_hint.setWordWrap(True)
-        cache_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
-        adv.addWidget(cache_hint)
+        adv.addWidget(self._hint(
+            "OpenStreetMap answers are kept on disk for a week, so building the same area "
+            "again sends no request. Clear them to force a fresh download."))
+
+        runs_row = QHBoxLayout()
+        runs_row.setSpacing(8)
+        self.runs_folder_button = QPushButton("Open data folder")
+        self.runs_folder_button.setObjectName("ghostButton")
+        self.runs_folder_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.runs_folder_button.clicked.connect(self.openFolderRequested.emit)
+        self.delete_runs_button = QPushButton("Delete old runs")
+        self.delete_runs_button.setObjectName("ghostButton")
+        self.delete_runs_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete_runs_button.setToolTip("Deletes every run folder except the newest one, after you confirm.")
+        self.delete_runs_button.clicked.connect(self.deleteRunsRequested.emit)
+        runs_row.addWidget(self.runs_folder_button)
+        runs_row.addWidget(self.delete_runs_button)
+        adv.addLayout(runs_row)
+        adv.addWidget(self._hint(
+            "Every export is kept in its own folder under your QGIS profile, so a later "
+            "run never overwrites it. Nothing is deleted unless you ask."))
 
         self.adv_container.setVisible(False)
         lay.addWidget(self.adv_container)
@@ -390,7 +536,7 @@ class Osm3dModelDialog(QDialog):
         lay.setContentsMargins(14, 12, 14, 12)
         lay.setSpacing(8)
 
-        self.summary_title = QLabel("✓ Export ready")
+        self.summary_title = QLabel("✓ Model ready")
         self.summary_title.setObjectName("summaryTitle")
         lay.addWidget(self.summary_title)
 
@@ -399,8 +545,37 @@ class Osm3dModelDialog(QDialog):
         self.summary_counts.setWordWrap(True)
         lay.addWidget(self.summary_counts)
 
+        self.summary_details = QLabel("")
+        self.summary_details.setObjectName("summaryText")
+        self.summary_details.setWordWrap(True)
+        lay.addWidget(self.summary_details)
+
+        fetch_row = QHBoxLayout()
+        fetch_row.setSpacing(8)
+        self.summary_fetch = QLabel("")
+        self.summary_fetch.setObjectName("summaryText")
+        self.summary_fetch.setWordWrap(True)
+        self.fresh_button = QPushButton("Download fresh")
+        self.fresh_button.setObjectName("ghostButton")
+        self.fresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.fresh_button.setToolTip("Builds the same area again from a new download.")
+        self.fresh_button.clicked.connect(self._fresh)
+        self.fresh_button.setVisible(False)
+        fetch_row.addWidget(self.summary_fetch, 1)
+        fetch_row.addWidget(self.fresh_button, 0, Qt.AlignmentFlag.AlignTop)
+        lay.addLayout(fetch_row)
+
+        self.summary_warnings = QLabel("")
+        self.summary_warnings.setObjectName("summaryWarnings")
+        self.summary_warnings.setTextFormat(Qt.TextFormat.RichText)
+        self.summary_warnings.setWordWrap(True)
+        self.summary_warnings.setVisible(False)
+        lay.addWidget(self.summary_warnings)
+
         self.summary_circle = QLabel("")
-        self.summary_circle.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
+        self.summary_circle.setObjectName("summaryText")
+        self.summary_circle.setWordWrap(True)
+        self.summary_circle.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.summary_circle)
 
         btn_row = QHBoxLayout()
@@ -429,6 +604,13 @@ class Osm3dModelDialog(QDialog):
         lay.addWidget(heading)
         return card, lay
 
+    @staticmethod
+    def _hint(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("hint")
+        label.setWordWrap(True)
+        return label
+
     # -- Behaviour ----------------------------------------------------------
     def _toggle_advanced(self, checked: bool):
         self.adv_container.setVisible(checked)
@@ -438,8 +620,8 @@ class Osm3dModelDialog(QDialog):
     def _fit_to_contents(self):
         """Grow (or shrink) the window to its content, never past the screen.
 
-        Anything that does not fit scrolls, so opening Advanced can no longer
-        compress the cards into one another.
+        The cards scroll and the footer does not, so opening Advanced on a short
+        screen scrolls the cards while Run stays in view.
         """
         layout = self.layout()
         if layout is None:
@@ -459,12 +641,12 @@ class Osm3dModelDialog(QDialog):
         content = self.body_widget.sizeHint().height()
         if body_layout is not None and body_layout.hasHeightForWidth():
             content = max(content, body_layout.heightForWidth(inner))
-        # The root layout has no margins or spacing, so the only chrome above the
-        # scroll area is the header band (its subtitle wraps, hence heightForWidth).
-        if self.header_widget.hasHeightForWidth():
-            chrome = self.header_widget.heightForWidth(width)
-        else:
-            chrome = self.header_widget.sizeHint().height()
+        chrome = 0
+        for band in (self.header_widget, self.footer_widget):
+            if band.hasHeightForWidth():
+                chrome += band.heightForWidth(width)
+            else:
+                chrome += band.sizeHint().height()
         desired = min(content + chrome + frame, self._available_height())
         self.resize(width, max(desired, self.minimumHeight()))
 
@@ -487,23 +669,106 @@ class Osm3dModelDialog(QDialog):
         try:
             self.basemap_combo.setLayer(layer)
         except (AttributeError, RuntimeError):
-            pass
+            return
+
+    def area_params(self) -> dict:
+        """What the model boundary depends on: the area source, the shape and the cap."""
+        return {
+            "source": "selection" if self.radio_selection.isChecked() else "canvas",
+            "shape": self.shape_combo.currentData() or "circle",
+            "max_ha": float(self.ha_spin.value()),
+        }
+
+    def run_params(self) -> dict:
+        params = self.area_params()
+        params.update({
+            "theme": self.theme_combo.currentData() or _DEFAULT_THEME,
+            "dem_layer": self.dem_combo.currentLayer(),
+            "basemap_layer": self.basemap_combo.currentLayer(),
+            "auto_open": self.auto_open_check.isChecked(),
+        })
+        return params
 
     def _emit_run(self):
         if self._busy:
             return
-        params = {
-            "source": "selection" if self.radio_selection.isChecked() else "canvas",
-            "shape": self.shape_combo.currentData() or "circle",
-            "theme": self.theme_combo.currentData() or _DEFAULT_THEME,
-            "max_ha": float(self.ha_spin.value()),
-            "dem_layer": self.dem_combo.currentLayer(),
-            "basemap_layer": self.basemap_combo.currentLayer(),
-            "auto_open": self.auto_open_check.isChecked(),
-        }
+        params = self.run_params()
         self._save_settings()
-        self.set_status("Starting export...", busy=True)
+        self.set_status("Starting…", busy=True)
         self.runRequested.emit(params)
+
+    def _cancel(self):
+        if not self._busy or self._cancelling:
+            return
+        self.cancel_button.setEnabled(False)
+        self.set_status("Cancelling…", busy=True)
+        self._cancelling = True
+        self.cancelRequested.emit()
+
+    def _fresh(self):
+        if not self._busy:
+            self.freshRequested.emit()
+
+    # -- Place search -------------------------------------------------------
+    def _search(self):
+        if self._busy:
+            return
+        text = " ".join(self.place_edit.text().split())
+        if not text:
+            self._set_place_note("Type a place name first, for example Alsancak, Izmir.", error=True)
+            return
+        self.placeSearchRequested.emit(text)
+
+    def set_place_searching(self, searching: bool):
+        self.place_button.setEnabled(not searching and not self._busy)
+        self.place_button.setText("Searching…" if searching else "Search")
+        if searching:
+            self.place_list.clear()
+            self.place_list.setVisible(False)
+            self._set_place_note("Searching…")
+
+    def show_place_results(self, places, error_text: str = "", query: str = ""):
+        """List up to five places to pick from, or say why there are none."""
+        self.set_place_searching(False)
+        self._places = list(places or [])[:5]
+        self.place_list.clear()
+        if error_text:
+            self.place_list.setVisible(False)
+            self._set_place_note(error_text, error=True)
+            return
+        if not self._places:
+            self.place_list.setVisible(False)
+            asked = f" for “{query}”" if query else ""
+            self._set_place_note(
+                f"No place found{asked}. Try a fuller name, for example Alsancak, Izmir.", error=True)
+            return
+        for place in self._places:
+            item = QListWidgetItem(place.name)
+            item.setToolTip(f"{place.name}\n{place.lat:.5f}, {place.lon:.5f}")
+            self.place_list.addItem(item)
+        rows = self.place_list.count()
+        row_h = max(self.place_list.sizeHintForRow(0), self.fontMetrics().height() + 8)
+        self.place_list.setFixedHeight(rows * row_h + 2 * self.place_list.frameWidth() + 4)
+        self.place_list.setVisible(True)
+        self._set_place_note("Pick a place to centre the model on it.")
+        self._fit_to_contents()
+
+    def _pick_place(self, item):
+        row = self.place_list.row(item)
+        if self._busy or not 0 <= row < len(self._places):
+            return
+        place = self._places[row]
+        self.radio_canvas.setChecked(True)
+        self._set_place_note(f"Centred on {place.name}.")
+        self.placeChosen.emit(place)
+
+    def set_place_note(self, text: str, error: bool = False):
+        self._set_place_note(text, error)
+
+    def _set_place_note(self, text: str, error: bool = False):
+        self.place_note.setStyleSheet(f"color: {ERR if error else TEXT_MUTED};")
+        self.place_note.setText(text)
+        self.place_note.setVisible(bool(text))
 
     # -- Persistence (QgsSettings) -----------------------------------------
     def _restore_settings(self):
@@ -511,7 +776,7 @@ class Osm3dModelDialog(QDialog):
         try:
             self.ha_spin.setValue(float(s.value(f"{_SETTINGS_PREFIX}/max_ha", self.ha_spin.value())))
         except (TypeError, ValueError):
-            pass
+            self.ha_spin.setValue(150.0)
         if str(s.value(f"{_SETTINGS_PREFIX}/source", "canvas")) == "selection":
             self.radio_selection.setChecked(True)
         else:
@@ -536,90 +801,129 @@ class Osm3dModelDialog(QDialog):
         s.setValue(f"{_SETTINGS_PREFIX}/theme", self.theme_combo.currentData() or _DEFAULT_THEME)
         s.setValue(f"{_SETTINGS_PREFIX}/auto_open", self.auto_open_check.isChecked())
 
+    # -- Window events -------------------------------------------------------
     def showEvent(self, event):  # noqa: N802 (Qt override)
         super().showEvent(event)
         first_show = not self._ever_shown
         self._ever_shown = True
         if first_show:
             self._fit_to_contents()
+        self.visibilityChanged.emit(True)
         if not self._busy:
             self._refresh_area_summary()
 
+    def hideEvent(self, event):  # noqa: N802 (Qt override)
+        super().hideEvent(event)
+        self.visibilityChanged.emit(False)
+
     def closeEvent(self, event):  # noqa: N802 (Qt override)
-        if self._busy and not self._allow_close:
-            event.ignore()
-            return
+        # Closing (or Esc) only hides the dialog; a running export carries on and
+        # the toolbar icon brings the dialog back with its live status.
         self._save_settings()
         super().closeEvent(event)
 
-    def reject(self):
-        if self._busy and not self._allow_close:
-            return
-        super().reject()
-
     def prepare_for_unload(self):
-        """Allow QGIS to tear down the dialog even during a running export."""
-        self._allow_close = True
+        """Stop the clocks and leave the busy state before QGIS tears the dialog down."""
+        self._elapsed_timer.stop()
         self._set_busy(False)
 
+    # -- Area readout --------------------------------------------------------
     def refresh_area_summary(self) -> None:
-        """Public entry point: re-measure and redraw the study-area readout.
+        """Public entry point: re-measure the model boundary and redraw the readout.
 
-        Called by the plugin whenever the map canvas is zoomed, panned or
-        reprojected, so the hectare figure never describes a view the user has
-        already left.
+        Called by the plugin whenever the map is zoomed, panned or reprojected,
+        so the figure never describes a view the user has already left.
         """
         self._refresh_area_summary()
 
     def _refresh_area_summary(self, *_):
         if self._busy or not callable(self.area_probe):
             return
-        source = "selection" if self.radio_selection.isChecked() else "canvas"
         try:
-            text = self.area_probe(source)
+            text = self.area_probe(self.area_params())
         except Exception as exc:  # never let a probe error break the dialog
             text = str(exc)
-        # Append the chosen boundary shape to a valid estimate (not to error text).
-        if text and " ha" in text:
-            shape = _SHAPE_SHORT.get(self.shape_combo.currentData(), "shape")
-            text = f"{text}  ·  {shape} boundary"
-            # Say so when the view is bigger than the cap, rather than letting the
-            # user read a hectare figure the export will silently not honour.
-            measured = self._measured_hectares(text)
-            cap = float(self.ha_spin.value())
-            if measured is not None and measured > cap:
-                text = f"{text}  ·  clipped to {cap:,.0f} ha — zoom in to keep it all"
         self.set_area_summary(text)
-
-    @staticmethod
-    def _measured_hectares(text: str):
-        """Pull the hectare figure back out of the probe's sentence.
-
-        The probe owns the wording and the measurement; the dialog only needs the
-        number to decide whether to warn, so it reads the first value rather than
-        duplicating a second QgsDistanceArea measurement here.
-        """
-        match = re.search(r"([\d,]+(?:\.\d+)?)\s*ha", text)
-        if not match:
-            return None
-        try:
-            return float(match.group(1).replace(",", ""))
-        except ValueError:
-            return None
 
     def set_area_summary(self, text: str):
         self.area_readout.setText(text or "—")
 
-    def set_status(self, text: str, error: bool = False, busy: bool = False):
-        color = ERR if error else OK
-        self.status.setStyleSheet(f"color: {color}; font-size: 12px;")
-        self.status.setText(text)
+    # -- Status line ---------------------------------------------------------
+    def set_status(self, text: str, error: bool = False, busy: bool = False,
+                   neutral: bool = False):
+        """Show one sentence in the footer.
+
+        While busy the elapsed seconds since the run started follow the
+        sentence and count up every second ("Asking overpass-api.de… 23 s").
+        """
+        was_busy = self._busy
+        self._status_text = plain_crs(text)
+        if error:
+            self._status_kind = "error"
+        elif busy or neutral:
+            self._status_kind = "info"
+        else:
+            self._status_kind = "ok"
         self._set_busy(busy)
+        if busy:
+            if not was_busy or self._wait_started is None:
+                self._wait_started = time.monotonic()
+            if not self._elapsed_timer.isActive():
+                self._elapsed_timer.start()
+        else:
+            self._elapsed_timer.stop()
+            self._wait_started = None
+        self._render_status()
+
+    @pyqtSlot(str)
+    def show_progress(self, text: str):
+        """A status sentence from the download task (delivered on the UI thread)."""
+        if self._busy and not self._cancelling and text:
+            self.set_status(text, busy=True)
+
+    def elapsed_seconds(self) -> int:
+        if self._wait_started is None:
+            return 0
+        return int(time.monotonic() - self._wait_started)
+
+    def _render_status(self):
+        text = self._status_text
+        if self._busy and self._wait_started is not None and text:
+            seconds = self.elapsed_seconds()
+            if text.endswith(("…", "...")):
+                text = f"{text} {seconds} s"
+            else:
+                text = f"{text} ({seconds} s)"
+        sheet = f"color: {({'error': ERR, 'ok': OK}).get(self._status_kind, TEXT)}; font-size: 12px;"
+        if self.status.styleSheet() != sheet:
+            self.status.setStyleSheet(sheet)
+        self.status.setText(text)
+        self.status.setVisible(bool(text))
+
+    def set_cancel_enabled(self, enabled: bool):
+        self.cancel_button.setEnabled(bool(enabled) and self._busy)
+
+    def set_has_last_run(self, has_run: bool):
+        """'Reopen last viewer' once a run exists; 'Open sample city' before."""
+        if has_run:
+            self.reopen_button.setText(REOPEN_LABEL)
+            self.reopen_button.setToolTip("Opens the newest run in the 3D viewer again.")
+        else:
+            self.reopen_button.setText(SAMPLE_LABEL)
+            self.reopen_button.setToolTip(
+                "Opens the sample city that ships with the plugin, so you can try the "
+                "viewer before downloading anything.")
 
     def _set_busy(self, busy: bool):
+        entering = bool(busy) and not self._busy
         self._busy = bool(busy)
+        if entering or not self._busy:
+            self._cancelling = False
         enabled = not self._busy
         for widget in (
+            self.place_edit,
+            self.place_button,
+            self.place_list,
             self.radio_canvas,
             self.radio_selection,
             self.shape_combo,
@@ -631,30 +935,92 @@ class Osm3dModelDialog(QDialog):
             self.dem_combo,
             self.basemap_combo,
             self.clear_cache_button,
+            self.runs_folder_button,
+            self.delete_runs_button,
             self.reopen_button,
             self.open_viewer_button,
             self.open_folder_button,
+            self.fresh_button,
         ):
             widget.setEnabled(enabled)
         self.run_button.setEnabled(enabled)
-        self.run_button.setText("Working…" if self._busy else _RUN_LABEL)
+        self.run_button.setText(_BUSY_LABEL if self._busy else _RUN_LABEL)
+        if entering:
+            self.cancel_button.setEnabled(True)
+        self.cancel_button.setVisible(self._busy)
 
-    def show_summary(self, summary: dict, url: str = ""):
+    # -- Result --------------------------------------------------------------
+    def show_summary(self, summary: dict, url: str = "", fetch=None, notes=()):
+        """What was built, what was estimated, where the data came from, what failed.
+
+        ``summary`` is builder.build_and_export's dict; ``fetch`` carries the
+        download's ``from_cache``, ``saved_at`` (epoch seconds) and ``host``;
+        ``notes`` are extra problems found after the build (the viewer could not
+        start, for instance). Every warning is listed; none is summarised away.
+        """
+        summary = summary or {}
+        fetch = fetch or {}
         counts = summary.get("counts", {}) or {}
-        furniture = sum(
-            counts.get(key, 0)
-            for key in ("busstops", "benches", "lights", "trashbins")
-        )
-        waterways = counts.get("waterlines", 0) + counts.get("waterareas", 0)
+        warnings = [str(w).strip() for w in (summary.get("warnings") or []) if str(w).strip()]
+        problems = warnings + [str(n).strip() for n in (notes or []) if str(n).strip()]
+
+        if problems:
+            self.summary_title.setText(f"Model ready, with {_plural(len(problems), 'warning')}")
+            self.summary_title.setStyleSheet(f"color: {WARN};")
+        else:
+            self.summary_title.setText("✓ Model ready")
+            self.summary_title.setStyleSheet(f"color: {OK};")
+
+        furniture = sum(int(counts.get(key, 0) or 0)
+                        for key in ("busstops", "benches", "lights", "trashbins"))
+        waterways = int(counts.get("waterlines", 0) or 0) + int(counts.get("waterareas", 0) or 0)
+        buildings = int(summary.get("buildings", counts.get("buildings", 0)) or 0)
         self.summary_counts.setText(
-            f"<b>{counts.get('buildings', 0)}</b> buildings · "
+            f"<b>{buildings}</b> buildings · "
             f"<b>{counts.get('roads', 0)}</b> roads · "
             f"<b>{counts.get('bikelanes', 0)}</b> bike lanes · "
             f"<b>{counts.get('greens', 0)}</b> greens · "
-            f"<b>{counts.get('trees', 0)}</b> trees · "
             f"<b>{waterways}</b> waterways · "
             f"<b>{furniture}</b> furniture"
         )
+
+        details = []
+        if summary.get("osm_trees") is not None or summary.get("planted_trees") is not None:
+            osm_trees = int(summary.get("osm_trees") or 0)
+            planted = int(summary.get("planted_trees") or 0)
+            details.append(f"Trees: {osm_trees} from OSM + {planted} planted.")
+        else:
+            details.append(f"Trees: {int(counts.get('trees', 0) or 0)}.")
+        if buildings and summary.get("estimated_heights") is not None:
+            estimated = int(summary.get("estimated_heights") or 0)
+            if estimated:
+                details.append(f"{estimated} of {buildings} building heights are estimated "
+                               "from the building type.")
+            else:
+                details.append(f"All {buildings} building heights come from OpenStreetMap tags.")
+        self.summary_details.setText(" ".join(details))
+
+        fetch_text = ""
+        if fetch.get("from_cache"):
+            saved_at = fetch.get("saved_at")
+            if saved_at:
+                fetch_text = (f"Built from a copy downloaded {age_text(time.time() - float(saved_at))} "
+                              "ago; no request was sent.")
+            else:
+                fetch_text = "Built from a saved copy; no request was sent."
+        elif fetch.get("host"):
+            fetch_text = f"Downloaded just now from {fetch['host']}."
+        self.summary_fetch.setText(fetch_text)
+        self.summary_fetch.setVisible(bool(fetch_text))
+        self.fresh_button.setVisible(bool(fetch.get("from_cache")))
+
+        if problems:
+            self.summary_warnings.setText(
+                "<br>".join(f"• {html.escape(text)}" for text in problems))
+        else:
+            self.summary_warnings.setText("")
+        self.summary_warnings.setVisible(bool(problems))
+
         label = summary.get("shape_label", "Study area")
         area_ha = summary.get("area_ha", "?")
         if summary.get("radius_m"):
@@ -664,11 +1030,25 @@ class Osm3dModelDialog(QDialog):
         else:
             line = f"{label} · {area_ha} ha"
         if url:
-            line += f"  ·  {url}"
+            line += f"\nViewer: {url}"
         self.summary_circle.setText(line)
+        zone = utm_zone_label(summary.get("epsg"))
+        self.summary_circle.setToolTip(
+            f"Measured in {zone} (EPSG:{summary.get('epsg')})." if zone else "")
+
         self.summary_card.setVisible(True)
         self._fit_to_contents()
-        self.scroll.ensureWidgetVisible(self.summary_card)
+        self._reveal_summary()
+        # The card's geometry settles on the next pass of the event loop.
+        QTimer.singleShot(0, self._reveal_summary)
+
+    def _reveal_summary(self):
+        """Scroll the summary card into view (vertically only)."""
+        layout = self.body_widget.layout()
+        if layout is not None:
+            layout.activate()
+        self.scroll.ensureWidgetVisible(self.summary_card, 0, 12)
+        self.scroll.horizontalScrollBar().setValue(0)
 
     # -- Style --------------------------------------------------------------
     def _stylesheet(self) -> str:
@@ -689,26 +1069,30 @@ class Osm3dModelDialog(QDialog):
         QLabel {{ color: {TEXT}; background: transparent; }}
         #header {{
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 {ACCENT}, stop:1 {ACCENT_DARK});
+                stop:0 {ACCENT_DARK}, stop:1 {ACCENT_DEEP});
         }}
         #headerTitle {{ color: #ffffff; font-size: 19px; font-weight: 800; }}
-        #headerSub {{ color: rgba(255,255,255,0.9); font-size: 11px; }}
+        #headerSub {{ color: #ffffff; font-size: 11px; }}
+        #footer {{ background: {CARD_BG}; border-top: 1px solid {CARD_BORDER}; }}
         #card, #summaryCard {{
             background: {CARD_BG};
             border: 1px solid {CARD_BORDER};
             border-radius: 10px;
         }}
         #summaryCard {{ border: 1px solid {ACCENT_SOFT}; background: #fff4ee; }}
-        #cardTitle {{ font-weight: 700; color: {ACCENT_DARK}; font-size: 12px;
+        #cardTitle {{ font-weight: 700; color: {ACCENT_DEEP}; font-size: 12px;
             text-transform: uppercase; letter-spacing: 0.04em; }}
         #summaryTitle {{ font-weight: 800; color: {OK}; font-size: 14px; }}
         #summaryCounts {{ font-size: 13px; color: {TEXT}; }}
+        #summaryText {{ font-size: 12px; color: {TEXT}; }}
+        #summaryWarnings {{ font-size: 12px; color: {WARN}; }}
+        #hint {{ color: {TEXT_MUTED}; font-size: 11px; }}
         #readout {{
             background: {PANEL_BG};
             border: 1px solid {CARD_BORDER};
             border-radius: 6px;
             padding: 6px 9px;
-            color: {ACCENT_DARK};
+            color: {ACCENT_DEEP};
             font-weight: 600;
             font-size: 12px;
         }}
@@ -718,8 +1102,26 @@ class Osm3dModelDialog(QDialog):
         QRadioButton {{ color: {TEXT}; padding: 2px 0; }}
         QCheckBox {{ color: {TEXT}; padding: 2px 0; }}
         QRadioButton:disabled, QCheckBox:disabled {{ color: {TEXT_MUTED}; }}
-        /* Likewise the spin box: styling it hides its native up/down arrows. */
-        QDoubleSpinBox {{ color: {TEXT}; min-width: 108px; }}
+        /* The spin box gets no colour either: a QGIS UI theme that styles it
+           (Night Mapping, Blend of Gray) sets its field and text colours as a
+           pair, and the default theme reads the dialog palette. Styling its
+           background here would hide its native up/down arrows. */
+        QDoubleSpinBox {{ min-width: 108px; }}
+        /* Text colour too: a stylesheet-polished widget keeps the application
+           palette, which is light-on-dark when QGIS follows a dark desktop. */
+        QLineEdit#placeEdit {{
+            background: #ffffff; color: {TEXT}; border: 1px solid {CARD_BORDER};
+            border-radius: 6px; padding: 5px 8px;
+            selection-background-color: {ACCENT_SOFT}; selection-color: {TEXT};
+        }}
+        QLineEdit#placeEdit:focus {{ border-color: {ACCENT_DARK}; }}
+        QListWidget#placeResults {{
+            background: #ffffff; color: {TEXT}; border: 1px solid {CARD_BORDER};
+            border-radius: 6px; outline: 0;
+        }}
+        QListWidget#placeResults::item {{ padding: 4px 6px; color: {TEXT}; }}
+        QListWidget#placeResults::item:selected {{ background: {ACCENT_SOFT}; color: {TEXT}; }}
+        QListWidget#placeResults::item:hover {{ background: #f6e7e0; color: {TEXT}; }}
         QComboBox {{
             padding: 4px 8px; border: 1px solid {CARD_BORDER};
             border-radius: 6px; background: #ffffff; min-width: 92px; color: {TEXT};
@@ -729,21 +1131,35 @@ class Osm3dModelDialog(QDialog):
         QComboBox::drop-down {{ border: 0; width: 18px; }}
         QComboBox QAbstractItemView {{
             background: #ffffff; color: {TEXT};
-            selection-background-color: {ACCENT_SOFT}; selection-color: {ACCENT_DARK};
+            selection-background-color: {ACCENT_SOFT}; selection-color: {TEXT};
             border: 1px solid {CARD_BORDER}; outline: 0;
         }}
-        #advToggle {{ border: 0; color: {ACCENT_DARK}; font-weight: 700; padding: 2px; }}
-        #advToggle:hover {{ color: {ACCENT}; }}
-        QPushButton#runButton {{
-            background: {ACCENT}; color: #ffffff; border: 0; border-radius: 9px;
-            font-size: 14px; font-weight: 800;
+        /* A transparent, borderless toggle on the card: a QGIS theme's tool-button
+           fill (#535353 in Night Mapping) would otherwise sit behind its text. */
+        #advToggle {{
+            background: transparent; border: 0; color: {ACCENT_DEEP};
+            font-weight: 700; padding: 2px;
         }}
-        QPushButton#runButton:hover {{ background: {ACCENT_DARK}; }}
-        QPushButton#runButton:disabled {{ background: #cbb8b0; color: #efe6e2; }}
+        #advToggle:hover, #advToggle:checked {{ background: transparent; border: 0; color: {TEXT}; }}
+        QPushButton#runButton {{
+            background: {RUN_BG}; color: {RUN_FG}; border: 0; border-radius: 9px;
+            font-size: 14px; font-weight: 800; padding: 0 12px;
+        }}
+        QPushButton#runButton:hover {{ background: {RUN_BG_HOVER}; color: {RUN_FG}; }}
+        QPushButton#runButton:disabled {{ background: {RUN_BG_BUSY}; color: {TEXT}; }}
+        QPushButton#cancelButton {{
+            background: #ffffff; color: {ERR}; border: 1px solid {ERR};
+            border-radius: 9px; font-size: 13px; font-weight: 700; padding: 0 14px;
+        }}
+        QPushButton#cancelButton:hover {{ background: #fdecea; }}
+        QPushButton#cancelButton:disabled {{
+            background: #f7efec; color: {TEXT_MUTED}; border-color: {CARD_BORDER};
+        }}
         QPushButton#ghostButton {{
-            background: transparent; color: {ACCENT_DARK};
+            background: transparent; color: {ACCENT_DEEP};
             border: 1px solid {ACCENT_SOFT}; border-radius: 7px; padding: 7px 10px;
             font-weight: 600;
         }}
         QPushButton#ghostButton:hover {{ background: #f6e7e0; border-color: {ACCENT}; }}
+        QPushButton#ghostButton:disabled {{ color: {TEXT_MUTED}; border-color: {CARD_BORDER}; }}
         """

@@ -11,13 +11,14 @@ The aim is simple: show that a real OSM area can become a useful, readable, attr
 ## Core Demo Script
 
 1. Open QGIS with 3D OSM Model enabled.
-2. Zoom to a compact urban area or select a polygon.
-3. Pick a boundary shape — inscribed circle, rounded rectangle, rectangle, or the exact polygon.
+2. Type a place under **Find a place** in the dialog and pick a result, or zoom the map to a compact urban area, or select a polygon.
+3. Pick a boundary shape — inscribed circle, rounded rectangle, rectangle, or the exact polygon — and show its outline on the map.
 4. Keep the maximum study area small enough for a fast Overpass response.
-5. Click **Create OSM layers & export 3D viewer**.
+5. Click **Create OSM layers & export 3D viewer** and point out the status line: the server being asked and the seconds.
 6. In the viewer, open the dashboard and show live counts.
 7. Toggle Layers, Style, Scene & Sun, and Walk mode.
 8. Take a screenshot from a low golden-hour camera angle.
+9. In Export Studio, choose the format **3D model (GLB)**, click **Export 3D model**, and open the file in Blender with File > Import > glTF 2.0.
 
 ## Showcase Recipes
 
@@ -29,10 +30,11 @@ The aim is simple: show that a real OSM area can become a useful, readable, attr
 | Campus or civic core | Selected polygon around public buildings | Selected-area workflow, walk mode, camera bookmarks, clean screenshot. |
 | Boundary shapes | One area, exported four ways | Inscribed circle, rounded rectangle, rectangle, and exact-polygon platforms compared. |
 | Hillside district | Area with optional DEM available | Terrain base, DEM mesh quality, time-of-day shadows, topography view. |
+| Design hand-off | Any compact area | The GLB export opened in Blender, Rhino or SketchUp. |
 
 ## Screenshot Checklist
 
-Capture these five images for an elite GitHub presentation:
+Capture these five images for the GitHub page:
 
 | Shot | Camera | UI state |
 | --- | --- | --- |

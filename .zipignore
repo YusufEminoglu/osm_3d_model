@@ -1,8 +1,14 @@
 # Plugin Hub package excludes (path-prefix match, relative to plugin folder).
 #
-# web/data ships a small bundled SAMPLE city (planx_manifest.json + layers/*.geojson)
-# so the viewer is never empty on first open. When the user runs the plugin, the
-# real OSM export overwrites it. Only the heavy/runtime-only DEM raster is excluded.
+# web/data holds only the bundled SAMPLE city (planx_manifest.json + layers/*.geojson),
+# so the viewer is never empty before the first run. From 1.10.0 every run is written
+# to its own folder in the QGIS profile (<profile>/osm_3d_model/runs/), never into
+# web/data. The two web/data excludes keep a DEM raster or basemap image left there by
+# a pre-1.10 run on a developer checkout out of the package.
+#
+# docs/ is the GitHub presentation layer. No plugin code opens a file under docs/ (the
+# manual is online), so it can stay out of the zip; check again before relying on it
+# (docs/TRAPS.md 2.5).
 web/data/dem
 web/data/basemap
 docs

@@ -7,32 +7,44 @@ Given a source area geometry (selected polygon or map-canvas extent), this modul
      rectangle or the exact polygon), clamped to a maximum study area (~300 ha),
   3. downloads + clips OSM data to that boundary,
   4. buffers the boundary +BASE_BUFFER_M (soft corners) into the model base,
-  5. writes the GeoJSON layers + manifest the bundled viewer reads.
+  5. writes one *run*: the GeoJSON layers + manifest the bundled viewer reads,
+     the optional DEM and basemap, and a GeoPackage holding every QGIS layer.
+
+Every run gets its own folder under the QGIS profile
+(``<profile>/osm_3d_model/runs/YYYYmmdd-HHMMSS[-label]``), so two runs never
+overwrite each other, a file left open from an earlier run never breaks a new
+one, and a plugin update never touches the user's work.  The plugin's own
+``web/data`` is the bundled sample city and is never written by a build.
 """
 from __future__ import annotations
 
 import contextlib
 import json
 import math
+import os
+import re
 import shutil
 import tempfile
+import time
+import unicodedata
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 from qgis.core import (
+    QgsApplication,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
     QgsFeature,
-    QgsField,
     QgsGeometry,
     QgsPointXY,
     QgsProject,
     QgsRectangle,
+    QgsVectorFileWriter,
     QgsVectorLayer,
     QgsWkbTypes,
 )
-from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QTransform
 
 from . import PLUGIN_VERSION
@@ -126,6 +138,169 @@ def resolve_theme(name: str) -> tuple:
 
 class BuildError(RuntimeError):
     pass
+
+
+# --------------------------------------------------------------------------
+# Runs: one folder per build under the QGIS profile
+# --------------------------------------------------------------------------
+RUNS_SUBDIR = ("osm_3d_model", "runs")
+GPKG_NAME = "layers.gpkg"
+MANIFEST_RELPATH = ("data", "planx_manifest.json")
+#: The viewer and its bundled sample city; a build never writes here.
+BUNDLED_WEB_ROOT = Path(__file__).resolve().parent / "web"
+
+
+def runs_root() -> Path:
+    """``<QGIS profile>/osm_3d_model/runs``, created on demand.
+
+    The profile folder is the one QGIS itself uses for settings, so the runs
+    follow the user's profile (and a test's throwaway profile) and survive a
+    plugin update, which replaces the plugin folder.
+    """
+    settings_dir = str(QgsApplication.qgisSettingsDirPath() or "").strip()
+    if not settings_dir:
+        raise BuildError("QGIS has no profile folder, so the model has nowhere to be saved.")
+    root = Path(settings_dir).joinpath(*RUNS_SUBDIR)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _run_label(label: str) -> str:
+    """A short, filesystem-safe ASCII version of ``label`` ("İzmir Konak" -> "Izmir-Konak")."""
+    text = unicodedata.normalize("NFKD", str(label or "")).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^A-Za-z0-9_-]+", "-", text).strip("-_")
+    return text[:40].strip("-_")
+
+
+def new_run_dir(label: str = "") -> Path:
+    """Create and return a new, unique ``runs_root()/YYYYmmdd-HHMMSS[-label]`` folder."""
+    root = runs_root()
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    suffix = _run_label(label)
+    base = f"{stamp}-{suffix}" if suffix else stamp
+    for index in range(1, 1000):
+        candidate = root / (base if index == 1 else f"{base}-{index}")
+        try:
+            candidate.mkdir(exist_ok=False)
+        except FileExistsError:
+            continue
+        return candidate
+    raise BuildError(f"Could not create a new run folder in {root}.")
+
+
+def _manifest_is_valid(path: Path) -> bool:
+    try:
+        with path.open("r", encoding="utf-8-sig") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
+        return False
+    return isinstance(payload, dict) and str(payload.get("schema", "")).startswith("planx-3d-city-manifest")
+
+
+def _run_folders(root: Path) -> List[Path]:
+    try:
+        children = list(root.iterdir())
+    except OSError:
+        return []
+    return [child for child in children
+            if child.is_dir() and not child.is_symlink() and not child.name.startswith(".")]
+
+
+def latest_run_dir() -> Optional[Path]:
+    """The newest run whose ``data/planx_manifest.json`` is valid, or None.
+
+    The manifest is written last, so a run that failed half-way is never
+    offered as the latest one.
+    """
+    best = None
+    for child in _run_folders(runs_root()):
+        manifest = child.joinpath(*MANIFEST_RELPATH)
+        if not manifest.is_file() or not _manifest_is_valid(manifest):
+            continue
+        try:
+            key = (manifest.stat().st_mtime, child.name)
+        except OSError:
+            continue
+        if best is None or key > best[0]:
+            best = (key, child)
+    return best[1] if best else None
+
+
+def _run_folders_in_project(root: Path) -> set:
+    """Run folders that a layer of the open project reads from."""
+    used = set()
+    try:
+        root_resolved = root.resolve()
+    except OSError:
+        return used
+    for layer in QgsProject.instance().mapLayers().values():
+        source = str(layer.source() or "").split("|", 1)[0]
+        if not source:
+            continue
+        with contextlib.suppress(OSError, ValueError):
+            relative = Path(source).resolve().relative_to(root_resolved)
+            if relative.parts:
+                used.add(root_resolved / relative.parts[0])
+    return used
+
+
+#: Folder names new_run_dir() gives: date-time, an optional label and counter.
+_RUN_NAME = re.compile(r"^\d{8}-\d{6}(?:-[^\\/]*)?$")
+_REPARSE_POINT = 0x400  # stat.FILE_ATTRIBUTE_REPARSE_POINT on Windows
+
+
+def _is_link(path: Path) -> bool:
+    """A symlink, or on Windows any reparse point (a junction included;
+    Path.is_junction only arrived in Python 3.12)."""
+    if path.is_symlink():
+        return True
+    try:
+        attributes = getattr(os.lstat(str(path)), "st_file_attributes", 0)
+    except OSError:
+        return True
+    return bool(attributes & _REPARSE_POINT)
+
+
+def delete_runs_except(keep: Optional[Path]) -> int:
+    """Delete every run folder except ``keep``; return how many were removed.
+
+    A run that a layer of the open project still reads from is kept, and so is
+    a run with a file open in another program: the folder is first renamed
+    (which Windows refuses while a file inside is open) and only then deleted,
+    so a run is either removed completely or left intact.
+    """
+    root = runs_root()
+    keep_resolved = None
+    if keep is not None:
+        with contextlib.suppress(OSError):
+            keep_resolved = Path(keep).resolve()
+    in_use = _run_folders_in_project(root)
+    removed = 0
+    try:
+        children = sorted(root.iterdir())
+    except OSError:
+        return 0
+    for child in children:
+        # only run folders this plugin made, and leftovers of an earlier delete
+        if not (_RUN_NAME.match(child.name) or child.name.startswith(".deleting-")):
+            continue
+        if not child.is_dir() or _is_link(child):
+            continue
+        try:
+            resolved = child.resolve()
+        except OSError:
+            continue
+        if resolved == keep_resolved or resolved in in_use:
+            continue
+        doomed = root / f".deleting-{uuid.uuid4().hex}"
+        try:
+            child.rename(doomed)
+        except OSError:
+            continue  # something inside is open; leave the whole run as it is
+        shutil.rmtree(doomed, ignore_errors=True)
+        if not child.name.startswith("."):
+            removed += 1
+    return removed
 
 
 # --------------------------------------------------------------------------
@@ -372,12 +547,8 @@ def prepare_study_area(source_geom: QgsGeometry, source_crs: QgsCoordinateRefere
 # --------------------------------------------------------------------------
 def _remove_file(path: Path) -> None:
     """Remove an optional generated artifact without masking the real export."""
-    try:
+    with contextlib.suppress(OSError):
         path.unlink()
-    except FileNotFoundError:
-        pass
-    except OSError:
-        pass
 
 
 def _validate_geojson(path: Path) -> None:
@@ -433,10 +604,10 @@ def _write_json_atomic(path: Path, payload: dict) -> None:
 
 def _roi_layer_from_polygon(base_utm: QgsGeometry, epsg_dest: int) -> QgsVectorLayer:
     """Memory layer holding the model base footprint (any boundary shape)."""
-    layer = QgsVectorLayer(f"MultiPolygon?crs=EPSG:{epsg_dest}", "Study area", "memory")
+    # The field is declared in the provider URI: no QVariant/QMetaType type
+    # enum is needed, which keeps QGIS 3.28 and QGIS 4 on the same code path.
+    layer = QgsVectorLayer(f"MultiPolygon?crs=EPSG:{epsg_dest}&field=name:string(80)", "Study area", "memory")
     pr = layer.dataProvider()
-    pr.addAttributes([QgsField("name", QVariant.String)])
-    layer.updateFields()
     geom = QgsGeometry(base_utm)
     geom.convertToMultiType()  # the provider is MultiPolygon; accept single parts too
     feat = QgsFeature()
@@ -450,8 +621,55 @@ def _roi_layer_from_polygon(base_utm: QgsGeometry, epsg_dest: int) -> QgsVectorL
 # --------------------------------------------------------------------------
 # Optional DEM clip
 # --------------------------------------------------------------------------
-def _export_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path, feedback=None) -> bool:
-    """Best-effort DEM warp/clip to the model base bbox in the target UTM CRS."""
+def _short_reason(exc: BaseException) -> str:
+    """One line of an exception, for a plain sentence ("could not clip it (...)")."""
+    text = " ".join(str(exc).split()) or type(exc).__name__
+    return text if len(text) <= 160 else text[:157] + "..."
+
+
+def _dem_overlaps(dem_layer, bbox: QgsRectangle, epsg_dest: int) -> Optional[bool]:
+    """True/False when the DEM's extent can be compared with the area, else None."""
+    with contextlib.suppress(Exception):
+        transform = QgsCoordinateTransform(
+            dem_layer.crs(), QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest), QgsProject.instance())
+        extent = transform.transformBoundingBox(dem_layer.extent())
+        if extent.isEmpty() or not all(math.isfinite(v) for v in (
+                extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum())):
+            return None
+        return bool(extent.intersects(bbox))
+    return None
+
+
+def _export_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path,
+                feedback=None) -> tuple:
+    """Warp/clip the DEM to the model base bbox in the target UTM CRS.
+
+    Returns ``(True, None)`` on success, else ``(False, sentence)`` where the
+    sentence tells the user, in plain words, why the DEM was left out.  The
+    DEM is optional: a failure never blocks the export.
+    """
+    warning = _dem_problem(dem_layer, base_utm, epsg_dest)
+    if warning is None:
+        try:
+            _clip_dem(dem_layer, base_utm, epsg_dest, dem_path)
+        except Exception as exc:  # DEM is optional; never block the export.
+            warning = f"The DEM was skipped: QGIS could not clip it ({_short_reason(exc)})."
+    if warning is not None:
+        if feedback:
+            feedback(warning)
+        return False, warning
+    return True, None
+
+
+def _dem_problem(dem_layer, base_utm: QgsGeometry, epsg_dest: int) -> Optional[str]:
+    if not hasattr(dem_layer, "isValid") or not dem_layer.isValid():
+        return "The DEM was skipped: the layer could not be read (its file may have moved)."
+    if _dem_overlaps(dem_layer, base_utm.boundingBox(), epsg_dest) is False:
+        return "The DEM was skipped: it does not overlap the area."
+    return None
+
+
+def _clip_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path) -> None:
     tmp_path = None
     try:
         import processing  # noqa: WPS433 (QGIS runtime import)
@@ -478,14 +696,9 @@ def _export_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path
             "OUTPUT": str(tmp_path),
         })
         if not tmp_path.is_file() or tmp_path.stat().st_size <= 0:
-            raise BuildError("QGIS did not create the clipped DEM.")
+            raise BuildError("QGIS did not create the clipped file")
         tmp_path.replace(dem_path)
         tmp_path = None
-        return True
-    except Exception as exc:  # DEM is optional; never block the export.
-        if feedback:
-            feedback(f"DEM skipped ({exc}).")
-        return False
     finally:
         if tmp_path is not None:
             _remove_file(tmp_path)
@@ -494,67 +707,168 @@ def _export_dem(dem_layer, base_utm: QgsGeometry, epsg_dest: int, dem_path: Path
 # --------------------------------------------------------------------------
 # Optional basemap underlay
 # --------------------------------------------------------------------------
+#: The whole basemap step (probe + full render) never takes longer than this.
+BASEMAP_DEADLINE_S = 20.0
+#: A small first render of the same area: when its tiles do not arrive (or it
+#: draws nothing) the full render is not started, so an unreachable tile
+#: server costs a handful of requests instead of hundreds.
+BASEMAP_PROBE_S = 6.0
+BASEMAP_PROBE_PX = 128
+BASEMAP_MAX_PX = 2048
+
+
+def _event_loop_flags():
+    from qgis.PyQt.QtCore import QEventLoop
+
+    flags = getattr(QEventLoop, "ProcessEventsFlag", QEventLoop)
+    return getattr(flags, "ExcludeUserInputEvents")
+
+
+def _render_layer_image(layer, extent: QgsRectangle, epsg_dest: int, width: int, height: int,
+                        deadline_s: float):
+    """Render ``layer`` asynchronously; return ``(image or None, timed_out)``.
+
+    QGIS keeps painting and answering the window manager while the tiles
+    arrive (a local event loop that leaves out user input, the same rule the
+    dialog's progress updates follow).  When ``deadline_s`` passes, the render
+    is cancelled.
+    """
+    from qgis.core import QgsMapRendererParallelJob, QgsMapSettings
+    from qgis.PyQt.QtCore import QEventLoop, QSize, QTimer
+    from qgis.PyQt.QtGui import QColor
+
+    settings = QgsMapSettings()
+    settings.setLayers([layer])
+    settings.setDestinationCrs(QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest))
+    settings.setExtent(extent)
+    settings.setOutputSize(QSize(int(width), int(height)))
+    settings.setBackgroundColor(QColor(0, 0, 0, 0))  # transparent where the layer has no data
+    with contextlib.suppress(Exception):
+        settings.setFlag(QgsMapSettings.Flag.Antialiasing, True)
+
+    job = QgsMapRendererParallelJob(settings)
+    loop = QEventLoop()
+    timer = QTimer()
+    timer.setSingleShot(True)
+    timer.timeout.connect(loop.quit)
+    job.finished.connect(loop.quit)
+    job.start()
+    timer.start(max(1, int(deadline_s * 1000)))
+    if job.isActive():
+        loop.exec(_event_loop_flags())
+    timer.stop()
+    if job.isActive():
+        job.cancelWithoutBlocking()
+        grace = time.monotonic() + 2.0
+        while job.isActive() and time.monotonic() < grace:
+            loop.processEvents(_event_loop_flags(), 50)
+        if job.isActive():
+            job.cancel()  # last resort: waits for the render threads
+        return None, True
+    return job.renderedImage(), False
+
+
+def _image_bytes(image) -> bytes:
+    from qgis.PyQt.QtGui import QImage
+
+    image = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+    size = image.sizeInBytes() if hasattr(image, "sizeInBytes") else image.byteCount()
+    pointer = image.constBits()
+    if hasattr(pointer, "setsize"):
+        pointer.setsize(size)
+    return bytes(pointer.asstring(size))
+
+
+def _image_is_transparent(image) -> bool:
+    """True when every pixel is fully transparent (premultiplied ARGB 0)."""
+    raw = _image_bytes(image)
+    return not raw or raw.count(0) == len(raw)
+
+
+def _image_is_blank(image) -> bool:
+    """True when the image is fully transparent or one single colour."""
+    raw = _image_bytes(image)
+    if len(raw) < 4:
+        return True
+    return raw == raw[:4] * (len(raw) // 4)
+
+
+def _basemap_size(bbox: QgsRectangle, max_px: int, min_px: int) -> tuple:
+    w_m, h_m = bbox.width(), bbox.height()
+    if w_m >= h_m:
+        return max_px, max(min_px, int(round(max_px * h_m / w_m)))
+    return max(min_px, int(round(max_px * w_m / h_m))), max_px
+
+
 def _export_basemap(basemap_layer, base_utm: QgsGeometry, epsg_dest: int,
-                    out_path: Path, feedback=None):
+                    out_path: Path, feedback=None) -> tuple:
     """Render a basemap layer to a transparent PNG over the model base bbox (UTM).
 
-    Works for raster, XYZ/tiled and vector layers via the QGIS map renderer.
-    Returns the bbox dict {minx,miny,maxx,maxy} on success, else None. Any failure
-    (network tiles, missing renderer) is swallowed so the export never breaks.
+    Works for raster, XYZ/tiled and vector layers via the QGIS map renderer,
+    under ``BASEMAP_DEADLINE_S`` and without freezing QGIS.  Returns
+    ``(bbox dict, None)`` on success, else ``(None, sentence)`` where the
+    sentence says in plain words why there is no basemap.  A blank result
+    (fully transparent or a single colour) is never published.
     """
+    try:
+        bbox, warning = _render_basemap(basemap_layer, base_utm, epsg_dest, out_path)
+    except Exception as exc:  # basemap is optional; never block the export.
+        bbox, warning = None, f"The basemap was skipped: QGIS could not draw it ({_short_reason(exc)})."
+    if warning is not None:
+        _remove_file(out_path)
+        if feedback:
+            feedback(warning)
+    return bbox, warning
+
+
+def _render_basemap(basemap_layer, base_utm: QgsGeometry, epsg_dest: int, out_path: Path) -> tuple:
+    if basemap_layer is None or not hasattr(basemap_layer, "isValid") or not basemap_layer.isValid():
+        return None, "The basemap was skipped: the layer could not be read."
+    bbox = base_utm.boundingBox()
+    if bbox.width() <= 0 or bbox.height() <= 0:
+        return None, "The basemap was skipped: the model area is empty."
+    started = time.monotonic()
+
+    probe_w, probe_h = _basemap_size(bbox, BASEMAP_PROBE_PX, 32)
+    probe, timed_out = _render_layer_image(basemap_layer, bbox, epsg_dest, probe_w, probe_h,
+                                           min(BASEMAP_PROBE_S, BASEMAP_DEADLINE_S))
+    if timed_out:
+        return None, (f"The basemap was skipped: its map tiles did not arrive within "
+                      f"{BASEMAP_PROBE_S:.0f} seconds. Check the internet connection, "
+                      f"or choose another basemap layer.")
+    if probe is None or probe.isNull() or _image_is_transparent(probe):
+        return None, ("The basemap was skipped: it drew nothing in this area (the layer has no data "
+                      "here, or its tile server refused the requests).")
+
+    remaining = BASEMAP_DEADLINE_S - (time.monotonic() - started)
+    if remaining <= 0.5:
+        return None, f"The basemap was skipped: it did not finish drawing within {BASEMAP_DEADLINE_S:.0f} seconds."
+    width, height = _basemap_size(bbox, BASEMAP_MAX_PX, 256)
+    image, timed_out = _render_layer_image(basemap_layer, bbox, epsg_dest, width, height, remaining)
+    if timed_out:
+        return None, f"The basemap was skipped: it did not finish drawing within {BASEMAP_DEADLINE_S:.0f} seconds."
+    if image is None or image.isNull() or _image_is_blank(image):
+        return None, ("The basemap was skipped: it came out blank (a single colour or nothing at all), "
+                      "so it was not used.")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = None
     try:
-        from qgis.core import QgsMapSettings, QgsMapRendererCustomPainterJob
-        from qgis.PyQt.QtCore import QSize
-        from qgis.PyQt.QtGui import QColor, QImage, QPainter
-
-        bbox = base_utm.boundingBox()
-        w_m, h_m = bbox.width(), bbox.height()
-        if w_m <= 0 or h_m <= 0:
-            return None
-        max_px = 2048
-        if w_m >= h_m:
-            wpx, hpx = max_px, max(256, int(round(max_px * h_m / w_m)))
-        else:
-            hpx, wpx = max_px, max(256, int(round(max_px * w_m / h_m)))
-
-        settings = QgsMapSettings()
-        settings.setLayers([basemap_layer])
-        settings.setDestinationCrs(QgsCoordinateReferenceSystem.fromEpsgId(epsg_dest))
-        settings.setExtent(bbox)
-        settings.setOutputSize(QSize(wpx, hpx))
-        settings.setBackgroundColor(QColor(0, 0, 0, 0))  # transparent where the layer has no data
-        with contextlib.suppress(Exception):
-            settings.setFlag(QgsMapSettings.Flag.Antialiasing, True)
-
-        image = QImage(QSize(wpx, hpx), QImage.Format.Format_ARGB32_Premultiplied)
-        image.fill(0)
-        painter = QPainter(image)
-        try:
-            job = QgsMapRendererCustomPainterJob(settings, painter)
-            job.renderSynchronously()
-        finally:
-            painter.end()
-
-        out_path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
             dir=str(out_path.parent), prefix=".basemap-", suffix=".png", delete=False,
         ) as handle:
             tmp_path = Path(handle.name)
-        if image.save(str(tmp_path), "PNG") and tmp_path.stat().st_size > 0:
-            tmp_path.replace(out_path)
-            tmp_path = None
-            return {
-                "minx": bbox.xMinimum(), "miny": bbox.yMinimum(),
-                "maxx": bbox.xMaximum(), "maxy": bbox.yMaximum(),
-            }
-    except Exception as exc:  # basemap is optional; never block the export.
-        if feedback:
-            feedback(f"Basemap skipped ({exc}).")
+        if not image.save(str(tmp_path), "PNG") or tmp_path.stat().st_size <= 0:
+            return None, "The basemap was skipped: QGIS could not save the image."
+        tmp_path.replace(out_path)
+        tmp_path = None
     finally:
         if tmp_path is not None:
             _remove_file(tmp_path)
-    return None
+    return {
+        "minx": bbox.xMinimum(), "miny": bbox.yMinimum(),
+        "maxx": bbox.xMaximum(), "maxy": bbox.yMaximum(),
+    }, None
 
 
 # --------------------------------------------------------------------------
@@ -631,7 +945,7 @@ def _viewer_defaults(latitude: float, has_dem: bool, theme_name: str = DEFAULT_T
     }
 
 
-def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bool,
+def _write_manifest(run_root: Path, epsg_dest: int, latitude: float, has_dem: bool,
                     theme_name: str = DEFAULT_THEME, basemap_bbox=None) -> Path:
     theme_name, theme_pal = resolve_theme(theme_name)
     manifest = {
@@ -667,19 +981,107 @@ def _write_manifest(web_root: Path, epsg_dest: int, latitude: float, has_dem: bo
         "assetTheme": theme_pal["assetTheme"],
         "colorTheme": theme_name,
         "inputs": [],
-        "summary": {"source": "OpenStreetMap", "epsg": epsg_dest, "hasDem": has_dem},
+        "summary": {"source": "OpenStreetMap", "epsg": epsg_dest, "hasDem": has_dem,
+                    "attribution": OSM_ATTRIBUTION},
     }
-    manifest_path = web_root / "data" / "planx_manifest.json"
+    manifest_path = run_root.joinpath(*MANIFEST_RELPATH)
     _write_json_atomic(manifest_path, manifest)
     return manifest_path
 
 
+OSM_ATTRIBUTION = "© OpenStreetMap contributors"
 PROJECT_OWNED_PROPERTY = "osm_3d_model/owned"
 
+# role in the download dict -> (GeoPackage table, project layer name), in the
+# legend order: point furniture and roads above polygons, the study-area base
+# at the very bottom.
+PROJECT_LAYERS = (
+    ("lights", "street_lights", "OSM Street Lights"),
+    ("busstops", "bus_stops", "OSM Bus Stops"),
+    ("benches", "benches", "OSM Benches"),
+    ("trashbins", "trash_bins", "OSM Trash Bins"),
+    ("trees", "trees", "OSM Trees"),
+    ("bikelanes", "bike_lanes", "OSM Bike Lanes"),
+    ("roads", "roads", "OSM Roads"),
+    ("buildings", "buildings", "OSM Buildings"),
+    ("waterlines", "waterways", "OSM Waterways"),
+    ("greens", "greens_water", "OSM Greens & Water"),
+    ("roi", "study_area", "OSM Study Area"),
+)
 
-def _replace_project_layers(project: QgsProject, roi_layer: QgsVectorLayer, osm: dict,
-                            theme_name: str, theme_palette: dict) -> None:
-    """Replace the previous run with a styled, correctly ordered layer group."""
+# GeoJSON file the viewer reads -> role in the download dict.
+VIEWER_LAYERS = (
+    ("roi", "roi"),
+    ("mybuildings", "buildings"), ("myroads", "roads"),
+    ("mytrees", "trees"), ("myblocks", "greens"),
+    ("mywaterlines", "waterlines"), ("mybikelanes", "bikelanes"),
+    ("mybusstops", "busstops"), ("mybenches", "benches"),
+    ("mylights", "lights"), ("mytrashbins", "trashbins"),
+)
+
+
+def _writer_enum(scope: str, name: str):
+    """``QgsVectorFileWriter.<scope>.<name>`` (QGIS 4), else the unscoped member (QGIS 3)."""
+    owner = getattr(QgsVectorFileWriter, scope, None)
+    value = getattr(owner, name, None) if owner is not None else None
+    return value if value is not None else getattr(QgsVectorFileWriter, name)
+
+
+def _is_point_layer(layer) -> bool:
+    return QgsWkbTypes.displayString(QgsWkbTypes.flatType(layer.wkbType())).lower().endswith("point")
+
+
+def _write_geopackage(gpkg_path: Path, tables: list) -> None:
+    """Write ``(table, layer)`` pairs into one GeoPackage, published at once.
+
+    The file is assembled under a temporary name next to the target and then
+    renamed, so a reader never sees a half-written GeoPackage.
+    """
+    gpkg_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = gpkg_path.with_name(f".{gpkg_path.stem}-{uuid.uuid4().hex}.gpkg")
+    context = QgsProject.instance().transformContext()
+    no_error = _writer_enum("WriterError", "NoError")
+    try:
+        for index, (table, layer) in enumerate(tables):
+            options = QgsVectorFileWriter.SaveVectorOptions()
+            options.driverName = "GPKG"
+            options.layerName = table
+            options.fileEncoding = "UTF-8"
+            options.actionOnExistingFile = _writer_enum(
+                "ActionOnExistingFile", "CreateOrOverwriteFile" if index == 0 else "CreateOrOverwriteLayer")
+            # Clipping can turn a line or polygon into a multi-part one inside
+            # a single-part memory layer; a GeoPackage table needs one type.
+            options.forceMulti = not _is_point_layer(layer)
+            result = QgsVectorFileWriter.writeAsVectorFormatV3(layer, str(tmp_path), context, options)
+            error = result[0] if isinstance(result, tuple) else result
+            message = str(result[1]) if isinstance(result, tuple) and len(result) > 1 else ""
+            if error != no_error:
+                detail = f": {message}" if message else ""
+                raise BuildError(f"QGIS could not write the {table} table of {gpkg_path.name}{detail}")
+        if not tmp_path.is_file() or tmp_path.stat().st_size <= 0:
+            raise BuildError(f"QGIS did not create {gpkg_path.name}.")
+        try:
+            tmp_path.replace(gpkg_path)
+        except OSError as exc:
+            raise BuildError(
+                f"{gpkg_path} is open in another program, so the layers could not be saved "
+                f"({_short_reason(exc)}).") from exc
+        tmp_path = None
+    finally:
+        if tmp_path is not None:
+            for leftover in (tmp_path, tmp_path.with_name(tmp_path.name + "-wal"),
+                             tmp_path.with_name(tmp_path.name + "-shm")):
+                _remove_file(leftover)
+
+
+def _gpkg_layer(gpkg_path: Path, table: str, name: str) -> QgsVectorLayer:
+    layer = QgsVectorLayer(f"{gpkg_path.as_posix()}|layername={table}", name, "ogr")
+    if not layer.isValid():
+        raise BuildError(f"QGIS could not open the {table} table of {gpkg_path}.")
+    return layer
+
+
+def _remove_owned_layers(project: QgsProject) -> None:
     root = project.layerTreeRoot()
     for layer in list(project.mapLayers().values()):
         if layer.customProperty(PROJECT_OWNED_PROPERTY, False):
@@ -688,45 +1090,88 @@ def _replace_project_layers(project: QgsProject, roi_layer: QgsVectorLayer, osm:
         if node.customProperty(PROJECT_OWNED_PROPERTY, False):
             root.removeChildNode(node)
 
-    group = root.insertGroup(0, MODEL_NAME)
+
+def _replace_project_layers(project: QgsProject, gpkg_path: Path, feature_counts: dict,
+                            theme_name: str, theme_palette: dict) -> None:
+    """Replace the previous run with this run's layers, read from its GeoPackage.
+
+    The layers keep the 1.9.1 names and the native styling of qgis_styling, and
+    because they live in a file (not in memory) they come back with their
+    features when the project is saved and opened again.  Empty layers stay in
+    the GeoPackage but are not added to the project (as in 1.9.1); the study
+    area always is.
+    """
+    loaded = {role: _gpkg_layer(gpkg_path, table, label) for role, table, label in PROJECT_LAYERS
+              if role == "roi" or feature_counts.get(role, 0) > 0}
+    roi_layer = loaded.pop("roi")
+    style_export_layers(roi_layer, loaded, theme_name, theme_palette)
+
+    _remove_owned_layers(project)
+    group = project.layerTreeRoot().insertGroup(0, MODEL_NAME)
     group.setCustomProperty(PROJECT_OWNED_PROPERTY, True)
     group.setCustomProperty("osm_3d_model/theme", theme_name)
-    style_export_layers(roi_layer, osm, theme_name, theme_palette)
-
-    # QGIS draws the legend from top to bottom. Keep point furniture and roads
-    # above polygons, and the study-area paper/base fill at the very bottom.
-    layers = [
-        (osm.get("lights"), "OSM Street Lights"),
-        (osm.get("busstops"), "OSM Bus Stops"),
-        (osm.get("benches"), "OSM Benches"),
-        (osm.get("trashbins"), "OSM Trash Bins"),
-        (osm.get("trees"), "OSM Trees"),
-        (osm.get("bikelanes"), "OSM Bike Lanes"),
-        (osm.get("roads"), "OSM Roads"),
-        (osm.get("buildings"), "OSM Buildings"),
-        (osm.get("waterlines"), "OSM Waterways"),
-        (osm.get("greens"), "OSM Greens & Water"),
-        (roi_layer, "OSM Study Area"),
-    ]
-    for layer, label in layers:
-        if layer is None or (layer is not roi_layer and layer.featureCount() <= 0):
+    group.setCustomProperty("osm_3d_model/run_dir", str(gpkg_path.parent))
+    for role, _table, _label in PROJECT_LAYERS:
+        layer = roi_layer if role == "roi" else loaded.get(role)
+        if layer is None:
             continue
-        layer.setName(label)
         layer.setCustomProperty(PROJECT_OWNED_PROPERTY, True)
         project.addMapLayer(layer, False)
         group.addLayer(layer)
+
+
+def _write_viewer_layers(run_root: Path, layers: dict) -> None:
+    """Write the viewer's GeoJSON files and publish ``data/layers`` in one step."""
+    vector_dir = run_root / "data" / "layers"
+    vector_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(tempfile.mkdtemp(prefix=".layers-", dir=str(vector_dir.parent)))
+    try:
+        for name, role in VIEWER_LAYERS:
+            out_path = staging_dir / f"{name}.geojson"
+            save_layer_to_geojson(layers[role], out_path)
+            _validate_geojson(out_path)
+        try:
+            _publish_directory(staging_dir, vector_dir)
+        except OSError as exc:
+            raise BuildError(
+                f"A file in {vector_dir} is open in another program, so the layers could not be "
+                f"replaced ({_short_reason(exc)}).") from exc
+        staging_dir = None
+    finally:
+        if staging_dir is not None and staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+def _count(counts: dict, key: str) -> int:
+    with contextlib.suppress(TypeError, ValueError):
+        return int(counts.get(key) or 0)
+    return 0
 
 
 # --------------------------------------------------------------------------
 # Orchestration
 # --------------------------------------------------------------------------
 def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenceSystem,
-                     web_root: str, dem_layer=None, basemap_layer=None,
+                     web_root: Optional[str] = None, dem_layer=None, basemap_layer=None,
                      max_ha: float = MAX_STUDY_HA_DEFAULT,
                      add_to_project: bool = True, shape: str = SHAPE_CIRCLE,
                      theme: str = DEFAULT_THEME, use_cache: bool = True,
-                     feedback=None, prepared: dict | None = None,
-                     osm_payload: dict | None = None) -> dict:
+                     feedback=None, prepared: Optional[dict] = None,
+                     osm_payload: Optional[dict] = None,
+                     run_dir: Optional[Path] = None) -> dict:
+    """Download, clip and publish one run; return the summary.
+
+    ``run_dir`` is the folder the run is written to (``None``: a new folder
+    from :func:`new_run_dir`).  ``web_root`` is accepted for compatibility with
+    1.9.1 callers and is never written: the plugin's ``web/data`` stays the
+    bundled sample city.  The run holds ``data/planx_manifest.json``,
+    ``data/layers/*.geojson``, ``data/dem/mydem.tif`` and
+    ``data/basemap/basemap.png`` for the viewer, and ``layers.gpkg`` with every
+    QGIS layer; the project layers load from that GeoPackage.
+
+    DEM and basemap problems never stop the export: each becomes a plain
+    sentence in ``summary["warnings"]``.
+    """
     project = QgsProject.instance()
     if prepared is None:
         prepared = prepare_study_area(source_geom, source_crs, max_ha, shape)
@@ -757,57 +1202,59 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
     # snap+dissolve "connect_roads" step was removed: it produced MultiLineString
     # geometries and did not actually improve the network, so the native OSM
     # roads are kept as-is.
+    counts = dict(osm.get("counts") or {})
+    layers = {role: osm[role] for _name, role in VIEWER_LAYERS if role != "roi"}
+    layers["roi"] = _roi_layer_from_polygon(base_utm, epsg_dest)
 
-    # Write GeoJSON the viewer expects.
-    web_path = Path(web_root)
-    vector_dir = web_path / "data" / "layers"
-    vector_dir.parent.mkdir(parents=True, exist_ok=True)
-    staging_dir = Path(tempfile.mkdtemp(prefix=".layers-", dir=str(vector_dir.parent)))
-
-    roi_layer = _roi_layer_from_polygon(base_utm, epsg_dest)
-    layer_files = {
-        "roi": roi_layer,
-        "mybuildings": osm["buildings"], "myroads": osm["roads"],
-        "mytrees": osm["trees"], "myblocks": osm["greens"],
-        "mywaterlines": osm["waterlines"], "mybikelanes": osm["bikelanes"],
-        "mybusstops": osm["busstops"], "mybenches": osm["benches"],
-        "mylights": osm["lights"], "mytrashbins": osm["trashbins"],
-    }
+    created_run = run_dir is None
+    run_root = new_run_dir() if created_run else Path(run_dir)
+    with contextlib.suppress(OSError):
+        if run_root.resolve() == BUNDLED_WEB_ROOT.resolve():
+            raise BuildError("The bundled sample city is never overwritten; build into a run folder.")
+    run_root.mkdir(parents=True, exist_ok=True)
+    gpkg_path = run_root / GPKG_NAME
+    warnings: List[str] = []
     try:
-        for name, layer in layer_files.items():
-            out_path = staging_dir / f"{name}.geojson"
-            save_layer_to_geojson(layer, out_path)
-            _validate_geojson(out_path)
-        _publish_directory(staging_dir, vector_dir)
-        staging_dir = None
-    finally:
-        if staging_dir is not None and staging_dir.exists():
-            shutil.rmtree(staging_dir, ignore_errors=True)
-
-    # Optional DEM.
-    has_dem = False
-    dem_path = web_path / "data" / "dem" / "mydem.tif"
-    if dem_layer is not None:
-        has_dem = _export_dem(dem_layer, base_utm, epsg_dest, dem_path, feedback=feedback)
-    if not has_dem:
-        _remove_file(dem_path)
-
-    # Optional basemap underlay rendered to a PNG over the base bbox.
-    basemap_bbox = None
-    if basemap_layer is not None:
+        _write_viewer_layers(run_root, layers)
         if feedback:
-            feedback("Rendering basemap underlay...")
-        basemap_bbox = _export_basemap(
-            basemap_layer, base_utm, epsg_dest,
-            web_path / "data" / "basemap" / "basemap.png", feedback=feedback,
-        )
-    if basemap_bbox is None:
-        _remove_file(web_path / "data" / "basemap" / "basemap.png")
+            feedback("Saving the layers to a GeoPackage...")
+        _write_geopackage(gpkg_path, [(table, layers[role]) for role, table, _label in PROJECT_LAYERS])
 
-    _write_manifest(web_path, epsg_dest, cen_wgs.y(), has_dem, theme_name, basemap_bbox)
+        # Optional DEM.
+        has_dem = False
+        dem_path = run_root / "data" / "dem" / "mydem.tif"
+        if dem_layer is not None:
+            has_dem, warning = _export_dem(dem_layer, base_utm, epsg_dest, dem_path, feedback=feedback)
+            if warning:
+                warnings.append(warning)
+        if not has_dem:
+            _remove_file(dem_path)
+
+        # Optional basemap underlay rendered to a PNG over the base bbox.
+        basemap_bbox = None
+        basemap_path = run_root / "data" / "basemap" / "basemap.png"
+        if basemap_layer is not None:
+            if feedback:
+                feedback("Rendering basemap underlay...")
+            basemap_bbox, warning = _export_basemap(
+                basemap_layer, base_utm, epsg_dest, basemap_path, feedback=feedback)
+            if warning:
+                warnings.append(warning)
+        if basemap_bbox is None:
+            _remove_file(basemap_path)
+
+        # The manifest is written last: a run without one is incomplete and
+        # is never offered by latest_run_dir().
+        _write_manifest(run_root, epsg_dest, cen_wgs.y(), has_dem, theme_name, basemap_bbox)
+    except BaseException:
+        if created_run:
+            shutil.rmtree(run_root, ignore_errors=True)
+        raise
 
     if add_to_project:
-        _replace_project_layers(project, roi_layer, osm, theme_name, theme_palette)
+        _replace_project_layers(project, gpkg_path,
+                                {role: layer.featureCount() for role, layer in layers.items()},
+                                theme_name, theme_palette)
 
     return {
         "epsg": epsg_dest,
@@ -820,4 +1267,12 @@ def build_and_export(source_geom: QgsGeometry, source_crs: QgsCoordinateReferenc
         "area_ha": area_ha,
         "counts": osm["counts"],
         "has_dem": has_dem,
+        "has_basemap": basemap_bbox is not None,
+        "run_dir": str(run_root),
+        "gpkg_path": str(gpkg_path),
+        "warnings": warnings,
+        "buildings": _count(counts, "buildings"),
+        "estimated_heights": _count(counts, "estimated_heights"),
+        "osm_trees": _count(counts, "osm_trees"),
+        "planted_trees": _count(counts, "planted_trees"),
     }
